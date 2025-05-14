@@ -1,0 +1,11 @@
+{
+    "name": "ServiceDesk",
+    "alias": "servicedesk",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\ServiceDesk\\Providers\\ServiceDeskServiceProvider"
+    ],
+    "files": []
+}

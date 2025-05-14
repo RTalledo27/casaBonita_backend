@@ -1,0 +1,10 @@
+{
+    "Security": true,
+    "CRM": true,
+    "Inventory": true,
+    "Sales": true,
+    "Accounting": true,
+    "Integrations": true,
+    "ServiceDesk": true,
+    "Audit": true
+}
