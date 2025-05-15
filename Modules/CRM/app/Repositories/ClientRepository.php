@@ -2,7 +2,7 @@
 
 namespace Modules\CRM\Repositories;
 
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Modules\CRM\Models\Client;
 
 class ClientRepository

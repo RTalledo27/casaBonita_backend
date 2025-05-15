@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\CRM\Http\Requests\StoreAddressRequest;
 use Modules\CRM\Http\Requests\UpdateAddressRequest;
-use Modules\CRM\Http\Resources\AddressResource;
 use Modules\CRM\Models\Address;
 use Modules\CRM\Repositories\AddressRepository;
+use Modules\CRM\Transformers\AddressResource;
 
 class AddressController extends Controller
 {

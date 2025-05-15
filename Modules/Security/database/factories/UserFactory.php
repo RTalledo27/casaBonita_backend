@@ -3,6 +3,7 @@
 namespace Modules\Security\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Modules\Security\Models\User;
 
 class UserFactory extends Factory
 {
@@ -23,6 +24,16 @@ class UserFactory extends Factory
             'status'        => 'active',
             'photo_profile' => $this->faker->imageUrl(640, 480, 'people', true),
         ];
+    }
+
+    /**
+     * State: crea el usuario y le asigna uno o varios permisos.
+     */
+    public function withPermission(string|array $permissions)
+    {
+        return $this->afterCreating(function (User $user) use ($permissions) {
+            $user->givePermissionTo($permissions);
+        });
     }
 }
 

@@ -10,17 +10,14 @@ use Modules\CRM\Http\Requests\{
     UpdateClientRequest,
     SpouseRequest
 };
-use Modules\CRM\Http\Resources\{
-    ClientResource,
-    AddressResource,
-    CrmInteractionResource
-};
+
 use Modules\CRM\Repositories\{
     ClientRepository,
     AddressRepository,
     CrmInteractionRepository
 };
 use Modules\CRM\Models\Client;
+use Modules\CRM\Transformers\ClientResource;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientController extends Controller

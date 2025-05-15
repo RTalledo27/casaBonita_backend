@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\CRM\Http\Resources;
+namespace Modules\CRM\Transformers;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 
