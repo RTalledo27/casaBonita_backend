@@ -2,17 +2,21 @@
 
 namespace Modules\Security\Models;
 
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\CRM\Models\CrmInteraction;
+use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 
 // use Modules\Security\Database\Factories\UserFactory;
 
-class User extends Model
-{
-    use HasFactory;
+class User extends Authenticatable
+ {
+    use HasFactory, HasRoles;
 
     protected $primaryKey = 'user_id';
+    protected $guard_name = 'sanctum';
     public    $timestamps  = true;
 
 
@@ -56,6 +60,6 @@ class User extends Model
 
     public function auditLogs()
     {
-        //return $this->hasMany(\Modules\Audit\Models\AuditLog::class, 'user_id');
+        return $this->hasMany(\Modules\Audit\Models\AuditLog::class, 'user_id');
     }
 }

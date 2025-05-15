@@ -4,6 +4,8 @@ namespace Modules\CRM\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Modules\CRM\Database\Factories\AddressFactory;
+
 // use Modules\CRM\Database\Factories\AddressFactory;
 
 class Address extends Model
@@ -12,6 +14,12 @@ class Address extends Model
 
     protected $primaryKey = 'address_id';
     public    $timestamps  = false;
+
+    //SOLUCION ERROR DE FACTORY
+    protected static function newFactory(): AddressFactory
+    {
+        return AddressFactory::new();
+    }
     /**
      * The attributes that are mass assignable.
      */

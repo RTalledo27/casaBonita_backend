@@ -4,16 +4,32 @@ namespace Modules\Security\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\Security\Http\Requests\StoreUserRequest;
+use Modules\Security\Http\Requests\UpdateUserRequest;
 use Modules\Security\Models\User;
+use Modules\Security\Repositories\UserRepository;
+use Modules\Security\Transformers\UserResource;
 
 class UserController extends Controller
 {
+
+
+    //CONSTRUCTOR
+    public function __construct(private UserRepository $users)
+    {
+        $this->middleware('auth:sanctum');
+        $this->authorizeResource(User::class, 'user');
+    }
+
+
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        return User::with('roles')->paginate(15);
+        $filters = request()->only(['search', 'sort_by', 'sort_dir', 'per_page']);
+        $paginated = $this->users->paginate($filters);
+        return UserResource::collection($paginated);
     }
 
     /**
@@ -26,15 +42,11 @@ class UserController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request) {
-        $data = $request->validate([
-            'username'      => 'required|string|unique:users,username',
-            'password_hash' => 'required|string|min:60',
-            'email'         => 'required|email|unique:users,email',
-            'status'        => 'required|in:active,blocked',
-            'photo_profile' => 'nullable|string'
-        ]);
-        return User::create($data);
+
+    public function store(StoreUserRequest $request)
+    {
+        $user = $this->users->create($request->validated());
+        return new UserResource($user);
     }
 
     /**
@@ -42,7 +54,7 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        return $user->load('roles');
+        return new UserResource($user->load('roles'));
     }
 
     /**
@@ -56,16 +68,18 @@ class UserController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, User $user) {
-        $user->update($request->all());
-        return $user;
+    public function update(UpdateUserRequest $request, User $user)
+    {
+        $user = $this->users->update($user, $request->validated());
+        return new UserResource($user);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(User $user) {
-        $user->delete();
+    public function destroy(User $user)
+    {
+        $this->users->delete($user);
         return response()->json([
             'message' => 'User deleted successfully'
         ])->status(200);

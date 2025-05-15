@@ -4,67 +4,46 @@ namespace Modules\CRM\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\CRM\Http\Requests\{
+    StoreCrmInteractionRequest,
+    UpdateCrmInteractionRequest
+};
 use Modules\CRM\Models\CrmInteraction;
+use Modules\CRM\Repositories\CrmInteractionRepository;
+use Modules\CRM\Transformers\CrmInteractionResource;
 
 class CrmInteractionController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function __construct(private CrmInteractionRepository $repo)
     {
-        return CrmInteraction::with('client', 'user')->paginate(15);
+        $this->middleware('auth:sanctum');
+        $this->authorizeResource(CrmInteraction::class, 'crm_interaction');
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function index(Request $request)
     {
-        return view('crm::create');
+        $data = $request->only(['client_id', 'date_from', 'date_to', 'channel', 'per_page']);
+        return CrmInteractionResource::collection($this->repo->paginate($data));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {
-        $data = $request->validate([
-            'client_id' => 'required|exists:clients,client_id',
-            'user_id'   => 'required|exists:users,user_id',
-            'date'      => 'required|date',
-            'channel'   => 'required|in:call,email,whatsapp,visit,other',
-            'notes'     => 'nullable|string',
-        ]);
-
-        return CrmInteraction::create($data);
-    }
-
-    /**
-     * Show the specified resource.
-     */
-    public function show(CrmInteraction $crmInteraction)
+    public function store(StoreCrmInteractionRequest $req)
     {
-        return $crmInteraction->load('client', 'user');
+        return new CrmInteractionResource($this->repo->create($req->validated()));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
+    public function show(CrmInteraction $crm_interaction)
     {
-        return view('crm::edit');
+        return new CrmInteractionResource($crm_interaction->load(['client', 'user']));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
+    public function update(UpdateCrmInteractionRequest $req, CrmInteraction $crm_interaction)
+    {
+        return new CrmInteractionResource($this->repo->update($crm_interaction, $req->validated()));
+    }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(CrmInteraction $crm_interaction) {
-        $crm_interaction->delete();
-        return response()->json(['message' => 'Interaction deleted successfully.'], 200);
+    public function destroy(CrmInteraction $crm_interaction)
+    {
+        $this->repo->delete($crm_interaction);
+        return response()->noContent();
     }
 }

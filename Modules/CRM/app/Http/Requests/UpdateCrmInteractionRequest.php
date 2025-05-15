@@ -3,8 +3,9 @@
 namespace Modules\CRM\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
-class SpouseRequest extends FormRequest
+class UpdateCrmInteractionRequest extends FormRequest
 {
     /**
      * Get the validation rules that apply to the request.
@@ -12,8 +13,9 @@ class SpouseRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'client_id'  => 'required|exists:clients,client_id',
-            'partner_id' => 'required|exists:clients,client_id|different:client_id',
+            'date'    => ['sometimes', 'required', 'date'],
+            'channel' => ['sometimes', 'required', Rule::in(['call', 'email', 'whatsapp', 'visit', 'other'])],
+            'notes'   => 'nullable|string',
         ];
     }
 
@@ -22,7 +24,6 @@ class SpouseRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('crm.clients.update');
-        //PUEDE CAMBIARSE EL NOMBRE DEL PERMISO LUEGO
+        return $this->user()->can('crm.interactions.update');
     }
 }

@@ -20,6 +20,9 @@ return new class extends Migration {
                 ->on('contracts')
                 ->cascadeOnDelete();        // ON DELETE CASCADE
         });
+
+     
+        
     }
 
     public function down(): void

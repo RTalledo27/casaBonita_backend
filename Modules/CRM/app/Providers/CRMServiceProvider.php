@@ -4,9 +4,14 @@ namespace Modules\CRM\Providers;
 
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
+use Modules\CRM\Repositories\AddressRepository;
+use Modules\CRM\Repositories\ClientRepository;
 use Nwidart\Modules\Traits\PathNamespace;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use Modules\CRM\Policies\{ClientPolicy, AddressPolicy, CrmInteractionPolicy};
+use Modules\CRM\Models\{Client, Address, CrmInteraction};
+use Illuminate\Support\Facades\Gate;
 
 class CRMServiceProvider extends ServiceProvider
 {
@@ -27,6 +32,9 @@ class CRMServiceProvider extends ServiceProvider
         $this->registerConfig();
         $this->registerViews();
         $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
+        Gate::policy(Client::class,        ClientPolicy::class);
+        Gate::policy(Address::class,       AddressPolicy::class);
+        Gate::policy(CrmInteraction::class, CrmInteractionPolicy::class);
     }
 
     /**
@@ -36,6 +44,9 @@ class CRMServiceProvider extends ServiceProvider
     {
         $this->app->register(EventServiceProvider::class);
         $this->app->register(RouteServiceProvider::class);
+        $this->app->singleton(ClientRepository::class, ClientRepository::class);
+        $this->app->singleton(\Modules\CRM\Repositories\CrmInteractionRepository::class);
+        $this->app->singleton(AddressRepository::class);
     }
 
     /**

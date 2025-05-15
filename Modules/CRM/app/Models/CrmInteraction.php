@@ -4,6 +4,7 @@ namespace Modules\CRM\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Modules\CRM\Database\Factories\CrmInteractionFactory;
 use Modules\Security\Models\User;
 
 // use Modules\CRM\Database\Factories\CrmInteractionFactory;
@@ -15,6 +16,13 @@ class CrmInteraction extends Model
 
     protected $primaryKey = 'interaction_id';
     public    $timestamps  = true;
+
+
+    //SOLUCION ERROR DE FACTORY
+    protected static function newFactory(): CrmInteractionFactory
+    {
+        return CrmInteractionFactory::new();
+    }
     /**
      * The attributes that are mass assignable.
      */

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Sales\Models\Reservation;
 
-// use Modules\CRM\Database\Factories\ClientFactory;
+use Modules\CRM\Database\Factories\ClientFactory;
 
 class Client extends Model
 {
@@ -14,6 +14,12 @@ class Client extends Model
     //protected $table = 'clients';
     protected $primaryKey = 'client_id';
     public $timestamps = true;
+
+    //SOLUCION ERROR DE FACTORY
+    protected static function newFactory(): ClientFactory
+    {
+        return ClientFactory::new();
+    }
 
 
     /**

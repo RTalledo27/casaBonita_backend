@@ -4,25 +4,33 @@ namespace Modules\Security\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Spatie\Permission\Models\Role as SpatieRole;
+
 // use Modules\Security\Database\Factories\RoleFactory;
 
-class Role extends Model
+class Role extends SpatieRole
 {
-    use HasFactory;
+    protected $table = 'roles';
     protected $primaryKey = 'role_id';
-    public    $timestamps  = false;
+    public $incrementing = true;
+    protected $keyType = 'int';
+    protected $guard_name = 'sanctum';
+
+
+    // Spatie por defecto usa timestamps; quítalos sólo si NO quieres created_at/updated_at
+    public $timestamps = true;
+
+    protected $fillable = [
+        'name',
+        'guard_name',
+        'description',
+    ];
 
     /**
-     * The attributes that are mass assignable.
+     * Relación con usuarios a través de la tabla pivote user_roles
      */
-    protected $fillable    = ['name', 'description'];
-
-    // protected static function newFactory(): RoleFactory
-    // {
-    //     // return RoleFactory::new();
-    // }
-
-    public function users()
+    public function users(): BelongsToMany
     {
         return $this->belongsToMany(
             User::class,

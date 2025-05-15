@@ -4,17 +4,29 @@ namespace Modules\CRM\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\CRM\Http\Requests\StoreAddressRequest;
+use Modules\CRM\Http\Requests\UpdateAddressRequest;
+use Modules\CRM\Http\Resources\AddressResource;
 use Modules\CRM\Models\Address;
+use Modules\CRM\Repositories\AddressRepository;
 
 class AddressController extends Controller
 {
+
+
+    //CONSTRUCTOR
+    public function __construct(private AddressRepository $repo)
+    {
+        $this->middleware('auth:sanctum');
+        $this->authorizeResource(Address::class, 'address');
+    }
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        return Address::with('client')
-            ->paginate(15);
+        $data = $request->only(['client_id', 'city', 'country', 'per_page']);
+        return AddressResource::collection($this->repo->paginate($data));
     }
 
     /**
@@ -28,25 +40,16 @@ class AddressController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request) {
-        $data = $request->validate([
-            'client_id' => 'required|exists:clients,client_id',
-            'line1'     => 'required|string|max:120',
-            'line2'     => 'nullable|string|max:120',
-            'city'      => 'required|string|max:60',
-            'state'     => 'nullable|string|max:60',
-            'country'   => 'required|string|max:60',
-            'zip_code'  => 'nullable|string|max:15',
-        ]);
-        return Address::create($data);
+    public function store(StoreAddressRequest $req)
+    {
+        return new AddressResource($this->repo->create($req->validated()));
     }
-
     /**
      * Show the specified resource.
      */
-    public function show($id)
+    public function show(Address $address)
     {
-        return view('crm::show');
+        return new AddressResource($address->load('client'));
     }
 
     /**
@@ -60,10 +63,9 @@ class AddressController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Address $address) {
-        $address->update($request->all());
-        return $address;
-
+    public function update(UpdateAddressRequest $req, Address $address)
+    {
+        return new AddressResource($this->repo->update($address, $req->validated()));
     }
 
     /**

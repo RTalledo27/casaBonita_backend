@@ -19,14 +19,12 @@ return new class extends Migration {
 
             // PK user_id en users
             $t->unsignedBigInteger('user_id');
-            $t->foreign('user_id')
-                ->references('user_id')
-                ->on('users')
-                ->cascadeOnDelete();
+           
 
             $t->dateTime('date');
             $t->enum('channel', ['call', 'email', 'whatsapp', 'visit', 'other']);
             $t->text('notes')->nullable();
+            $t->timestamps();
         });
     }
 
