@@ -12,6 +12,11 @@ use Modules\Security\Transformers\UserResource;
 
 class UserController extends Controller
 {
+    /**
+     * @group Seguridad - Gestión de Usuarios
+     *
+     * Endpoints para administrar usuarios del sistema.
+     */
 
 
     //CONSTRUCTOR
@@ -23,7 +28,16 @@ class UserController extends Controller
 
 
     /**
-     * Display a listing of the resource.
+     * Listar usuarios
+     *
+     * Devuelve la lista paginada de usuarios con sus roles.
+     *
+     * @queryParam search string Buscar por nombre o correo. Example: admin
+     * @queryParam sort_by string Campo para ordenar. Example: name
+     * @queryParam sort_dir string Dirección (asc/desc). Example: desc
+     * @queryParam per_page int Resultados por página. Example: 10
+     *
+     * @response 200
      */
     public function index()
     {
@@ -39,18 +53,30 @@ class UserController extends Controller
     {
         }
 
-    /**
-     * Store a newly created resource in storage.
-     */
 
+
+    /**
+     * Crear nuevo usuario
+     *
+     * @bodyParam name string required Nombre del usuario. Example: Juan Pérez
+     * @bodyParam email string required Correo único. Example: juan@erp.com
+     * @bodyParam password string required Contraseña. Example: secret123
+     * @bodyParam role string required Rol a asignar. Example: admin
+     *
+     * @response 201
+     */
     public function store(StoreUserRequest $request)
     {
         $user = $this->users->create($request->validated());
+        $user->assignRole($request->role);
         return new UserResource($user);
     }
 
     /**
-     * Show the specified resource.
+     * Ver usuario específico
+     *
+     * @urlParam id int required ID del usuario. Example: 2
+     * @response 200
      */
     public function show(User $user)
     {
@@ -66,22 +92,37 @@ class UserController extends Controller
     }
 
     /**
-     * Update the specified resource in storage.
+     * Actualizar usuario
+     *
+     * @urlParam id int required ID del usuario. Example: 2
+     * @bodyParam name string Nombre del usuario.
+     * @bodyParam email string Correo del usuario.
+     * @bodyParam password string (opcional) Contraseña nueva.
+     *
+     * @response 200
      */
     public function update(UpdateUserRequest $request, User $user)
     {
         $user = $this->users->update($user, $request->validated());
         return new UserResource($user);
     }
-
     /**
      * Remove the specified resource from storage.
+     */
+    /**
+     * Eliminar usuario
+     *
+     * @urlParam id int required ID del usuario. Example: 2
+     *
+     * @response 200 {
+     *  "message": "User deleted successfully"
+     * }
      */
     public function destroy(User $user)
     {
         $this->users->delete($user);
         return response()->json([
             'message' => 'User deleted successfully'
-        ])->status(200);
+        ], 200);
     }
 }

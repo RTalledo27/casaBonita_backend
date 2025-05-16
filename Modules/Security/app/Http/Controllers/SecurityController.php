@@ -7,7 +7,30 @@ use Illuminate\Http\Request;
 
 class SecurityController extends Controller
 {
+
     /**
+     * @group Seguridad - Autenticación
+     *
+     * Iniciar sesión del usuario en el sistema.
+     *
+     * Este endpoint permite autenticar un usuario y devolver un token de acceso.
+     *
+     * @bodyParam email string required El correo electrónico del usuario. Example: admin@erp.com
+     * @bodyParam password string required La contraseña del usuario. Example: password123
+     *
+     * @response 200 {
+     *  "token": "eyJ0eXAiOiJKV1QiLCJh...",
+     *  "user": {
+     *    "id": 1,
+     *    "name": "Administrador",
+     *    "email": "admin@erp.com",
+     *    "role": "admin"
+     *  }
+     * }
+     */
+    
+    /**
+     * 
      * Display a listing of the resource.
      */
     public function index()

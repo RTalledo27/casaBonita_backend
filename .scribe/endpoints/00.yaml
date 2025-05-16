@@ -326,7 +326,7 @@ endpoints:
         name: type
         description: ''
         required: true
-        example: ingreso
+        example: pasivo
         type: string
         enumValues:
           - activo
@@ -341,7 +341,7 @@ endpoints:
     cleanBodyParameters:
       code: consequatur
       name: mqeopfuudtdsufvyvddqa
-      type: ingreso
+      type: pasivo
     fileParameters: []
     responses: []
     responseFields: []
@@ -585,7 +585,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -624,7 +624,7 @@ endpoints:
         nullable: false
         custom: []
     cleanBodyParameters:
-      date: '2025-05-15T16:37:26'
+      date: '2025-05-16T15:50:01'
       description: 'Dolores dolorum amet iste laborum eius est dolor.'
       status: draft
     fileParameters: []
@@ -722,7 +722,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -752,7 +752,7 @@ endpoints:
         name: status
         description: ''
         required: false
-        example: draft
+        example: posted
         type: string
         enumValues:
           - draft
@@ -761,9 +761,9 @@ endpoints:
         nullable: false
         custom: []
     cleanBodyParameters:
-      date: '2025-05-15T16:37:26'
+      date: '2025-05-16T15:50:01'
       description: 'Dolores dolorum amet iste laborum eius est dolor.'
-      status: draft
+      status: posted
     fileParameters: []
     responses: []
     responseFields: []
@@ -1195,7 +1195,7 @@ endpoints:
         name: issue_date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -1235,7 +1235,7 @@ endpoints:
         name: sunat_status
         description: ''
         required: true
-        example: enviado
+        example: pendiente
         type: string
         enumValues:
           - pendiente
@@ -1248,11 +1248,11 @@ endpoints:
         custom: []
     cleanBodyParameters:
       contract_id: consequatur
-      issue_date: '2025-05-15T16:37:26'
+      issue_date: '2025-05-16T15:50:01'
       amount: 11613.31890586
       currency: opf
       document_number: consequatur
-      sunat_status: enviado
+      sunat_status: pendiente
     fileParameters: []
     responses: []
     responseFields: []
@@ -1358,7 +1358,7 @@ endpoints:
         name: issue_date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -1398,7 +1398,7 @@ endpoints:
         name: sunat_status
         description: ''
         required: false
-        example: enviado
+        example: aceptado
         type: string
         enumValues:
           - pendiente
@@ -1410,10 +1410,10 @@ endpoints:
         nullable: false
         custom: []
     cleanBodyParameters:
-      issue_date: '2025-05-15T16:37:26'
+      issue_date: '2025-05-16T15:50:01'
       amount: 11613.31890586
       currency: opf
-      sunat_status: enviado
+      sunat_status: aceptado
     fileParameters: []
     responses: []
     responseFields: []
@@ -1814,7 +1814,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -1852,7 +1852,7 @@ endpoints:
         custom: []
     cleanBodyParameters:
       bank_account_id: consequatur
-      date: '2025-05-15T16:37:26'
+      date: '2025-05-16T15:50:01'
       amount: 11613.31890586
       currency: opf
       reference: uudtdsufvyvddqamniihf
@@ -1961,7 +1961,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -1998,7 +1998,7 @@ endpoints:
         nullable: true
         custom: []
     cleanBodyParameters:
-      date: '2025-05-15T16:37:26'
+      date: '2025-05-16T15:50:01'
       amount: 11613.31890586
       currency: opf
       reference: uudtdsufvyvddqamniihf
@@ -2628,7 +2628,7 @@ endpoints:
         name: doc_type
         description: ''
         required: true
-        example: DNI
+        example: PAS
         type: string
         enumValues:
           - DNI
@@ -2696,7 +2696,7 @@ endpoints:
         name: type
         description: ''
         required: true
-        example: client
+        example: lead
         type: string
         enumValues:
           - lead
@@ -2709,7 +2709,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -2748,14 +2748,14 @@ endpoints:
     cleanBodyParameters:
       first_name: vmqeopfuudtdsufvyvddq
       last_name: amniihfqcoynlazghdtqt
-      doc_type: DNI
+      doc_type: PAS
       doc_number: qxbajwbpilpmufinl
       email: imogene.mante@example.com
       primary_phone: '49766366662210'
       secondary_phone: '49766366662210'
       marital_status: divorciado
-      type: client
-      date: '2025-05-15T16:37:26'
+      type: lead
+      date: '2025-05-16T15:50:01'
       occupation: consequatur
       salary: 11613.31890586
       family_group: consequatur
@@ -2788,14 +2788,14 @@ endpoints:
         name: client_id
         description: 'The ID of the client.'
         required: true
-        example: 17
+        example: 15
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      client_id: 17
+      client_id: 15
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -2838,14 +2838,14 @@ endpoints:
         name: client_id
         description: 'The ID of the client.'
         required: true
-        example: 17
+        example: 15
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      client_id: 17
+      client_id: 15
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -3025,14 +3025,14 @@ endpoints:
         name: address_id
         description: 'The ID of the address.'
         required: true
-        example: 17
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      address_id: 17
+      address_id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -3076,14 +3076,14 @@ endpoints:
         name: address_id
         description: 'The ID of the address.'
         required: true
-        example: 17
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      address_id: 17
+      address_id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters:
@@ -3183,14 +3183,14 @@ endpoints:
         name: address_id
         description: 'The ID of the address.'
         required: true
-        example: 17
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      address_id: 17
+      address_id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -3287,7 +3287,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -3321,7 +3321,7 @@ endpoints:
     cleanBodyParameters:
       client_id: consequatur
       user_id: consequatur
-      date: '2025-05-15T16:37:26'
+      date: '2025-05-16T15:50:01'
       channel: visit
       notes: consequatur
     fileParameters: []
@@ -3419,7 +3419,7 @@ endpoints:
         name: date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:01'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -3429,7 +3429,7 @@ endpoints:
         name: channel
         description: ''
         required: true
-        example: call
+        example: other
         type: string
         enumValues:
           - call
@@ -3451,8 +3451,8 @@ endpoints:
         nullable: true
         custom: []
     cleanBodyParameters:
-      date: '2025-05-15T16:37:26'
-      channel: call
+      date: '2025-05-16T15:50:01'
+      channel: other
       notes: consequatur
     fileParameters: []
     responses: []
@@ -3524,14 +3524,14 @@ endpoints:
         name: client_client_id
         description: 'The ID of the client client.'
         required: true
-        example: 17
+        example: 15
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      client_client_id: 17
+      client_client_id: 15
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -3547,6 +3547,110 @@ endpoints:
           access-control-allow-origin: '*'
         description: null
         custom: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
+  -
+    httpMethods:
+      - POST
+    uri: 'api/v1/crm/clients/{client_client_id}/spouses'
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'POST /crm/clients/{client}/spouses'
+      description: ''
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      client_client_id:
+        name: client_client_id
+        description: 'The ID of the client client.'
+        required: true
+        example: 15
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+    cleanUrlParameters:
+      client_client_id: 15
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      partner_id:
+        name: partner_id
+        description: 'The <code>client_id</code> of an existing record in the clients table. The value and <code>client_id</code> must be different.'
+        required: true
+        example: consequatur
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+    cleanBodyParameters:
+      partner_id: consequatur
+    fileParameters: []
+    responses: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
+  -
+    httpMethods:
+      - DELETE
+    uri: 'api/v1/crm/clients/{client_client_id}/spouses/{partner_client_id}'
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'DELETE /crm/clients/{client}/spouses/{spouse}'
+      description: ''
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      client_client_id:
+        name: client_client_id
+        description: 'The ID of the client client.'
+        required: true
+        example: 15
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+      partner_client_id:
+        name: partner_client_id
+        description: 'The ID of the partner client.'
+        required: true
+        example: 15
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+    cleanUrlParameters:
+      client_client_id: 15
+      partner_client_id: 15
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses: []
     responseFields: []
     auth: []
     controller: null
@@ -3574,14 +3678,14 @@ endpoints:
         name: client_client_id
         description: 'The ID of the client client.'
         required: true
-        example: 17
+        example: 15
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      client_client_id: 17
+      client_client_id: 15
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -4986,7 +5090,7 @@ endpoints:
         name: status
         description: ''
         required: true
-        example: vendido
+        example: disponible
         type: string
         enumValues:
           - disponible
@@ -5007,7 +5111,7 @@ endpoints:
       BFH: 11613.31890586
       initial_quota: 11613.31890586
       currency: opf
-      status: vendido
+      status: disponible
     fileParameters: []
     responses: []
     responseFields: []
@@ -5213,7 +5317,7 @@ endpoints:
         name: status
         description: ''
         required: false
-        example: disponible
+        example: vendido
         type: string
         enumValues:
           - disponible
@@ -5232,7 +5336,7 @@ endpoints:
       BFH: 11613.31890586
       initial_quota: 11613.31890586
       currency: opf
-      status: disponible
+      status: vendido
     fileParameters: []
     responses: []
     responseFields: []
@@ -5366,7 +5470,7 @@ endpoints:
         name: type
         description: ''
         required: true
-        example: foto
+        example: plano
         type: string
         enumValues:
           - foto
@@ -5379,7 +5483,7 @@ endpoints:
     cleanBodyParameters:
       lot_id: consequatur
       url: 'https://www.mueller.com/laborum-eius-est-dolor-dolores-minus-voluptatem'
-      type: foto
+      type: plano
     fileParameters: []
     responses: []
     responseFields: []
@@ -5765,7 +5869,7 @@ endpoints:
         name: reservation_date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -5775,7 +5879,7 @@ endpoints:
         name: expiration_date
         description: 'Must be a valid date. Must be a date after or equal to <code>reservation_date</code>.'
         required: true
-        example: '2106-06-14'
+        example: '2106-06-15'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -5795,7 +5899,7 @@ endpoints:
         name: status
         description: ''
         required: true
-        example: convertida
+        example: cancelada
         type: string
         enumValues:
           - activa
@@ -5808,10 +5912,10 @@ endpoints:
     cleanBodyParameters:
       lot_id: consequatur
       client_id: consequatur
-      reservation_date: '2025-05-15T16:37:26'
-      expiration_date: '2106-06-14'
+      reservation_date: '2025-05-16T15:50:02'
+      expiration_date: '2106-06-15'
       deposit_amount: 11613.31890586
-      status: convertida
+      status: cancelada
     fileParameters: []
     responses: []
     responseFields: []
@@ -5907,7 +6011,7 @@ endpoints:
         name: reservation_date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -5917,7 +6021,7 @@ endpoints:
         name: expiration_date
         description: 'Must be a valid date. Must be a date after or equal to <code>reservation_date</code>.'
         required: false
-        example: '2106-06-14'
+        example: '2106-06-15'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -5948,8 +6052,8 @@ endpoints:
         nullable: false
         custom: []
     cleanBodyParameters:
-      reservation_date: '2025-05-15T16:37:26'
-      expiration_date: '2106-06-14'
+      reservation_date: '2025-05-16T15:50:02'
+      expiration_date: '2106-06-15'
       deposit_amount: 11613.31890586
       status: expirada
     fileParameters: []
@@ -6085,7 +6189,7 @@ endpoints:
         name: sign_date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -6115,7 +6219,7 @@ endpoints:
         name: status
         description: ''
         required: true
-        example: resuelto
+        example: vigente
         type: string
         enumValues:
           - vigente
@@ -6127,10 +6231,10 @@ endpoints:
     cleanBodyParameters:
       reservation_id: consequatur
       contract_number: consequatur
-      sign_date: '2025-05-15T16:37:26'
+      sign_date: '2025-05-16T15:50:02'
       total_price: 11613.31890586
       currency: opf
-      status: resuelto
+      status: vigente
     fileParameters: []
     responses: []
     responseFields: []
@@ -6246,7 +6350,7 @@ endpoints:
         name: sign_date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -6276,7 +6380,7 @@ endpoints:
         name: status
         description: ''
         required: false
-        example: vigente
+        example: cancelado
         type: string
         enumValues:
           - vigente
@@ -6286,10 +6390,10 @@ endpoints:
         nullable: false
         custom: []
     cleanBodyParameters:
-      sign_date: '2025-05-15T16:37:26'
+      sign_date: '2025-05-16T15:50:02'
       total_price: 11613.31890586
       currency: opf
-      status: vigente
+      status: cancelado
     fileParameters: []
     responses: []
     responseFields: []
@@ -6413,7 +6517,7 @@ endpoints:
         name: due_date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -6444,7 +6548,7 @@ endpoints:
         custom: []
     cleanBodyParameters:
       contract_id: consequatur
-      due_date: '2025-05-15T16:37:26'
+      due_date: '2025-05-16T15:50:02'
       amount: 11613.31890586
       status: pendiente
     fileParameters: []
@@ -6542,7 +6646,7 @@ endpoints:
         name: due_date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -6562,7 +6666,7 @@ endpoints:
         name: status
         description: ''
         required: false
-        example: pendiente
+        example: vencido
         type: string
         enumValues:
           - pendiente
@@ -6572,9 +6676,9 @@ endpoints:
         nullable: false
         custom: []
     cleanBodyParameters:
-      due_date: '2025-05-15T16:37:26'
+      due_date: '2025-05-16T15:50:02'
       amount: 11613.31890586
-      status: pendiente
+      status: vencido
     fileParameters: []
     responses: []
     responseFields: []
@@ -6708,7 +6812,7 @@ endpoints:
         name: payment_date
         description: 'Must be a valid date.'
         required: true
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -6728,7 +6832,7 @@ endpoints:
         name: method
         description: ''
         required: true
-        example: transferencia
+        example: efectivo
         type: string
         enumValues:
           - transferencia
@@ -6749,9 +6853,9 @@ endpoints:
         custom: []
     cleanBodyParameters:
       schedule_id: consequatur
-      payment_date: '2025-05-15T16:37:26'
+      payment_date: '2025-05-16T15:50:02'
       amount: 11613.31890586
-      method: transferencia
+      method: efectivo
       reference: opfuudtdsufvyvddqamni
     fileParameters: []
     responses: []
@@ -6848,7 +6952,7 @@ endpoints:
         name: payment_date
         description: 'Must be a valid date.'
         required: false
-        example: '2025-05-15T16:37:26'
+        example: '2025-05-16T15:50:02'
         type: string
         enumValues: []
         exampleWasSpecified: false
@@ -6888,7 +6992,7 @@ endpoints:
         nullable: true
         custom: []
     cleanBodyParameters:
-      payment_date: '2025-05-15T16:37:26'
+      payment_date: '2025-05-16T15:50:02'
       amount: 11613.31890586
       method: efectivo
       reference: opfuudtdsufvyvddqamni
@@ -7146,6 +7250,319 @@ endpoints:
   -
     httpMethods:
       - GET
+    uri: api/v1/security/users
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Listar usuarios'
+      description: 'Devuelve la lista paginada de usuarios con sus roles.'
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters:
+      search:
+        name: search
+        description: 'Buscar por nombre o correo.'
+        required: false
+        example: admin
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      sort_by:
+        name: sort_by
+        description: 'Campo para ordenar.'
+        required: false
+        example: name
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      sort_dir:
+        name: sort_dir
+        description: 'Dirección (asc/desc).'
+        required: false
+        example: desc
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      per_page:
+        name: per_page
+        description: 'Resultados por página.'
+        required: false
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+    cleanQueryParameters:
+      search: admin
+      sort_by: name
+      sort_dir: desc
+      per_page: 10
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        status: 200
+        content: '{}'
+        headers: []
+        description: ''
+        custom: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
+  -
+    httpMethods:
+      - POST
+    uri: api/v1/security/users
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Crear nuevo usuario'
+      description: ''
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters: []
+    cleanUrlParameters: []
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters:
+      username:
+        name: username
+        description: 'Must not be greater than 60 characters.'
+        required: true
+        example: vmqeopfuudtdsufvyvddq
+        type: string
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+      email:
+        name: email
+        description: 'Correo único.'
+        required: true
+        example: juan@erp.com
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      password:
+        name: password
+        description: Contraseña.
+        required: true
+        example: secret123
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      status:
+        name: status
+        description: ''
+        required: false
+        example: active
+        type: string
+        enumValues:
+          - active
+          - blocked
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+      roles:
+        name: roles
+        description: 'The <code>role_id</code> of an existing record in the roles table.'
+        required: false
+        example: null
+        type: object
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+      name:
+        name: name
+        description: 'Nombre del usuario.'
+        required: true
+        example: 'Juan Pérez'
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+      role:
+        name: role
+        description: 'Rol a asignar.'
+        required: true
+        example: admin
+        type: string
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+    cleanBodyParameters:
+      username: vmqeopfuudtdsufvyvddq
+      email: juan@erp.com
+      password: secret123
+      status: active
+      name: 'Juan Pérez'
+      role: admin
+    fileParameters: []
+    responses:
+      -
+        status: 201
+        content: '{}'
+        headers: []
+        description: ''
+        custom: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
+  -
+    httpMethods:
+      - GET
+    uri: 'api/v1/security/users/{user_id}'
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Ver usuario específico'
+      description: ''
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      user_id:
+        name: user_id
+        description: 'The ID of the user.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+      id:
+        name: id
+        description: 'ID del usuario.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+    cleanUrlParameters:
+      user_id: 10
+      id: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        status: 200
+        content: '{}'
+        headers: []
+        description: ''
+        custom: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
+  -
+    httpMethods:
+      - DELETE
+    uri: 'api/v1/security/users/{user_id}'
+    metadata:
+      groupName: Endpoints
+      groupDescription: ''
+      subgroup: ''
+      subgroupDescription: ''
+      title: 'Eliminar usuario'
+      description: ''
+      authenticated: false
+      custom: []
+    headers:
+      Content-Type: application/json
+      Accept: application/json
+    urlParameters:
+      user_id:
+        name: user_id
+        description: 'The ID of the user.'
+        required: true
+        example: 10
+        type: integer
+        enumValues: []
+        exampleWasSpecified: false
+        nullable: false
+        custom: []
+      id:
+        name: id
+        description: 'ID del usuario.'
+        required: true
+        example: 2
+        type: integer
+        enumValues: []
+        exampleWasSpecified: true
+        nullable: false
+        custom: []
+    cleanUrlParameters:
+      user_id: 10
+      id: 2
+    queryParameters: []
+    cleanQueryParameters: []
+    bodyParameters: []
+    cleanBodyParameters: []
+    fileParameters: []
+    responses:
+      -
+        status: 200
+        content: |-
+          {
+           "message": "User deleted successfully"
+          }
+        headers: []
+        description: ''
+        custom: []
+    responseFields: []
+    auth: []
+    controller: null
+    method: null
+    route: null
+    custom: []
+  -
+    httpMethods:
+      - GET
     uri: api/v1/security/roles
     metadata:
       groupName: Endpoints
@@ -7169,7 +7586,7 @@ endpoints:
     responses:
       -
         status: 200
-        content: '{"current_page":1,"data":[],"first_page_url":"http:\/\/localhost\/api\/v1\/security\/roles?page=1","from":null,"last_page":1,"last_page_url":"http:\/\/localhost\/api\/v1\/security\/roles?page=1","links":[{"url":null,"label":"&laquo; Previous","active":false},{"url":"http:\/\/localhost\/api\/v1\/security\/roles?page=1","label":"1","active":true},{"url":null,"label":"Next &raquo;","active":false}],"next_page_url":null,"path":"http:\/\/localhost\/api\/v1\/security\/roles","per_page":15,"prev_page_url":null,"to":null,"total":0}'
+        content: '{"current_page":1,"data":[{"role_id":1,"name":"admin","guard_name":"web","description":null,"created_at":"2025-05-16T15:35:16.000000Z","updated_at":"2025-05-16T15:35:16.000000Z"},{"role_id":2,"name":"vendedor","guard_name":"web","description":null,"created_at":"2025-05-16T15:35:16.000000Z","updated_at":"2025-05-16T15:35:16.000000Z"},{"role_id":3,"name":"contador","guard_name":"web","description":null,"created_at":"2025-05-16T15:35:16.000000Z","updated_at":"2025-05-16T15:35:16.000000Z"}],"first_page_url":"http:\/\/localhost\/api\/v1\/security\/roles?page=1","from":1,"last_page":1,"last_page_url":"http:\/\/localhost\/api\/v1\/security\/roles?page=1","links":[{"url":null,"label":"&laquo; Previous","active":false},{"url":"http:\/\/localhost\/api\/v1\/security\/roles?page=1","label":"1","active":true},{"url":null,"label":"Next &raquo;","active":false}],"next_page_url":null,"path":"http:\/\/localhost\/api\/v1\/security\/roles","per_page":15,"prev_page_url":null,"to":3,"total":3}'
         headers:
           cache-control: 'no-cache, private'
           content-type: application/json
@@ -7255,14 +7672,14 @@ endpoints:
         name: role_id
         description: 'The ID of the role.'
         required: true
-        example: 17
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      role_id: 17
+      role_id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -7270,11 +7687,8 @@ endpoints:
     fileParameters: []
     responses:
       -
-        status: 404
-        content: |-
-          {
-              "message": "No query results for model [Modules\\Security\\Models\\Role] 17"
-          }
+        status: 200
+        content: '{"role_id":1,"name":"admin","guard_name":"web","description":null,"created_at":"2025-05-16T15:35:16.000000Z","updated_at":"2025-05-16T15:35:16.000000Z","users":[{"user_id":10,"username":"admin","email":"prueba@casabonita.com","status":"active","photo_profile":null,"created_at":"2025-05-16T15:35:16.000000Z","updated_at":"2025-05-16T15:35:16.000000Z","pivot":{"role_id":1,"user_id":10}}]}'
         headers:
           cache-control: 'no-cache, private'
           content-type: application/json
@@ -7309,14 +7723,14 @@ endpoints:
         name: role_id
         description: 'The ID of the role.'
         required: true
-        example: 17
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      role_id: 17
+      role_id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
@@ -7350,230 +7764,14 @@ endpoints:
         name: role_id
         description: 'The ID of the role.'
         required: true
-        example: 17
+        example: 1
         type: integer
         enumValues: []
         exampleWasSpecified: false
         nullable: false
         custom: []
     cleanUrlParameters:
-      role_id: 17
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses: []
-    responseFields: []
-    auth: []
-    controller: null
-    method: null
-    route: null
-    custom: []
-  -
-    httpMethods:
-      - GET
-    uri: api/v1/security/users
-    metadata:
-      groupName: Endpoints
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Display a listing of the resource.'
-      description: ''
-      authenticated: false
-      custom: []
-    headers:
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        status: 401
-        content: '{"message":"Unauthenticated."}'
-        headers:
-          cache-control: 'no-cache, private'
-          content-type: application/json
-          access-control-allow-origin: '*'
-        description: null
-        custom: []
-    responseFields: []
-    auth: []
-    controller: null
-    method: null
-    route: null
-    custom: []
-  -
-    httpMethods:
-      - POST
-    uri: api/v1/security/users
-    metadata:
-      groupName: Endpoints
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Store a newly created resource in storage.'
-      description: ''
-      authenticated: false
-      custom: []
-    headers:
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters: []
-    cleanUrlParameters: []
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters:
-      username:
-        name: username
-        description: 'Must not be greater than 60 characters.'
-        required: true
-        example: vmqeopfuudtdsufvyvddq
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-      email:
-        name: email
-        description: 'Must be a valid email address.'
-        required: true
-        example: kunde.eloisa@example.com
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-      password:
-        name: password
-        description: ''
-        required: true
-        example: consequatur
-        type: string
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-      status:
-        name: status
-        description: ''
-        required: false
-        example: blocked
-        type: string
-        enumValues:
-          - active
-          - blocked
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-      roles:
-        name: roles
-        description: 'The <code>role_id</code> of an existing record in the roles table.'
-        required: false
-        example: null
-        type: object
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-    cleanBodyParameters:
-      username: vmqeopfuudtdsufvyvddq
-      email: kunde.eloisa@example.com
-      password: consequatur
-      status: blocked
-    fileParameters: []
-    responses: []
-    responseFields: []
-    auth: []
-    controller: null
-    method: null
-    route: null
-    custom: []
-  -
-    httpMethods:
-      - GET
-    uri: 'api/v1/security/users/{user_id}'
-    metadata:
-      groupName: Endpoints
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Show the specified resource.'
-      description: ''
-      authenticated: false
-      custom: []
-    headers:
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      user_id:
-        name: user_id
-        description: 'The ID of the user.'
-        required: true
-        example: 17
-        type: integer
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-    cleanUrlParameters:
-      user_id: 17
-    queryParameters: []
-    cleanQueryParameters: []
-    bodyParameters: []
-    cleanBodyParameters: []
-    fileParameters: []
-    responses:
-      -
-        status: 401
-        content: '{"message":"Unauthenticated."}'
-        headers:
-          cache-control: 'no-cache, private'
-          content-type: application/json
-          access-control-allow-origin: '*'
-        description: null
-        custom: []
-    responseFields: []
-    auth: []
-    controller: null
-    method: null
-    route: null
-    custom: []
-  -
-    httpMethods:
-      - DELETE
-    uri: 'api/v1/security/users/{user_id}'
-    metadata:
-      groupName: Endpoints
-      groupDescription: ''
-      subgroup: ''
-      subgroupDescription: ''
-      title: 'Remove the specified resource from storage.'
-      description: ''
-      authenticated: false
-      custom: []
-    headers:
-      Content-Type: application/json
-      Accept: application/json
-    urlParameters:
-      user_id:
-        name: user_id
-        description: 'The ID of the user.'
-        required: true
-        example: 17
-        type: integer
-        enumValues: []
-        exampleWasSpecified: false
-        nullable: false
-        custom: []
-    cleanUrlParameters:
-      user_id: 17
+      role_id: 1
     queryParameters: []
     cleanQueryParameters: []
     bodyParameters: []
