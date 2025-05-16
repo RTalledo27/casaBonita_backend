@@ -12,7 +12,13 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
 Route::prefix('v1')->group(function () {
     Route::prefix('security')->group(function () {
-       Route::apiResource('roles', RoleController::class);
-       Route::apiResource('users', UserController::class);
+        // Usuarios
+        Route::apiResource('users', UserController::class);
+        Route::post('users/{user}/roles', [UserController::class, 'syncRoles']);
+        // Roles
+        Route::apiResource('roles', RoleController::class);
+        Route::post('roles/{role}/permissions', [RoleController::class, 'syncPermissions']);
+        // Permisos (si se necesita)
+        //Route::apiResource('permissions', PermissionController::class)->only(['index', 'show']);
     });
 });

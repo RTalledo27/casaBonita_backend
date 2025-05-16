@@ -12,7 +12,7 @@ class SpouseRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'client_id'  => 'required|exists:clients,client_id',
+           // 'client_id'  => 'required|exists:clients,client_id',
             'partner_id' => 'required|exists:clients,client_id|different:client_id',
         ];
     }

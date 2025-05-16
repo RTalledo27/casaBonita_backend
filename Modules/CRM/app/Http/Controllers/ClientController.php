@@ -116,26 +116,29 @@ class ClientController extends Controller
     /** GET /crm/clients/{client}/spouses */
     public function spouses(Client $client)
     {
-        return ClientResource::collection($client->spouses);
+        $spouses = $client->spouses()->with(['addresses', 'interactions'])->get();
+
+        return ClientResource::collection($spouses);
     }
 
+  
     /** POST /crm/clients/{client}/spouses */
-    public function storeSpouse(SpouseRequest $req, Client $client)
+    public function addSpouse(SpouseRequest $req, Client $client)
     {
         $spouseId = $req->input('partner_id');
         $this->clients->addSpouse($client, $spouseId);
         return response()->json([
             'message' => 'Conyugue agregado correctamente',
-        ])->status(200);
+        ]);
     }
 
     /** DELETE /crm/clients/{client}/spouses/{spouse} */
-    public function destroySpouse(Client $client, Client $partner)
+    public function removeSpouse(Client $client, Client $partner)
     {
         $this->clients->removeSpouse($client, $partner->client_id);
         return response()->json([
             'message' => 'Conyugue eliminado correctamente',
-        ])->status(200);
+        ], 200);
     }
 
 

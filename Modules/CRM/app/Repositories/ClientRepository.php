@@ -2,8 +2,9 @@
 
 namespace Modules\CRM\Repositories;
 
-use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Modules\CRM\Models\Client;
+use Modules\CRM\Models\Spouse;
 
 class ClientRepository
 {
@@ -60,22 +61,26 @@ class ClientRepository
     }
 
     public function all(array $filters = [])
+{
+    return Client::when($filters['type'] ?? null, fn($q,$t) => $q->where('type',$t))
+                 ->when($filters['date_from'] ?? null, fn($q,$d) => $q->whereDate('created_at','>=',$d))
+                 ->when($filters['date_to'] ?? null, fn($q,$d) => $q->whereDate('created_at','<=',$d))
+                 ->get();
+}
+
+    public function addSpouse(Client $client, int $partnerId): Spouse
     {
-        return Client::when($filters['type'] ?? null, fn($q, $t) => $q->where('type', $t))
-            ->when($filters['date_from'] ?? null, fn($q, $d) => $q->whereDate('created_at', '>=', $d))
-            ->when($filters['date_to'] ?? null, fn($q, $d) => $q->whereDate('created_at', '<=', $d))
-            ->get();
+        return Spouse::create([
+            'client_id'  => $client->client_id,
+            'partner_id' => $partnerId,
+        ]);
     }
 
     public function removeSpouse(Client $client, int $partnerId): void
     {
-        $client->spouses()->detach($partnerId);
+        Spouse::query()
+            ->where('client_id',  $client->client_id)
+            ->where('partner_id', $partnerId)
+            ->delete();
     }
-
-    public function addSpouse(Client $client, int $partnerId): void
-    {
-        $client->spouses()->attach($partnerId);
-    }
-
-
 }

@@ -19,8 +19,8 @@ class ClientResource extends JsonResource
                 'secondary' => $this->secondary_phone,
             ],
             'type'        => $this->type,
-            'addresses'   => AddressResource::collection($this->whenLoaded('addresses')),
-            'interactions' => CrmInteractionResource::collection($this->whenLoaded('interactions')),
+            'addresses'   => AddressResource::collection($this->addresses),
+            'interactions' => CrmInteractionResource::collection($this->interactions),
             'created_at'  => $this->created_at->toDateTimeString(),
         ];
     }

@@ -48,7 +48,7 @@ class Client extends Model
 
     //RELACIONES 
     public function spouses(){
-     return $this->belongsToMany(Client::class, 'spouses', 'client_id', 'spouse_id')
+     return $this->belongsToMany(Client::class, 'spouses', 'client_id', 'partner_id')
         //->withPivot('id', 'client_id', 'spouse_id')
         //->withTimestamps();
         ;
