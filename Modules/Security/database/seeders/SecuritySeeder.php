@@ -24,6 +24,7 @@ class SecuritySeeder extends Seeder
 
         Permission::firstOrCreate(['name' => 'security.access']);
         Permission::firstOrCreate(['name' => 'security.users.view']);
+        Permission::firstOrCreate(['name' => 'security.users.index']);
         Permission::firstOrCreate(['name' => 'security.users.create']);
         Permission::firstOrCreate(['name' => 'security.users.update']);
         Permission::firstOrCreate(['name' => 'security.users.delete']);
@@ -32,7 +33,8 @@ class SecuritySeeder extends Seeder
         Permission::firstOrCreate(['name' => 'security.roles.update']);
         Permission::firstOrCreate(['name' => 'security.roles.delete']);
         Permission::firstOrCreate(['name' => 'security.permissions.view']);
-    
+        $this->call(PermissionSeeder::class);
+
 
         // admin user
         $admin = User::firstOrCreate(

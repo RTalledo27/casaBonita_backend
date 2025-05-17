@@ -4,11 +4,13 @@ namespace Modules\Security\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Modules\Security\Http\Requests\StoreUserRequest;
 use Modules\Security\Http\Requests\UpdateUserRequest;
 use Modules\Security\Models\User;
 use Modules\Security\Repositories\UserRepository;
 use Modules\Security\Transformers\UserResource;
+use Symfony\Component\HttpFoundation\Response;
 
 class UserController extends Controller
 {
@@ -18,12 +20,19 @@ class UserController extends Controller
      * Endpoints para administrar usuarios del sistema.
      */
 
+     protected $repository;
 
     //CONSTRUCTOR
-    public function __construct(private UserRepository $users)
+    public function __construct(UserRepository $repository)
     {
-        $this->middleware('auth:sanctum');
-        $this->authorizeResource(User::class, 'user');
+        $this->middleware('can:security.users.index')->only(['index', 'show']);
+        $this->middleware('can:security.users.store')->only(['store']);
+        $this->middleware('can:security.users.update')->only(['update']);
+        $this->middleware('can:security.users.destroy')->only(['destroy']);
+        $this->middleware('can:security.users.change-password')->only(['changePassword']);
+        $this->middleware('can:security.users.toggle-status')->only(['toggleStatus']);
+
+        $this->repository = $repository;
     }
 
 
@@ -41,9 +50,9 @@ class UserController extends Controller
      */
     public function index()
     {
-        $filters = request()->only(['search', 'sort_by', 'sort_dir', 'per_page']);
-        $paginated = $this->users->paginate($filters);
-        return UserResource::collection($paginated);
+        $users = $this->repository->allWithRoles();
+
+        return UserResource::collection($users);
     }
 
     /**
@@ -67,9 +76,27 @@ class UserController extends Controller
      */
     public function store(StoreUserRequest $request)
     {
-        $user = $this->users->create($request->validated());
-        $user->assignRole($request->role);
-        return new UserResource($user);
+        try {
+            DB::beginTransaction();
+
+            $user = $this->repository->create($request->validated());
+
+            if ($request->has('roles')) {
+                $user->syncRoles($request->input('roles'));
+            }
+
+            DB::commit();
+
+            return (new UserResource($user->fresh('roles')))
+                ->response()
+                ->setStatusCode(201);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al crear usuario',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     /**
@@ -80,7 +107,9 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        return new UserResource($user->load('roles'));
+        $user->load('roles');
+
+        return new UserResource($user);
     }
 
     /**
@@ -103,8 +132,25 @@ class UserController extends Controller
      */
     public function update(UpdateUserRequest $request, User $user)
     {
-        $user = $this->users->update($user, $request->validated());
-        return new UserResource($user);
+        try {
+            DB::beginTransaction();
+
+            $this->repository->update($user, $request->validated());
+
+            if ($request->has('roles')) {
+                $user->syncRoles($request->input('roles'));
+            }
+
+            DB::commit();
+
+            return new UserResource($user->fresh('roles'));
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al actualizar usuario',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
     /**
      * Remove the specified resource from storage.
@@ -120,9 +166,64 @@ class UserController extends Controller
      */
     public function destroy(User $user)
     {
-        $this->users->delete($user);
-        return response()->json([
-            'message' => 'User deleted successfully'
-        ], 200);
+        try {
+            $this->repository->delete($user);
+
+            return response()->json([
+                'message' => 'Usuario eliminado correctamente',
+            ], Response::HTTP_OK);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al eliminar usuario',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
+
+    /**
+     * Cambiar contraseña del usuario
+     *
+     * @urlParam id int required ID del usuario. Example: 2
+     * @bodyParam password string required Nueva contraseña. Example: NuevaClave123
+     *
+     * @response 200 {
+     *  "message": "Contraseña actualizada correctamente"
+     * }
+     */
+    public function changePassword(Request $request, User $user)
+    {
+        $request->validate([
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user->update([
+            'password' => bcrypt($request->password),
+        ]);
+
+        return response()->json([
+            'message' => 'Contraseña actualizada correctamente',
+        ], Response::HTTP_OK);
+    }
+
+
+    /**
+     * Activar o bloquear usuario
+     *
+     * @urlParam id int required ID del usuario. Example: 2
+     *
+     * @response 200 {
+     *  "message": "Estado actualizado correctamente"
+     * }
+     */
+    public function toggleStatus(User $user)
+    {
+        $user->status = $user->status === 'active' ? 'blocked' : 'active';
+        $user->save();
+
+        return response()->json([
+            'message' => 'Estado actualizado correctamente',
+            'status' => $user->status
+        ]);
+    }
+
 }

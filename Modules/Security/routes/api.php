@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Security\Http\Controllers\Auth\AuthController;
+use Modules\Security\Http\Controllers\PermissionController;
 use Modules\Security\Http\Controllers\RoleController;
 use Modules\Security\Http\Controllers\SecurityController;
 use Modules\Security\Http\Controllers\UserController;
@@ -15,10 +17,26 @@ Route::prefix('v1')->group(function () {
         // Usuarios
         Route::apiResource('users', UserController::class);
         Route::post('users/{user}/roles', [UserController::class, 'syncRoles']);
+        Route::post('users/{user}/change-password', [UserController::class, 'changePassword']);
+        Route::post('users/{user}/toggle-status', [UserController::class, 'toggleStatus']);
+
+
+        //INICIO DE SESION:
+        Route::post('login', [AuthController::class, 'login']);
+        Route::middleware('auth:sanctum')->group(function () {
+            Route::post('logout', [AuthController::class, 'logout']);
+            Route::get('me', [AuthController::class, 'me']);
+        });
+
+        //
+        Route::apiResource('permissions', PermissionController::class)->only(['index', 'show', 'store']);
+
         // Roles
         Route::apiResource('roles', RoleController::class);
         Route::post('roles/{role}/permissions', [RoleController::class, 'syncPermissions']);
         // Permisos (si se necesita)
         //Route::apiResource('permissions', PermissionController::class)->only(['index', 'show']);
+
+       
     });
 });

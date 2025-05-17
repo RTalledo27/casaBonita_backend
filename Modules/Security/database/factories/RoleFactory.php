@@ -20,6 +20,7 @@ class RoleFactory extends Factory
         return [
             'name'=> $this->faker->unique()->jobTitle(),
             'description'=> $this->faker->sentence(),
+            'guard_name'=> 'sanctum',
         ];
     }
 

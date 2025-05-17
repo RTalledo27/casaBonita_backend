@@ -17,6 +17,8 @@ class CrmInteractionRepository
 
     public function create(array $data): CrmInteraction
     {
+        $data['user_id'] = auth()->id(); 
+
         return CrmInteraction::create($data)->load(['client', 'user']);
     }
 

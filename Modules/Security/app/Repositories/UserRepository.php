@@ -7,6 +7,8 @@ use Modules\Security\Models\User;
 
 class UserRepository
 {
+
+    
     public function handle() {}
 
     /**
@@ -69,4 +71,8 @@ class UserRepository
         $user->delete();
     }
 
+    public function allWithRoles()
+    {
+        return User::with('roles')->paginate(10);
+    }
 }

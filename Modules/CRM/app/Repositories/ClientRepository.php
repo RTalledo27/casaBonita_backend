@@ -3,6 +3,7 @@
 namespace Modules\CRM\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Modules\CRM\Models\Client;
 use Modules\CRM\Models\Spouse;
 
@@ -39,9 +40,28 @@ class ClientRepository
      */
     public function create(array $data): Client
     {
-        return Client::create($data)
-            ->load(['addresses', 'interactions']);
-    }
+        return DB::transaction(function () use ($data) {
+            // Crear cliente principal
+            $client = Client::create($data);
+
+            // Crear direcciones si vienen anidadas
+            if (!empty($data['addresses']) && is_array($data['addresses'])) {
+                foreach ($data['addresses'] as $address) {
+                    $client->addresses()->create($address);
+                }
+            }
+
+            // Vincular cónyuge si se proporciona
+            if (!empty($data['spouse_id'])) {
+                Spouse::firstOrCreate([
+                    'client_id'  => $client->client_id,
+                    'partner_id' => $data['spouse_id'],
+                ]);
+            }
+
+            return $client->load(['addresses', 'interactions', 'spouses']);
+        });
+        }
 
     /**
      * Update an existing client.

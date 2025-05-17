@@ -5,6 +5,7 @@ namespace Modules\CRM\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\CRM\Http\Requests\{
+    CrmInteractionRequest,
     StoreCrmInteractionRequest,
     UpdateCrmInteractionRequest
 };
@@ -17,33 +18,37 @@ class CrmInteractionController extends Controller
     public function __construct(private CrmInteractionRepository $repo)
     {
         $this->middleware('auth:sanctum');
-        $this->authorizeResource(CrmInteraction::class, 'crm_interaction');
+        $this->middleware('permission:crm.access');
+        $this->authorizeResource(CrmInteraction::class, 'interaction');
     }
 
+    /** @group CRM - Interacciones
+     * @urlParam client_id int required El ID del cliente relacionado
+     */
     public function index(Request $request)
     {
-        $data = $request->only(['client_id', 'date_from', 'date_to', 'channel', 'per_page']);
-        return CrmInteractionResource::collection($this->repo->paginate($data));
+        return CrmInteractionResource::collection($this->repo->paginate($request->all()));
     }
 
-    public function store(StoreCrmInteractionRequest $req)
+    public function store(CrmInteractionRequest $request)
     {
-        return new CrmInteractionResource($this->repo->create($req->validated()));
+        return new CrmInteractionResource($this->repo->create($request->validated()));
     }
 
-    public function show(CrmInteraction $crm_interaction)
+    public function show(CrmInteraction $interaction)
     {
-        return new CrmInteractionResource($crm_interaction->load(['client', 'user']));
+        return new CrmInteractionResource($interaction->load('client'));
     }
 
-    public function update(UpdateCrmInteractionRequest $req, CrmInteraction $crm_interaction)
+    public function update(CrmInteractionRequest $request, CrmInteraction $interaction)
     {
-        return new CrmInteractionResource($this->repo->update($crm_interaction, $req->validated()));
+        return new CrmInteractionResource($this->repo->update($interaction, $request->validated()));
     }
 
-    public function destroy(CrmInteraction $crm_interaction)
+    public function destroy(CrmInteraction $interaction)
     {
-        $this->repo->delete($crm_interaction);
+        $this->repo->delete($interaction);
         return response()->noContent();
     }
+
 }

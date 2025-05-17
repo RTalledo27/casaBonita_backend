@@ -29,6 +29,11 @@ class StoreClientRequest extends FormRequest
             'occupation'     => 'nullable|string',
             'salary'         => 'nullable|numeric',
             'family_group'   => 'nullable|string',
+            'spouse_id' => 'nullable|exists:clients,client_id',
+            'addresses' => 'nullable|array',
+            'addresses.*.line1' => 'required_with:addresses|string',
         ];
     }
+  
+
 }

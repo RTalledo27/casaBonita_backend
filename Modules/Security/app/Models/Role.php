@@ -12,6 +12,8 @@ use Spatie\Permission\Models\Role as SpatieRole;
 
 class Role extends SpatieRole
 {
+
+    use HasFactory;
     protected $table = 'roles';
     protected $primaryKey = 'role_id';
     public $incrementing = true;

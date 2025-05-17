@@ -4,8 +4,10 @@ namespace Modules\Security\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Modules\Security\Http\Requests\RoleRequest;
 use Modules\Security\Models\Role;
+use Modules\Security\Transformers\RoleResource;
 
 class RoleController extends Controller
 {
@@ -25,7 +27,7 @@ class RoleController extends Controller
      */
     public function index()
     {
-        return Role::with('permissions')->get()->paginate(15);
+        return RoleResource::collection(Role::with('permissions')->get());
     }
 
     
@@ -53,7 +55,10 @@ class RoleController extends Controller
     {
         $role = Role::create(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
-        return response()->json(['message' => 'Rol creado correctamente', 'role' => $role], 201);
+        return response()->json([
+            'message' => 'Rol creado correctamente',
+            'data' => new RoleResource($role->load('permissions'))
+        ], Response::HTTP_CREATED);
     }
 
 
@@ -66,7 +71,7 @@ class RoleController extends Controller
      */
     public function show(Role $role)
     {
-        return $role->load('permissions')->load('users');
+        return new RoleResource($role->load(['permissions', 'users']));
     }
 
 
@@ -95,7 +100,39 @@ class RoleController extends Controller
     {
         $role->update(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
-        return response()->json(['message' => 'Rol actualizado correctamente', 'role' => $role]);
+        return response()->json([
+            'message' => 'Rol actualizado correctamente',
+            'data' => new RoleResource($role->load('permissions'))
+        ], Response::HTTP_OK);
+    
+    }
+
+
+    /**
+     * Asignar permisos a un rol
+     *
+     * @urlParam role string required Nombre del rol. Example: admin
+     * @bodyParam permissions array required Lista de permisos. Example: ["security.users.index", "security.users.store"]
+     *
+     * @response 200 {
+     *  "message": "Permisos asignados correctamente",
+     *  "permissions": ["security.users.index", "security.users.store"]
+     * }
+     */
+
+    public function syncPermissions(Request $request, Role $role)
+    {
+        $request->validate([
+            'permissions' => 'required|array',
+            'permissions.*' => 'exists:permissions,name',
+        ]);
+
+        $role->syncPermissions($request->permissions);
+
+        return response()->json([
+            'message' => 'Permisos asignados correctamente',
+            'permissions' => $role->permissions->pluck('name')
+        ]);
     }
 
 

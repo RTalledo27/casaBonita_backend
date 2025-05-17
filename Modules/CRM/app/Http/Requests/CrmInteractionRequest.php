@@ -11,7 +11,12 @@ class CrmInteractionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return[
+        'client_id' => 'required|exists:clients,client_id',
+        'channel' => 'required|in:call,email,whatsapp,visit,other',
+        'notes' => 'nullable|string',
+        'date' => 'required|date', // ← CAMBIADO
+    ];
     }
 
     /**

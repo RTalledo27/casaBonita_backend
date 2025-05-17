@@ -20,7 +20,7 @@ class User extends Authenticatable
 
     protected $primaryKey = 'user_id';
     protected $guard_name = 'sanctum';
-    public    $timestamps  = true;
+     public    $timestamps  = true;
 
 
     protected static function newFactory(): UserFactory
