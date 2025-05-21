@@ -14,6 +14,10 @@ class RoleController extends Controller
 
     public function __construct()
     {
+        $this->middleware('can:security.roles.view')->only(['index', 'show']);
+        $this->middleware('can:security.roles.store')->only(['store']);
+        $this->middleware('can:security.roles.update')->only(['update']);
+        $this->middleware('can:security.roles.destroy')->only(['destroy']);
         $this->middleware('auth:sanctum');
     }
 

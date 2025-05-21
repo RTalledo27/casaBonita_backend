@@ -16,6 +16,9 @@ class AuthController extends Controller
 
     public function __construct()
     {
+        // Middleware para proteger las rutas de autenticación
+        // Solo el login es accesible sin autenticación
+        
         $this->middleware('auth:sanctum')->except(['login']);
     }
 
@@ -33,24 +36,27 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
+            'username' => 'required|string',
+            'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $credentials['email'])->first();
+        // Buscamos el usuario por username
+        $user = User::where('username', $credentials['username'])->first();
 
+        // Verificamos password contra password_hash
         if (! $user || ! Hash::check($credentials['password'], $user->password_hash)) {
             throw ValidationException::withMessages([
-                'email' => ['Credenciales inválidas.'],
+                'username' => ['Credenciales inválidas.'],
             ]);
         }
 
+        // Generamos token
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'token' => $token,
-            'user' => new UserResource($user)
-        ]);
+            'user'  => new UserResource($user),
+        ], 200);
     }
 
 

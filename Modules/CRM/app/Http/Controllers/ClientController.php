@@ -32,9 +32,13 @@ class ClientController extends Controller
     ) {
         $this->middleware('auth:sanctum');
         $this->middleware('permission:crm.clients.view')->only(['index', 'show', 'summary']);
-        $this->middleware('permission:crm.clients.create')->only('store');
+        $this->middleware('permission:crm.clients.store')->only('store');
         $this->middleware('permission:crm.clients.update')->only('update');
         $this->middleware('permission:crm.clients.delete')->only('destroy');
+        $this->middleware('permission:crm.clients.spouses.view')->only(['addSpouse']); //ver spouses
+        $this->middleware('permission:crm.clients.spouses.create')->only(['addSpouse']); //agregar spouse
+        $this->middleware('permission:crm.clients.spouses.delete')->only(['removeSpouse']); //eliminar spouse
+        $this->middleware('permission:crm.clients.export')->only(['exportCsv']); //exportar csv
         $this->authorizeResource(Client::class, 'client');
     }
 

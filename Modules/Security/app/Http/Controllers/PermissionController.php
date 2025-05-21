@@ -17,8 +17,8 @@ class PermissionController extends Controller
     {
         $this->middleware('can:security.permissions.view')->only(['index', 'show']);
         $this->middleware('can:security.permissions.store')->only(['store']);
-       // $this->middleware('can:security.permissions.update')->only(['update']);
-        //$this->middleware('can:security.permissions.destroy')->only(['destroy']);
+        $this->middleware('can:security.permissions.update')->only(['update']);
+        $this->middleware('can:security.permissions.destroy')->only(['destroy']);
     }
     public function index()
     {

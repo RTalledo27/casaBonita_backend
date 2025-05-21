@@ -13,11 +13,37 @@ class StoreUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'username' => ['required', 'string', 'max:60', 'unique:users,username'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
-            'status'   => ['in:active,blocked'],
-            'roles'    => ['array', 'exists:roles,role_id'], // array de IDs de roles
+            // ACCESS INFO
+            'username'              => ['required', 'string', 'max:60', 'unique:users,username'],
+            'email'                 => ['required', 'email', 'unique:users,email'],
+            'password'              => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
+            // Laravel por convención busca password_confirmation
+            'password_confirmation' => ['required', 'same:password'],
+
+            'status'                => ['required', 'in:active,blocked'],
+
+            // PERSONAL INFO
+            'first_name'            => ['required', 'string', 'max:50'],
+            'last_name'             => ['required', 'string', 'max:50'],
+            'birth_date'            => ['required', 'date', 'before:today'],
+
+            // CONTACT INFO
+            'dni'                   => ['required', 'string', 'max:20'],
+            'phone'                 => ['required', 'string', 'max:20'],
+            'address'               => ['nullable', 'string', 'max:255'],
+
+            // WORK INFO
+            'position'              => ['required', 'string', 'max:60'],
+            'department'            => ['required', 'string', 'max:60'],
+            'hire_date'             => ['nullable', 'date', 'before_or_equal:today'],
+
+            // PHOTO
+            'photo_profile'         => ['nullable', 'image', 'max:2048'], // opcional, máximo 2 MB
+
+            // ROLES
+            'roles'                 => ['required', 'array'],
+            // Según tu último feedback, el API espera nombres, no IDs
+            'roles.*'               => ['string', 'exists:roles,name'], // array de IDs de roles
         ];    }
 
     /**

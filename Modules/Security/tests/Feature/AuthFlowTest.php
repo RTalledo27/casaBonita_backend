@@ -15,12 +15,12 @@ class AuthFlowTest extends TestCase
     public function user_can_login_with_valid_credentials()
     {
         $user = User::factory()->create([
-            'email' => 'admin@erp.com',
+            'username' => 'admin',
             'password_hash' => bcrypt('Secret@123')
         ]);
 
         $response = $this->postJson('/api/v1/security/login', [
-            'email' => 'admin@erp.com',
+            'username' => 'admin',
             'password' => 'Secret@123' // ✅ Texto plano
         ]);
 
@@ -31,15 +31,15 @@ class AuthFlowTest extends TestCase
     /** @test */
     public function login_fails_with_invalid_credentials()
     {
-        User::factory()->create(['email' => 'admin@erp.com', 'password_hash' => bcrypt('Secret@123')]);
+        User::factory()->create(['username' => 'admin', 'password_hash' => bcrypt('Secret@123')]);
 
         $response = $this->postJson('/api/v1/security/login', [
-            'email' => 'admin@erp.com',
+            'username' => 'admin@erp.com',
             'password' => 'WrongPassword',
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['email']);
+            ->assertJsonValidationErrors(['username']);
     }
 
     /** @test */

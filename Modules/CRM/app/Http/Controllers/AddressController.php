@@ -18,6 +18,11 @@ class AddressController extends Controller
     public function __construct(private AddressRepository $repo)
     {
         $this->middleware('auth:sanctum');
+        $this->middleware('can:crm.addresses.view')->only(['index', 'show']);
+        $this->middleware('can:crm.addresses.store')->only(['store']);
+        $this->middleware('can:crm.addresses.update')->only(['update']);
+        $this->middleware('can:crm.addresses.destroy')->only(['destroy']);
+
         $this->authorizeResource(Address::class, 'address');
     }
     /**

@@ -3,6 +3,8 @@
 namespace Modules\Security\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Modules\Security\Models\User;
 
 class UserRepository
@@ -32,19 +34,46 @@ class UserRepository
      */
     public function create(array $data): User
     {
+        // 1) Extraigo el UploadedFile y lo guardo en 'users'
+        $file = $data['photo_profile'] ?? null;
+        unset($data['photo_profile']);
+
+        if ($file instanceof UploadedFile) {
+            // $module puede venir del controlador o deducirse, ej: 'security/users'
+            $module = 'security/users';
+            $path   = $file->store($module, 'public');
+            $data['photo_profile'] = $path;
+        }
+
+        $data['created_by'] = Auth::id();
+
+        // 2) Creo el usuario
         $user = User::create([
             'username'      => $data['username'],
+            'first_name'    => $data['first_name']    ?? null,
+            'last_name'     => $data['last_name']     ?? null,
+            'dni'           => $data['dni']           ?? null,
             'email'         => $data['email'],
+            'phone'         => $data['phone']         ?? null,
+            'status'        => $data['status']        ?? 'active',
+            'position'      => $data['position']      ?? null,
+            'department'    => $data['department']    ?? null,
+            'address'       => $data['address']       ?? null,
+            'hire_date'     => $data['hire_date']     ?? null,
+            'birth_date'    => $data['birth_date']    ?? null,
+            'photo_profile' => $data['photo_profile'] ?? null,
             'password_hash' => bcrypt($data['password']),
-            'status'        => $data['status'] ?? 'active',
+            'created_by'    => $data['created_by'],
         ]);
 
+        // 3) Sincronizo roles
         if (!empty($data['roles'])) {
             $user->syncRoles($data['roles']);
         }
 
         return $user->load('roles');
     }
+
 
     /**
      * Update existing user.
@@ -63,9 +92,11 @@ class UserRepository
         return $user->load('roles');
     }
 
-    /**
-     * Delete a user.
-     */
+
+
+/**
+ * Delete a user.
+ */
     public function delete(User $user): void
     {
         $user->delete();

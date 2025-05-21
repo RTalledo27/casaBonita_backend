@@ -25,12 +25,12 @@ class UserController extends Controller
     //CONSTRUCTOR
     public function __construct(UserRepository $repository)
     {
-        $this->middleware('can:security.users.index')->only(['index', 'show']);
-        $this->middleware('can:security.users.store')->only(['store']);
-        $this->middleware('can:security.users.update')->only(['update']);
-        $this->middleware('can:security.users.destroy')->only(['destroy']);
-        $this->middleware('can:security.users.change-password')->only(['changePassword']);
-        $this->middleware('can:security.users.toggle-status')->only(['toggleStatus']);
+        $this->middleware('permission:security.users.index')->only(['index', 'show']);
+        $this->middleware('permission:security.users.store')->only(['store']);
+        $this->middleware('permission:security.users.update')->only(['update']);
+        $this->middleware('permission:security.users.destroy')->only(['destroy']);
+        $this->middleware('permission:security.users.change-password')->only(['changePassword']);
+        $this->middleware('permission:security.users.toggle-status')->only(['toggleStatus']);
 
         $this->repository = $repository;
     }
@@ -84,6 +84,8 @@ class UserController extends Controller
             if ($request->has('roles')) {
                 $user->syncRoles($request->input('roles'));
             }
+
+            $data['created_by'] = $request->user()->user_id;
 
             DB::commit();
 
