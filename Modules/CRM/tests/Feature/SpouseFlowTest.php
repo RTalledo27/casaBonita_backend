@@ -37,10 +37,11 @@ class SpouseFlowTest extends TestCase
     /** Agregar un cónyuge */
     public function test_add_spouse()
     {
-        Sanctum::actingAs(User::factory()->withPermission(['crm.access', 'crm.clients.update'])->create());
+        Sanctum::actingAs(User::factory()->withPermission([/*'crm.access',*/ 'crm.clients.update'])->create());
         $c1 = Client::factory()->create();
         $c2 = Client::factory()->create();
-
+        
+        Log
         $this->postJson("/api/v1/crm/clients/{$c1->client_id}/spouses",[ 'partner_id'=>$c2->client_id] )
             ->assertOk()->assertJson(['message' => 'Conyugue agregado correctamente']);
     }

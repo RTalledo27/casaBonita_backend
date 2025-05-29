@@ -50,6 +50,8 @@ class UserController extends Controller
      */
     public function index()
     {
+      
+
         $users = $this->repository->allWithRoles();
 
         return UserResource::collection($users);
@@ -170,6 +172,8 @@ class UserController extends Controller
     {
         try {
             $this->repository->delete($user);
+
+            
 
             return response()->json([
                 'message' => 'Usuario eliminado correctamente',

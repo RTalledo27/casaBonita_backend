@@ -5,6 +5,7 @@ namespace Modules\Security\Repositories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Modules\Security\Models\User;
 
 class UserRepository
@@ -34,6 +35,9 @@ class UserRepository
      */
     public function create(array $data): User
     {
+        Log::alert('Creating user', [
+            'data' => $data,
+        ]);
         // 1) Extraigo el UploadedFile y lo guardo en 'users'
         $file = $data['photo_profile'] ?? null;
         unset($data['photo_profile']);
@@ -80,15 +84,34 @@ class UserRepository
      */
     public function update(User $user, array $data): User
     {
+        Log::alert('Updating user', [
+            'user_id' => $user,
+            'data'    => $data,
+        ]);
+        // 1) Si viene foto nueva, guárdala y sustituye el campo
+        if (!empty($data['photo_profile']) && $data['photo_profile'] instanceof UploadedFile) {
+            // Opcional: puedes organizarla por módulo/carpetas
+            $path = $data['photo_profile']->store('security/users', 'public');
+            $data['photo_profile'] = $path;
+        } else {
+            // No quieres sobreescribir con null si no se envía
+            unset($data['photo_profile']);
+        }
+
+        // 2) Si enviaron contraseña, hasheala
         if (isset($data['password'])) {
             $data['password_hash'] = bcrypt($data['password']);
         }
+
+        // 3) Actualiza el resto de campos masivos
         $user->update($data);
 
+        // 4) Si mandaron roles, sincronízalos
         if (isset($data['roles'])) {
             $user->syncRoles($data['roles']);
         }
 
+        // 5) Devuelve el usuario con sus roles cargados
         return $user->load('roles');
     }
 

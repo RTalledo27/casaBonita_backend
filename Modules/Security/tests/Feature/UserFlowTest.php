@@ -65,7 +65,7 @@ class UserFlowTest extends TestCase
             'email' => 'test@erp.com',
             'password' => 'Secret@123',
             'password_confirmation' => 'Secret@123',
-            'roles' => [$role->role_id], // asegúrate que 'admin' exista
+            'roles' => [$role->name], // asegúrate que 'admin' exista
         ];
 
 
@@ -105,7 +105,7 @@ class UserFlowTest extends TestCase
         $payload = [
             'name' => 'Updated Name',
             'email' => 'updated@erp.com',
-            'roles' => [$role->role_id], // asegúrate que 'admin' exista
+            'roles' => [$role->name], // asegúrate que 'admin' exista
         ];
 
         $response = $this->putJson("/api/v1/security/users/{$user->user_id}", $payload);

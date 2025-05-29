@@ -72,7 +72,7 @@ class ClientFlowTest extends TestCase
     public function test_create_client()
     {
         Sanctum::actingAs(
-            User::factory()->withPermission(['crm.access', 'crm.clients.create'])->create()
+            User::factory()->withPermission([/*'crm.access',*/ 'crm.clients.create'])->create()
         );
         $payload = Client::factory()->make()->toArray();
 
