@@ -30,8 +30,13 @@ class StoreClientRequest extends FormRequest
             'salary'           => 'nullable|numeric|min:0',
             'family_group'     => 'nullable|string|max:255',
             'num_son'          => 'nullable|integer|min:0',
-            'spouse_id' => 'nullable|exists:clients,client_id',
-            'addresses' => 'nullable|array',
+            'spouse_id'        => 'nullable|exists:clients,client_id',
+            'family_members'        => 'nullable|array',
+            'family_members.*.first_name' => 'required_with:family_members|string|max:80',
+            'family_members.*.last_name'  => 'required_with:family_members|string|max:80',
+            'family_members.*.dni'        => 'required_with:family_members|string|max:20',
+            'family_members.*.relation'   => 'required_with:family_members|string|max:60',
+            'addresses'         => 'nullable|array',
             'addresses.*.line1' => 'required_with:addresses|string',
         ];
     }

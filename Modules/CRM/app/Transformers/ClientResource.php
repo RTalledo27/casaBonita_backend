@@ -4,6 +4,8 @@ namespace Modules\CRM\Transformers;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 use Modules\CRM\Transformers\CrmInteractionResource;
+use Modules\CRM\Transformers\AddressResource;
+
 
 class ClientResource extends JsonResource
 {

@@ -39,6 +39,11 @@ class UpdateClientRequest extends FormRequest
             'occupation'     => 'nullable|string',
             'salary'         => 'nullable|numeric',
             'family_group'   => 'nullable|string',
+            'family_members'        => 'nullable|array',
+            'family_members.*.first_name' => 'required_with:family_members|string|max:80',
+            'family_members.*.last_name'  => 'required_with:family_members|string|max:80',
+            'family_members.*.dni'        => 'required_with:family_members|string|max:20',
+            'family_members.*.relation'   => 'required_with:family_members|string|max:60',
         ];
     }
 }
