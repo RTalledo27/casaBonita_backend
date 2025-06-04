@@ -29,7 +29,6 @@ class StoreClientRequest extends FormRequest
             'occupation'       => 'nullable|string|max:255',
             'salary'           => 'nullable|numeric|min:0',
             'family_group'     => 'nullable|string|max:255',
-            'num_son'          => 'nullable|integer|min:0',
             'spouse_id'        => 'nullable|exists:clients,client_id',
             'family_members'        => 'nullable|array',
             'family_members.*.first_name' => 'required_with:family_members|string|max:80',
