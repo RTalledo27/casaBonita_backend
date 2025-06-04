@@ -15,7 +15,7 @@ class LotController extends Controller
     {
         //
 
-        return Lot::whit('manzana', 'street_type','media')->paginate(15);
+        return Lot::with('manzana', 'street_type','media')->paginate(15);
     }
 
     /**
