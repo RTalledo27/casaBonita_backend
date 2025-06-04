@@ -39,7 +39,7 @@ class ClientResource extends JsonResource
             'occupation'       => $this->occupation,
             'salary'           => $this->salary,
             'family_group'     => $this->family_group,
-            'num_son'          => $this->num_son,
+            'family_members'   => FamilyMemberResource::collection($this->whenLoaded('familyMembers')),
             'created_at'       => $this->created_at,
 
             // relaciones opcionales

@@ -83,6 +83,7 @@ class Client extends Model
 
 
 
+
     //RELACIONES 
     public function spouses(){
         return $this->belongsToMany(Client::class, 'spouses', 'client_id', 'partner_id')
@@ -98,6 +99,12 @@ class Client extends Model
     public function interactions()
     {
         return $this->hasMany(CrmInteraction::class, 'client_id');
+    }
+
+
+    public function familyMembers()
+    {
+        return $this->hasMany(FamilyMember::class, 'client_id');
     }
 
     public function reservations()

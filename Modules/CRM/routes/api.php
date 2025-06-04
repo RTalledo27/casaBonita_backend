@@ -5,7 +5,8 @@ use Modules\CRM\Http\Controllers\{
     ClientController,
     AddressController,
     CrmInteractionController,
-    CRMController
+    CRMController,
+    FamilyMemberController
 };
 
 
@@ -22,9 +23,11 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('clients',       ClientController::class);
             Route::apiResource('addresses',     AddressController::class);
             Route::apiResource('interactions',  CrmInteractionController::class);
+            Route::apiResource('family-members', FamilyMemberController::class);
 
-            // Endpoints adicionales
-            Route::get('clients/{client}/spouses',       [ClientController::class, 'spouses'])
+
+        // Endpoints adicionales
+        Route::get('clients/{client}/spouses',       [ClientController::class, 'spouses'])
                 ->name('clients.spouses.index');
             Route::post('clients/{client}/spouses',      [ClientController::class, 'addSpouse'])
                 ->name('clients.spouses.store');

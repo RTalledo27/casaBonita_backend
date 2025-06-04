@@ -36,6 +36,17 @@ class ClientRepository
                 }
             }
 
+
+            if (!empty($data['family_members']) && is_array($data['family_members'])) {
+                foreach ($data['family_members'] as $member) {
+                    $client->familyMembers()->create($member);
+                }
+            }
+
+
+
+
+
             if (!empty($data['spouse_id'])) {
                 Spouse::firstOrCreate([
                     'client_id' => $client->client_id,
@@ -52,8 +63,18 @@ class ClientRepository
      */
     public function update(Client $client, array $data): Client
     {
-        $client->update($data);
-        return $client->load(['addresses', 'interactions']);
+        return DB::transaction(function () use ($client, $data) {
+            $client->update($data);
+
+            if (array_key_exists('family_members', $data)) {
+                $client->familyMembers()->delete();
+                foreach ($data['family_members'] as $member) {
+                    $client->familyMembers()->create($member);
+                }
+            }
+
+            return $client->load(['addresses', 'interactions', 'familyMembers']);
+        });
     }
 
     /**
