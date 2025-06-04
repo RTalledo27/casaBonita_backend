@@ -15,28 +15,28 @@ class AddressPolicy
      */
     public function __construct() {}
 
-    public function viewAny(User $user): bool
+    public function viewAny(User $user)
     {
-        return $user->can('crm.addresses.view');
+        return $user->hasPermission('crm.addresses.view');
     }
 
-    public function view(User $user, Address $address): bool
+    public function view(User $user, Address $address)
     {
-        return $user->can('crm.addresses.view');
+        return $user->hasPermission('crm.addresses.view');
     }
 
-    public function create(User $user): bool
+    public function create(User $user)
     {
-        return $user->can('crm.addresses.create');
+        return $user->hasPermission('crm.addresses.create');
     }
 
-    public function update(User $user, Address $address): bool
+    public function update(User $user, Address $address)
     {
-        return $user->can('crm.addresses.update');
+        return $user->hasPermission('crm.addresses.update');
     }
 
-    public function delete(User $user, Address $address): bool
+    public function delete(User $user, Address $address)
     {
-        return $user->can('crm.addresses.delete');
+        return $user->hasPermission('crm.addresses.delete');
     }
 }

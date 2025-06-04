@@ -12,6 +12,7 @@ use RecursiveIteratorIterator;
 use Modules\CRM\Policies\{ClientPolicy, AddressPolicy, CrmInteractionPolicy};
 use Modules\CRM\Models\{Client, Address, CrmInteraction};
 use Illuminate\Support\Facades\Gate;
+use Modules\Security\Models\User;
 
 class CRMServiceProvider extends ServiceProvider
 {
@@ -20,6 +21,13 @@ class CRMServiceProvider extends ServiceProvider
     protected string $name = 'CRM';
 
     protected string $nameLower = 'crm';
+
+    protected $policies = [
+        Client::class => ClientPolicy::class,
+        Address::class => AddressPolicy::class,
+        CrmInteraction::class => CrmInteractionPolicy::class,
+    ];
+
 
     /**
      * Boot the application events.
@@ -31,10 +39,26 @@ class CRMServiceProvider extends ServiceProvider
         $this->registerTranslations();
         $this->registerConfig();
         $this->registerViews();
+        $this->registerPolicies();
         $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
         Gate::policy(Client::class,        ClientPolicy::class);
         Gate::policy(Address::class,       AddressPolicy::class);
         Gate::policy(CrmInteraction::class, CrmInteractionPolicy::class);
+
+        Gate::define('crm.access', function (User $user) {
+            return $user->can('crm.acc');
+        });
+        
+    }
+
+    /**
+     * Register the policies for the module.
+     */
+    protected function registerPolicies(): void
+    {
+        foreach ($this->policies as $model => $policy) {
+            Gate::policy($model, $policy);
+        }
     }
 
     /**

@@ -46,6 +46,43 @@ class Client extends Model
     //     // return ClientFactory::new();
     // }
 
+    // use Illuminate\Database\Eloquent\Builder;
+
+    public function scopeFilter($query, array $filters)
+    {
+        if (!empty($filters['search'])) {
+            $query->where(function ($q) use ($filters) {
+                $q->where('first_name', 'like', "%{$filters['search']}%")
+                    ->orWhere('last_name', 'like', "%{$filters['search']}%")
+                    ->orWhere('email', 'like', "%{$filters['search']}%")
+                    ->orWhere('doc_number', 'like', "%{$filters['search']}%");
+            });
+        }
+
+        if (!empty($filters['type'])) {
+            $query->where('type', $filters['type']);
+        }
+
+        if (!empty($filters['sort_by']) && !empty($filters['sort_dir'])) {
+            $query->orderBy($filters['sort_by'], $filters['sort_dir']);
+        } else {
+            $query->latest(); // default sort
+        }
+
+        if (!empty($filters['date_from'])) {
+            $query->whereDate('created_at', '>=', $filters['date_from']);
+        }
+
+        if (!empty($filters['date_to'])) {
+            $query->whereDate('created_at', '<=', $filters['date_to']);
+        }
+
+        return $query;
+    }
+
+
+
+
     //RELACIONES 
     public function spouses(){
         return $this->belongsToMany(Client::class, 'spouses', 'client_id', 'partner_id')

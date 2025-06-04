@@ -15,39 +15,43 @@ class ClientPolicy
      */
     public function __construct() {}
 
-    public function viewAny(User $user): bool
+    public function viewAny(User $user)
     {
-        return $user->can('crm.clients.view');
+        return $user->hasPermissionTo('crm.clients.view');
     }
 
-    public function view(User $user, Client $client): bool
+    public function view(User $user, Client $client)
     {
-        return $user->can('crm.clients.view');
+        return $user->hasPermissionTo('crm.clients.view');
     }
 
-    public function create(User $user): bool
+    public function create(User $user)
     {
-        return $user->can('crm.clients.create');
+        return $user->hasPermission('crm.clients.create');
     }
 
-    public function update(User $user, Client $client): bool
+    public function update(User $user, Client $client)
     {
-        return $user->can('crm.clients.update');
+        return $user->hasPermission('crm.clients.update');
     }
 
-    public function delete(User $user, Client $client): bool
+    public function delete(User $user, Client $client)
     {
-        return $user->can('crm.clients.delete');
+        return $user->hasPermission('crm.clients.delete');
     }
 
-    // (Opcional) restaurar y forzar eliminación:
-    public function restore(User $user, Client $client): bool
+    public function export(User $user)
     {
-        return $user->can('crm.clients.restore');
+        return $user->hasPermission('crm.clients.export');
     }
 
-    public function forceDelete(User $user, Client $client): bool
+    public function summary(User $user, Client $client)
     {
-        return $user->can('crm.clients.force-delete');
+        return $user->hasPermission('crm.clients.summary');
+    }
+
+    public function manageSpouses(User $user, Client $client)
+    {
+        return $user->hasPermission('crm.clients.spouses');
     }
 }

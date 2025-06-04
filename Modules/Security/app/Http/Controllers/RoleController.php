@@ -5,12 +5,29 @@ namespace Modules\Security\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Log;
 use Modules\Security\Http\Requests\RoleRequest;
 use Modules\Security\Models\Role;
 use Modules\Security\Transformers\RoleResource;
+use Pusher\Pusher;
 
 class RoleController extends Controller
 {
+
+
+    private function pusherInstance()
+    {
+        return new Pusher(
+            config('broadcasting.connections.pusher.key'),
+            config('broadcasting.connections.pusher.secret'),
+            config('broadcasting.connections.pusher.app_id'),
+            [
+                'cluster' => config('broadcasting.connections.pusher.options.cluster'),
+                'useTLS' => true
+            ]
+        );
+    }
+
 
     public function __construct()
     {
@@ -59,6 +76,13 @@ class RoleController extends Controller
     {
         $role = Role::create(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
+
+        //pusher:
+        $pusher = $this->pusherInstance();
+        $pusher->trigger('role-channel', 'created', [
+            'role' => (new RoleResource($role->load('permissions')))->toArray($request)
+        ]);
+
         return response()->json([
             'message' => 'Rol creado correctamente',
             'data' => new RoleResource($role->load('permissions'))
@@ -104,6 +128,14 @@ class RoleController extends Controller
     {
         $role->update(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
+
+        $pusher = $this->pusherInstance();
+        $pusher->trigger('role-channel', 'updated', [
+            'role' => (new RoleResource($role->load('permissions')))->toArray($request)
+        ]);
+        
+
+
         return response()->json([
             'message' => 'Rol actualizado correctamente',
             'data' => new RoleResource($role->load('permissions'))
@@ -150,7 +182,14 @@ class RoleController extends Controller
      */
     public function destroy(Role $role)
     {
+        $roleData = (new RoleResource($role->load('permissions')))->toArray(request());
+
         $role->delete();
+
+        $pusher = $this->pusherInstance();
+        $pusher->trigger('role-channel', 'deleted', [
+            'role' => $roleData
+        ]);
         return response()->json(['message' => 'Rol eliminado correctamente']);
     }
 }

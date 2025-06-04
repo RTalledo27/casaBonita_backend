@@ -14,26 +14,13 @@ class ClientRepository
     /**
      * Paginate clients with optional filters.
      */
-    public function paginate(array $filters = []): LengthAwarePaginator
+    public function paginate(array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
         return Client::with(['addresses', 'interactions'])
-            ->when(
-                $filters['search'] ?? null,
-                fn($q, $search) =>
-                $q->where(
-                    fn($q2) =>
-                    $q2->where('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name',  'like', "%{$search}%")
-                )
-            )
-            ->when(
-                $filters['type'] ?? null,
-                fn($q, $type) =>
-                $q->where('type', $type)
-            )
-            ->orderBy($filters['sort_by'] ?? 'created_at', $filters['sort_dir'] ?? 'desc')
-            ->paginate($filters['per_page'] ?? 20);
+            ->filter($filters)
+            ->paginate($filters['per_page'] ?? $perPage);
     }
+
 
     /**
      * Create a new client and load relations.
@@ -41,27 +28,24 @@ class ClientRepository
     public function create(array $data): Client
     {
         return DB::transaction(function () use ($data) {
-            // Crear cliente principal
             $client = Client::create($data);
 
-            // Crear direcciones si vienen anidadas
             if (!empty($data['addresses']) && is_array($data['addresses'])) {
                 foreach ($data['addresses'] as $address) {
                     $client->addresses()->create($address);
                 }
             }
 
-            // Vincular cónyuge si se proporciona
             if (!empty($data['spouse_id'])) {
                 Spouse::firstOrCreate([
-                    'client_id'  => $client->client_id,
+                    'client_id' => $client->client_id,
                     'partner_id' => $data['spouse_id'],
                 ]);
             }
 
             return $client->load(['addresses', 'interactions', 'spouses']);
         });
-        }
+    }
 
     /**
      * Update an existing client.

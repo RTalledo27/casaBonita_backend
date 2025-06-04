@@ -7,28 +7,28 @@ use Modules\Security\Models\User;
 
 class CrmInteractionPolicy
 {
-    public function viewAny(User $user): bool
+    public function viewAny(User $user)
     {
-        return $user->can('crm.interactions.view');
+        return $user->hasPermission('crm.interactions.view');
     }
 
-    public function view(User $user, CrmInteraction $interaction): bool
+    public function view(User $user, CrmInteraction $interaction)
     {
-        return $user->can('crm.interactions.view');
+        return $user->hasPermission('crm.interactions.view');
     }
 
-    public function create(User $user): bool
+    public function create(User $user)
     {
-        return $user->can('crm.interactions.create');
+        return $user->hasPermission('crm.interactions.create');
     }
 
-    public function update(User $user, CrmInteraction $interaction): bool
+    public function update(User $user, CrmInteraction $interaction)
     {
-        return $user->can('crm.interactions.update');
+        return $user->hasPermission('crm.interactions.update');
     }
 
-    public function delete(User $user, CrmInteraction $interaction): bool
+    public function delete(User $user, CrmInteraction $interaction)
     {
-        return $user->can('crm.interactions.delete');
+        return $user->hasPermission('crm.interactions.delete');
     }
 }

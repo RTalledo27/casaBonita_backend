@@ -18,6 +18,13 @@ class AddressRepository
     }
 
 
+    public function find(int $id): Address
+    {
+        return Address::with('client')->findOrFail($id);
+    }
+
+
+
     public function create(array $data): Address
     {
         return Address::create($data)->load('client');
@@ -40,4 +47,9 @@ class AddressRepository
         $address->delete();
     }
 
+
+    public function belongsToClient(Address $address, int $clientId): bool
+    {
+        return $address->client_id === $clientId;
+    }
 }

@@ -13,13 +13,16 @@ class CrmInteractionResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id' => $this->interaction_id,
-            'client_id' => $this->client_id,
-            'user_id' => $this->user_id,
-            'channel' => $this->channel,
-            'notes' => $this->notes,
-            'date' => $this->date, // ← CAMBIADO
-            'created_at' => $this->created_at,
+            'interaction_id' => $this->interaction_id,
+            'client_id'      => $this->client_id,
+            'client_name'    => $this->client->full_name ?? null,
+            'user_id'        => $this->user_id,
+            'user_name'      => $this->user->name ?? null,
+            'date'           => $this->date,
+            'channel'        => $this->channel,
+            'notes'          => $this->notes,
+            'created_at'     => $this->created_at?->toDateTimeString(),
+            'updated_at'     => $this->updated_at?->toDateTimeString(),
         ];
         }
 }

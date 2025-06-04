@@ -2,32 +2,68 @@
 
 namespace Modules\CRM\Repositories;
 
+use Illuminate\Database\Eloquent\Collection;
 use Modules\CRM\Models\CrmInteraction;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class CrmInteractionRepository
 {
+    public function all(): Collection
+    {
+        return CrmInteraction::with(['client', 'user'])->get();
+    }
+
+    /**
+     * Paginación con filtros opcionales.
+     */
     public function paginate(array $filters = []): LengthAwarePaginator
     {
-        return CrmInteraction::with(['client', 'user'])
-            ->when($filters['client_id'] ?? null, fn($q, $id) => $q->where('client_id', $id))
-            ->orderBy($filters['sort_by'] ?? 'date', $filters['sort_dir'] ?? 'desc')
-            ->paginate($filters['per_page'] ?? 20);
+        $query = CrmInteraction::with(['client', 'user']);
+
+        if (!empty($filters['search'])) {
+            $query->where('notes', 'like', "%{$filters['search']}%");
+        }
+
+        if (!empty($filters['client_id'])) {
+            $query->where('client_id', $filters['client_id']);
+        }
+
+        if (!empty($filters['channel'])) {
+            $query->where('channel', $filters['channel']);
+        }
+
+        return $query->orderBy('date', 'desc')
+            ->paginate($filters['per_page'] ?? 10);
     }
 
+    /**
+     * Crear nueva interacción.
+     */
     public function create(array $data): CrmInteraction
     {
-        $data['user_id'] = auth()->id(); 
-
-        return CrmInteraction::create($data)->load(['client', 'user']);
+        return CrmInteraction::create($data);
     }
 
+    /**
+     * Buscar una interacción por ID.
+     */
+    public function find(int $id): CrmInteraction
+    {
+        return CrmInteraction::with(['client', 'user'])->findOrFail($id);
+    }
+
+    /**
+     * Actualizar una interacción.
+     */
     public function update(CrmInteraction $interaction, array $data): CrmInteraction
     {
         $interaction->update($data);
-        return $interaction->load(['client', 'user']);
+        return $interaction->refresh();
     }
 
+    /**
+     * Eliminar una interacción.
+     */
     public function delete(CrmInteraction $interaction): void
     {
         $interaction->delete();

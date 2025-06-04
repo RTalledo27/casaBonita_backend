@@ -12,43 +12,67 @@ use Modules\CRM\Http\Requests\{
 use Modules\CRM\Models\CrmInteraction;
 use Modules\CRM\Repositories\CrmInteractionRepository;
 use Modules\CRM\Transformers\CrmInteractionResource;
+use Modules\services\PusherNotifier;
 
 class CrmInteractionController extends Controller
 {
-    public function __construct(private CrmInteractionRepository $repo)
-    {
+    public function __construct(
+        private CrmInteractionRepository $interactions,
+        private PusherNotifier $pusher
+    ) {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:crm.access');
-        $this->authorizeResource(CrmInteraction::class, 'interaction');
+        $this->middleware('can:crm.access');
+        $this->middleware('permission:crm.interactions.view')->only(['index', 'show']);
+        $this->middleware('permission:crm.interactions.store')->only('store');
+        $this->middleware('permission:crm.interactions.update')->only('update');
+        $this->middleware('permission:crm.interactions.delete')->only('destroy');
     }
 
-    /** @group CRM - Interacciones
-     * @urlParam client_id int required El ID del cliente relacionado
+    /**
+     * Listar todas las interacciones (con filtros si es necesario).
      */
     public function index(Request $request)
     {
-        return CrmInteractionResource::collection($this->repo->paginate($request->all()));
+        $filters = $request->only(['client_id', 'user_id', 'channel', 'date']);
+        return CrmInteractionResource::collection($this->interactions->paginate($filters));
     }
 
-    public function store(CrmInteractionRequest $request)
+    /**
+     * Crear una nueva interacción.
+     */
+    public function store(StoreCrmInteractionRequest $request)
     {
-        return new CrmInteractionResource($this->repo->create($request->validated()));
+        $interaction = $this->interactions->create($request->validated());
+        $this->pusher->notify('interaction', 'created', ['interaction' => new CrmInteractionResource($interaction)]);
+        return new CrmInteractionResource($interaction);
     }
 
+    /**
+     * Mostrar una interacción específica.
+     */
     public function show(CrmInteraction $interaction)
     {
-        return new CrmInteractionResource($interaction->load('client'));
+        return new CrmInteractionResource($interaction);
     }
 
-    public function update(CrmInteractionRequest $request, CrmInteraction $interaction)
+    /**
+     * Actualizar una interacción existente.
+     */
+    public function update(UpdateCrmInteractionRequest $request, CrmInteraction $interaction)
     {
-        return new CrmInteractionResource($this->repo->update($interaction, $request->validated()));
+        $updated = $this->interactions->update($interaction, $request->validated());
+        $this->pusher->notify('interaction', 'updated', ['interaction' => new CrmInteractionResource($updated)]);
+        return new CrmInteractionResource($updated);
     }
 
+    /**
+     * Eliminar una interacción.
+     */
     public function destroy(CrmInteraction $interaction)
     {
-        $this->repo->delete($interaction);
-        return response()->noContent();
+        $id = $interaction->interaction_id;
+        $this->interactions->delete($interaction);
+        $this->pusher->notify('interaction', 'deleted', ['interaction' => ['interaction_id' => $id]]);
+        return response()->json(['message' => 'Interacción eliminada', 'interaction_id' => $id]);
     }
-
 }

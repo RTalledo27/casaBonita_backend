@@ -10,10 +10,33 @@ use Modules\Security\Http\Requests\UpdateUserRequest;
 use Modules\Security\Models\User;
 use Modules\Security\Repositories\UserRepository;
 use Modules\Security\Transformers\UserResource;
+use Pusher\Pusher;
 use Symfony\Component\HttpFoundation\Response;
 
 class UserController extends Controller
 {
+
+    /**
+     * 
+     * INICIALIZACION PUSHER
+     * 
+     */
+
+     private function pusherInstance(){
+        return new Pusher(
+            config('broadcasting.connections.pusher.key'),
+            config('broadcasting.connections.pusher.secret'),
+            config('broadcasting.connections.pusher.app_id'),
+            [
+                'cluster' => config('broadcasting.connections.pusher.options.cluster'),
+                'useTLS' => true
+            ]
+
+        );
+     }
+
+
+
     /**
      * @group Seguridad - Gestión de Usuarios
      *
@@ -53,7 +76,6 @@ class UserController extends Controller
       
 
         $users = $this->repository->allWithRoles();
-
         return UserResource::collection($users);
     }
 
@@ -81,6 +103,7 @@ class UserController extends Controller
         try {
             DB::beginTransaction();
 
+
             $user = $this->repository->create($request->validated());
 
             if ($request->has('roles')) {
@@ -90,6 +113,14 @@ class UserController extends Controller
             $data['created_by'] = $request->user()->user_id;
 
             DB::commit();
+
+
+            //PUSHER
+            $pusher = $this->pusherInstance();
+            $pusher->trigger('user-channel', 'created', [
+                'user' => (new UserResource($user->fresh('roles')))->toArray($request)
+            ]);
+
 
             return (new UserResource($user->fresh('roles')))
                 ->response()
@@ -147,7 +178,17 @@ class UserController extends Controller
 
             DB::commit();
 
+            //PUSHER
+            $pusher = $this->pusherInstance();
+            $pusher->trigger('user-channel', 'updated', [
+                'user' => (new UserResource($user->fresh('roles')))->toArray($request)
+            ]);
+
+
             return new UserResource($user->fresh('roles'));
+
+
+
         } catch (\Throwable $e) {
             DB::rollBack();
             return response()->json([
@@ -171,9 +212,18 @@ class UserController extends Controller
     public function destroy(User $user)
     {
         try {
+            
+            $userData = (new UserResource($user->fresh('roles')))->toArray(request());
+            
             $this->repository->delete($user);
 
-            
+
+
+
+            $pusher = $this->pusherInstance();
+            $pusher->trigger('user-channel', 'deleted', [
+                'user' =>  $userData
+            ]);
 
             return response()->json([
                 'message' => 'Usuario eliminado correctamente',
