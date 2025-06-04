@@ -54,7 +54,7 @@ class ClientRepository
                 ]);
             }
 
-            return $client->load(['addresses', 'interactions', 'spouses']);
+            return $client->load(['addresses', 'interactions', 'spouses', 'familyMembers']);
         });
     }
 
