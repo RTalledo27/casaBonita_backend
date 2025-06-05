@@ -54,7 +54,7 @@ class ClientController extends Controller
     public function store(StoreClientRequest $req)
     {
         $client = $this->clients->create($req->validated());
-        $this->pusher->notify('client', 'created', ['client' => new ClientResource($client)]);
+        $this->pusher->notify('client-channel', 'created', ['client' => new ClientResource($client)]);
         return new ClientResource($client);
     }
 
@@ -73,7 +73,7 @@ class ClientController extends Controller
     public function update(UpdateClientRequest $req, Client $client)
     {
         $updated = $this->clients->update($client, $req->validated());
-        $this->pusher->notify('client', 'updated', ['client' => new ClientResource($updated)]);
+        $this->pusher->notify('client-channel', 'updated', ['client' => new ClientResource($updated)]);
         return new ClientResource($updated);
     }
 
@@ -84,7 +84,7 @@ class ClientController extends Controller
     {
         $id = $client->client_id;
         $this->clients->delete($client);
-        $this->pusher->notify('client', 'deleted', ['client' => ['client_id' => $id]]);
+        $this->pusher->notify('client-channel', 'deleted', ['client' => ['client_id' => $id]]);
         return response()->json(['message' => 'Cliente eliminado', 'client_id' => $id]);
     }
 

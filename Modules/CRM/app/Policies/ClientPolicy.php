@@ -27,31 +27,31 @@ class ClientPolicy
 
     public function create(User $user)
     {
-        return $user->hasPermission('crm.clients.create');
+        return $user->hasPermissionTo('crm.clients.store');
     }
 
     public function update(User $user, Client $client)
     {
-        return $user->hasPermission('crm.clients.update');
+        return $user->hasPermissionTo('crm.clients.update');
     }
 
     public function delete(User $user, Client $client)
     {
-        return $user->hasPermission('crm.clients.delete');
+        return $user->hasPermissionTo('crm.clients.delete');
     }
 
     public function export(User $user)
     {
-        return $user->hasPermission('crm.clients.export');
+        return $user->hasPermissionTo('crm.clients.export');
     }
 
     public function summary(User $user, Client $client)
     {
-        return $user->hasPermission('crm.clients.summary');
+        return $user->hasPermissionTo('crm.clients.summary');
     }
 
     public function manageSpouses(User $user, Client $client)
     {
-        return $user->hasPermission('crm.clients.spouses');
+        return $user->hasPermissionTo('crm.clients.spouses');
     }
 }

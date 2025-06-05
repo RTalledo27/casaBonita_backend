@@ -10,7 +10,7 @@ class StoreClientRequest extends FormRequest
     public function authorize(): bool
     {
         // Verifica permiso de creación
-        return $this->user()->can('crm.clients.create');
+        return $this->user()->can('crm.clients.store');
     }
 
     public function rules(): array
