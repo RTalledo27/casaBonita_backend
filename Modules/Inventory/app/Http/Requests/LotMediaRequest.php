@@ -11,7 +11,12 @@ class LotMediaRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'lot_id'   => 'required|exists:lots,lot_id',
+            'url'      => 'required|url',
+            'type'     => 'required|in:foto,plano,video,doc',
+            'position' => 'nullable|integer|min:1',
+        ];    
     }
 
     /**
@@ -19,6 +24,6 @@ class LotMediaRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('inventory.media.manage') ?? false;
     }
 }

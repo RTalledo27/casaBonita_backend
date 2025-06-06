@@ -3,7 +3,16 @@
 namespace Modules\Inventory\Providers;
 
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Modules\Inventory\Models\Lot;
+use Modules\Inventory\Models\LotMedia;
+use Modules\Inventory\Models\Manzana;
+use Modules\Inventory\Models\StreetType;
+use Modules\Inventory\Policies\LotMediaPolicy;
+use Modules\Inventory\Policies\LotPolicy;
+use Modules\Inventory\Policies\ManzanaPolicy;
+use Modules\Inventory\Policies\StreetTypePolicy;
 use Nwidart\Modules\Traits\PathNamespace;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -11,11 +20,18 @@ use RecursiveIteratorIterator;
 class InventoryServiceProvider extends ServiceProvider
 {
     use PathNamespace;
+    use PathNamespace;
 
     protected string $name = 'Inventory';
 
     protected string $nameLower = 'inventory';
 
+    protected $policies = [
+        Lot::class       => LotPolicy::class,
+        LotMedia::class    => LotMediaPolicy::class,
+        Manzana::class     => ManzanaPolicy::class,
+        StreetType::class  => StreetTypePolicy::class,
+    ];
     /**
      * Boot the application events.
      */
@@ -25,6 +41,7 @@ class InventoryServiceProvider extends ServiceProvider
         $this->registerCommandSchedules();
         $this->registerTranslations();
         $this->registerConfig();
+        $this->registerPolicies();
         $this->registerViews();
         $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
     }
@@ -36,6 +53,10 @@ class InventoryServiceProvider extends ServiceProvider
     {
         $this->app->register(EventServiceProvider::class);
         $this->app->register(RouteServiceProvider::class);
+        $this->app->singleton(\Modules\Inventory\Repositories\LotRepository::class);
+        $this->app->singleton(\Modules\Inventory\Repositories\LotMediaRepository::class);
+        $this->app->singleton(\Modules\Inventory\Repositories\ManzanaRepository::class);
+        $this->app->singleton(\Modules\Inventory\Repositories\StreetTypeRepository::class);
     }
 
     /**
@@ -150,5 +171,12 @@ class InventoryServiceProvider extends ServiceProvider
         }
 
         return $paths;
+    }
+
+    protected function registerPolicies(): void
+    {
+        foreach ($this->policies as $model => $policy) {
+            Gate::policy($model, $policy);
+        }
     }
 }

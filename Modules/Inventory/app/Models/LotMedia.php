@@ -20,6 +20,7 @@ class LotMedia extends Model
         'lot_id',
         'url',
         'type',
+        'position',
         'uploaded_at'
     ];
 

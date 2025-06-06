@@ -4,63 +4,132 @@ namespace Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Modules\Inventory\Http\Requests\LotMediaRequest;
 use Modules\Inventory\Models\LotMedia;
+use Modules\Inventory\Repositories\LotMediaRepository;
+use Modules\Inventory\Transformers\lotMediaResource;
+use Modules\services\PusherNotifier;
+use Pusher\Pusher;
 
 class LotMediaController extends Controller
 {
+
+    private function pusherInstance(): Pusher
+    {
+        return new Pusher(
+            config('broadcasting.connections.pusher.key'),
+            config('broadcasting.connections.pusher.secret'),
+            config('broadcasting.connections.pusher.app_id'),
+            [
+                'cluster' => config('broadcasting.connections.pusher.options.cluster'),
+                'useTLS'  => true,
+            ]
+        );
+    }
+
+    /* ---------- DI + políticas / permisos ---------- */
+    public function __construct(private LotMediaRepository $repository)
+    {
+        $this->middleware('auth:sanctum');
+        $this->middleware('permission:inventory.media.index')->only(['index', 'show']);
+        $this->middleware('permission:inventory.media.store')->only(['store']);
+        $this->middleware('permission:inventory.media.update')->only(['update']);
+        $this->middleware('permission:inventory.media.destroy')->only(['destroy']);
+
+        $this->authorizeResource(LotMedia::class, 'lot_media');
+    }
+
     /**
      * Display a listing of the resource.
      */
     public function index()
     {
-        //
-
-        return LotMedia::all();
+        return LotMediaResource::collection(LotMedia::all());
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    /** Crear media */
+    public function store(LotMediaRequest $request)
     {
+        try {
+            DB::beginTransaction();
 
-        //
-        $data = $request->validate([
-            'lot_id'      => 'required|exists:lots,lot_id',
-            'url'         => 'required|url',
-            'type'        => 'required|in:foto,plano,video,doc',
-         ]);
-        return LotMedia::create($data);
+            $media = $this->repository->create($request->validated());
+
+            DB::commit();
+            $pusher = $this->pusherInstance();
+            $pusher->trigger('lot-media-channel', 'created', [
+                'media' => (new LotMediaResource($media))->toArray($request),
+            ]);
+            
+
+            return (new LotMediaResource($media))
+                ->response()
+                ->setStatusCode(Response::HTTP_CREATED);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al crear media',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
-    /**
-     * Show the specified resource.
-     */
-    public function show(LotMedia $lotMedia)
+    /** Mostrar media */
+    public function show(LotMedia $lot_media)
     {
-        //
-
-        return $lotMedia;
+        return new LotMediaResource($lot_media);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id)
+    /** Actualizar media */
+    public function update(LotMediaRequest $request, LotMedia $lot_media)
     {
-        //
+        try {
+            DB::beginTransaction();
 
-        return response()->json([]);
+            $this->repository->update($lot_media, $request->validated());
+
+            DB::commit();
+
+            $fresh = $lot_media->fresh();
+            $pusher = $this->pusherInstance();
+            
+            $pusher->trigger('lot-media-channel', 'updated', [
+                'media' => (new LotMediaResource($fresh))->toArray($request),
+            ]);
+
+            return new LotMediaResource($fresh);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al actualizar media',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(LotMedia $lotMedia)
+    /** Eliminar media */
+    public function destroy(LotMedia $lot_media)
     {
-        $lotMedia->delete();
-        return response()->json([
-            'message' => 'Media deleted successfully',
-        ]);
+        try {
+            $mediaData = (new lotMediaResource($lot_media))->toArray(request());
+
+            $this->repository->delete($lot_media);
+
+            $pusher = $this->pusherInstance();
+            $pusher->trigger('lot-media-channel', 'deleted', [
+                'media' => $mediaData,
+            ]);
+
+            
+
+            return response()->json(['message' => 'Media eliminada correctamente']);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al eliminar media',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }

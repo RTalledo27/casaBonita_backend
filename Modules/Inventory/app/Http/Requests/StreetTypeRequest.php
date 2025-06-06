@@ -11,14 +11,17 @@ class StreetTypeRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
-    }
+        return [
+            'name' => 'required|string|unique:street_type,name' . ($this->street_type?->street_type_id ? ',' . $this->street_type->street_type_id . ',street_type_id' : ''),
+        ];
+        }
 
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return true;
-    }
+ $permission = $this->street_type ? 'inventory.manzanas.update' : 'inventory.manzanas.create';
+        return $this->user()?->can($permission) ?? false;
+        }
 }

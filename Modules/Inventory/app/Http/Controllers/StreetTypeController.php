@@ -4,67 +4,132 @@ namespace Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Modules\Inventory\Http\Requests\StreetTypeRequest;
 use Modules\Inventory\Models\StreetType;
+use Modules\Inventory\Repositories\StreetTypeRepository;
+use Modules\Inventory\Transformers\StreetTypeResource;
+use Modules\services\PusherNotifier;
+use Pusher\Pusher;
 
 class StreetTypeController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+
+    /* ---------- Helper Pusher ---------- */
+    private function pusherInstance(): Pusher
+    {
+        return new Pusher(
+            config('broadcasting.connections.pusher.key'),
+            config('broadcasting.connections.pusher.secret'),
+            config('broadcasting.connections.pusher.app_id'),
+            [
+                'cluster' => config('broadcasting.connections.pusher.options.cluster'),
+                'useTLS'  => true,
+            ]
+        );
+    }
+
+    public function __construct(private StreetTypeRepository $repository)
+    {
+        $this->middleware('auth:sanctum');
+        $this->middleware('permission:inventory.street-types.index')->only(['index', 'show']);
+        $this->middleware('permission:inventory.street-types.store')->only(['store']);
+        $this->middleware('permission:inventory.street-types.update')->only(['update']);
+        $this->middleware('permission:inventory.street-types.destroy')->only(['destroy']);
+
+        $this->authorizeResource(StreetType::class, 'street_type');
+    }
+
+    /* ---------- CRUD ---------- */
+
+    /** Listar tipos de calle */
     public function index()
     {
-        //
-
-        return StreetType::all();
+        return StreetTypeResource::collection(
+            $this->repository->all()
+        );
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    /** Crear tipo de calle */
+    public function store(StreetTypeRequest $request)
     {
-        //
-        $data  = $request->validate([
-            'name' => 'required|string|unique:street_type,name',
-        ]);
-        return StreetType::create($data);
+        try {
+            DB::beginTransaction();
+
+            $streetType = $this->repository->create($request->validated());
+
+            DB::commit();
+
+            $pusher = $this->pusherInstance();
+            $pusher->trigger('street-type-channel', 'created', [
+                'street_type' => (new StreetTypeResource($streetType))->toArray($request),
+            ]);
+
+            return (new StreetTypeResource($streetType))
+                ->response()
+                ->setStatusCode(Response::HTTP_CREATED);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al crear tipo de calle',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
-    /**
-     * Show the specified resource.
-     */
-    public function show(StreetType $streetType)
+    /** Mostrar tipo de calle */
+    public function show(StreetType $street_type)
     {
-        //
-
-        return $streetType;
+        return new StreetTypeResource($street_type);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, StreetType $streetType)
+    /** Actualizar tipo de calle */
+    public function update(StreetTypeRequest $request, StreetType $street_type)
     {
-        //
+        try {
+            DB::beginTransaction();
 
-        $data = $request->validate([
-            'name' => 'required|string|unique:street_type,name,' . $streetType->street_type_id . ',street_type_id',
-        ]);
+            $this->repository->update($street_type, $request->validated());
 
-        $streetType->update($data);
-        return $streetType;   
-     }
+            DB::commit();
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(StreetType $streetType)
+            $fresh = $street_type->fresh();
+            $pusher= $this->pusherInstance();
+            $pusher->trigger('street-type-channel', 'updated', [
+                'street_type' => (new StreetTypeResource($fresh))->toArray($request),
+            ]);
+
+            return new StreetTypeResource($fresh);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al actualizar tipo de calle',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /** Eliminar tipo de calle */
+    public function destroy(StreetType $street_type)
     {
-        //
+        try {
+            $resource = new StreetTypeResource($street_type);
 
-        $streetType->delete();
-        return response()->json([
-            'message' => 'Street type deleted successfully'
-        ]);
+            $this->repository->delete($street_type);
+
+            $pusher = $this->pusherInstance();
+
+            $pusher->trigger('street-type-channel', 'deleted', [
+                'street_type' => $resource->toArray(request()),
+            ]);
+
+            return response()->json(['message' => 'Tipo de calle eliminado correctamente']);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al eliminar tipo de calle',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }
