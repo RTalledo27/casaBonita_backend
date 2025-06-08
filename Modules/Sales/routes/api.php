@@ -16,6 +16,7 @@ Route::prefix('v1')->group(function () {
     Route::prefix('sales')->middleware('auth:sanctum')->group(function () {
         Route::apiResource('reservations', ReservationController::class);
         Route::apiResource('contracts',    ContractController::class);
+        Route::post('reservations/{reservation}/convert', [ReservationController::class, 'convert']);
         Route::apiResource('schedules',    PaymentScheduleController::class);
         Route::apiResource('payments',     PaymentController::class);
     });
