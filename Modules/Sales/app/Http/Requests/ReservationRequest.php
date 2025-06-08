@@ -11,14 +11,20 @@ class ReservationRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
-    }
+        return [
+            'lot_id'           => 'required|exists:lots,lot_id',
+            'client_id'        => 'required|exists:clients,client_id',
+            'reservation_date' => 'required|date',
+            'expiration_date'  => 'required|date|after_or_equal:reservation_date',
+            'deposit_amount'   => 'nullable|numeric',
+            'status'           => 'required|in:activa,expirada,cancelada,convertida',
+        ];    }
 
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('sales.reservations.store') ?? false;
     }
 }

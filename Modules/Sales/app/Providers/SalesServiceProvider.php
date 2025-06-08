@@ -16,6 +16,13 @@ class SalesServiceProvider extends ServiceProvider
 
     protected string $nameLower = 'sales';
 
+
+    protected $policies = [
+        \Modules\Sales\Models\Reservation::class => \Modules\Sales\Policies\ReservationPolicy::class,
+        \Modules\Sales\Models\Contract::class    => \Modules\Sales\Policies\ContractPolicy::class,
+    ];
+
+
     /**
      * Boot the application events.
      */
@@ -26,6 +33,7 @@ class SalesServiceProvider extends ServiceProvider
         $this->registerTranslations();
         $this->registerConfig();
         $this->registerViews();
+        $this->registerPolicies();
         $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
     }
 
@@ -36,6 +44,8 @@ class SalesServiceProvider extends ServiceProvider
     {
         $this->app->register(EventServiceProvider::class);
         $this->app->register(RouteServiceProvider::class);
+        $this->app->singleton(\Modules\Sales\Repositories\ReservationRepository::class);
+        $this->app->singleton(\Modules\Sales\Repositories\ContractRepository::class);
     }
 
     /**
@@ -150,5 +160,12 @@ class SalesServiceProvider extends ServiceProvider
         }
 
         return $paths;
+    }
+
+    protected function registerPolicies(): void
+    {
+        foreach ($this->policies as $model => $policy) {
+            \Illuminate\Support\Facades\Gate::policy($model, $policy);
+        }
     }
 }

@@ -11,14 +11,25 @@ class ContractRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
-    }
+        return [
+            'reservation_id'  => 'required|exists:reservations,reservation_id',
+            'contract_number' => 'required|string|unique:contracts,contract_number',
+            'sign_date'       => 'required|date',
+            'total_price'     => 'required|numeric',
+            'currency'        => 'required|string|size:3',
+            'status'          => 'required|in:vigente,resuelto,cancelado',
+            'schedules'       => 'nullable|array',
+            'schedules.*.due_date' => 'required_with:schedules|date',
+            'schedules.*.amount'   => 'required_with:schedules|numeric',
+        ];
+        }
 
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('sales.contracts.store
+        ') ?? false;
     }
 }
