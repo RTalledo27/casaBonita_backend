@@ -21,6 +21,6 @@ class ContractApprovalResource extends JsonResource
             'approved_at' => $this->approved_at,
             'comments'    => $this->comments,
             'contract'    => new ContractResource($this->whenLoaded('contract')),
-            'approver'    => new UserResource($this->whenLoaded('approver')), ];
+            'approver'    => new UserResource($this->whenLoaded('approver')) ];
     }
 }

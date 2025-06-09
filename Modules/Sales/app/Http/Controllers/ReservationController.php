@@ -83,7 +83,7 @@ class ReservationController extends Controller
             'reservation_id' => $reservation->reservation_id,
             'status'         => 'vigente',
         ]));
-        $this->pusher->notify('reservation', 'converted', ['reservation' => new ReservationResource($reservation)]);
+        $this->pusher->notify('reservation-channel', 'converted', ['reservation' => new ReservationResource($reservation)]);
         return new ContractResource($contract);
     }
 

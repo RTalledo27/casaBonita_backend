@@ -12,6 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Sales\Models\ContractApproval;
+use Modules\Security\Models\Role;
 
 // use Modules\Security\Database\Factories\UserFactory;
 
