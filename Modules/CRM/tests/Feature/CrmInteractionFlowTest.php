@@ -61,7 +61,6 @@ class CrmInteractionFlowTest extends TestCase
 
         $client = Client::factory()->create();
 
-        //dd($client);
 
         $payload = [
             'client_id' => $client->client_id,

@@ -11,6 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Modules\Sales\Models\ContractApproval;
 
 // use Modules\Security\Database\Factories\UserFactory;
 
@@ -80,5 +81,11 @@ class User extends Authenticatable
     public function auditLogs()
     {
         return $this->hasMany(\Modules\Audit\Models\AuditLog::class, 'user_id');
+    }
+
+
+    //CONTRATOS APROBADOS 
+    public function contractApprovals(){
+        return $this->hasMany(ContractApproval::class, 'user_id');
     }
 }

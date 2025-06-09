@@ -22,6 +22,9 @@ class ContractResource extends JsonResource
             'status'         => $this->status,
             'reservation'    => new ReservationResource($this->whenLoaded('reservation')),
             'schedules'      => PaymentScheduleResource::collection($this->whenLoaded('schedules')),
+            'pdf_path'       => $this->pdf_path,
+            'approvals'      => ContractApprovalResource::collection($this->whenLoaded('approvals')),
+
         ];
     }
 }

@@ -32,12 +32,12 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('roles', RoleController::class);
             Route::post('roles/{role}/permissions',    [RoleController::class, 'syncPermissions']);
 
-            // Permisos
-            Route::apiResource('permissions', PermissionController::class)
-                ->only(['index', 'show', 'store']);
+        // Permisos
+        Route::apiResource('permissions', PermissionController::class);
 
-            // Logout y perfil
-            Route::post('logout', [AuthController::class, 'logout']);
+
+        // Logout y perfil
+        Route::post('logout', [AuthController::class, 'logout']);
             Route::get('me',      [AuthController::class, 'me']);
         });
 });

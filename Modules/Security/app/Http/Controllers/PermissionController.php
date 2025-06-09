@@ -30,6 +30,28 @@ class PermissionController extends Controller
         return new PermissionResource($permission);
     }
 
+
+    public function update(Request $request, Permission $permission)
+    {
+        $request->validate([
+            'name' => 'required|string|unique:permissions,name,' . $permission->id,
+        ]);
+
+        $permission->update([
+            'name' => $request->name,
+        ]);
+
+        return new PermissionResource($permission);
+    }
+    public function destroy(Permission $permission)
+    {
+        $permission->delete();
+
+        return response()->json([
+            'message' => 'Permission deleted',
+        ], Response::HTTP_OK);
+    }
+
     public function store(Request $request)
     {
         $request->validate([

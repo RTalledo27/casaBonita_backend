@@ -46,7 +46,7 @@ class CRMServiceProvider extends ServiceProvider
         Gate::policy(CrmInteraction::class, CrmInteractionPolicy::class);
 
         Gate::define('crm.access', function (User $user) {
-            return $user->can('crm.acc');
+            return $user->can('crm.access');
         });
         
     }

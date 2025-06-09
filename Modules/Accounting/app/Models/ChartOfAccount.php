@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class ChartOfAccount extends Model
 {
     use HasFactory;
-    protected $primatyKey = 'account_id';
+    protected $primaryKey = 'account_id';
     // protected $table = 'chart_of_account';
     public $timestamps = false;
 
