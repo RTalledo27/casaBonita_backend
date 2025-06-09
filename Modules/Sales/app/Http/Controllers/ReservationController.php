@@ -5,6 +5,7 @@ namespace Modules\Sales\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Modules\Sales\Http\Requests\ContractRequest;
+use Modules\Sales\Http\Requests\ConvertReservationRequest;
 use Modules\Sales\Http\Requests\ReservationRequest;
 use Modules\Sales\Http\Requests\UpdateReservationRequest;
 use Modules\Sales\Models\Reservation;
@@ -73,7 +74,7 @@ class ReservationController extends Controller
     /**
      * Convert reservation to contract.
      */
-    public function convert(ContractRequest $request, Reservation $reservation)
+    public function convert(ConvertReservationRequest $request, Reservation $reservation)
     {
         if ($reservation->contract) {
             return response()->json(['message' => 'Reservation already converted'], 409);
