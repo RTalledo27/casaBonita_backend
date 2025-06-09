@@ -17,9 +17,12 @@ class SecuritySeeder extends Seeder
 
 
         // roles
-        $adminRole   = Role::firstOrCreate(['name' => 'admin']);
-        $sellerRole  = Role::firstOrCreate(['name' => 'vendedor']);
-        $accountRole = Role::firstOrCreate(['name' => 'contador']);
+        $adminRole = Role::firstOrCreate([
+            'name' => 'admin',
+            'guard_name' => 'sanctum'
+        ]);
+                //$sellerRole  = Role::firstOrCreate(['name' => 'vendedor', 'guard_name' => 'sanctum']);
+        //$accountRole = Role::firstOrCreate(['name' => 'contador', 'guard_name' => 'sanctum']);
 
 
         Permission::firstOrCreate(['name' => 'security.access']);
@@ -42,5 +45,6 @@ class SecuritySeeder extends Seeder
             ['username' => 'admin', 'password_hash' => bcrypt('Romaim27'), 'status' => 'active']
         );
         $admin->roles()->sync([$adminRole->role_id]);
-    }
+        $adminRole->syncPermissions(Permission::all());
+        }
 }

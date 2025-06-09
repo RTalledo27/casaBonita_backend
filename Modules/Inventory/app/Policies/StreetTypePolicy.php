@@ -18,26 +18,26 @@ class StreetTypePolicy
 
     public function viewAny(User $user)
     {
-        return $user->hasPermissionTo('inventory.manzanas.view');
+        return $user->hasPermissionTo('inventory.streetType.view');
     }
 
     public function view(User $user, StreetType $streetType)
     {
-        return $user->hasPermissionTo('inventory.manzanas.view');
+        return $user->hasPermissionTo('inventory.streetTypes.view');
     }
 
     public function create(User $user)
     {
-        return $user->hasPermissionTo('inventory.manzanas.store');
+        return $user->hasPermissionTo('inventory.streetTypes.store');
     }
 
     public function update(User $user, StreetType $streetType)
     {
-        return $user->hasPermissionTo('inventory.manzanas.update');
+        return $user->hasPermissionTo('inventory.streetTypes.update');
     }
 
     public function delete(User $user, StreetType $streetType)
     {
-        return $user->hasPermissionTo('inventory.manzanas.delete');
+        return $user->hasPermissionTo('inventory.streetTypes.delete');
     }
 }

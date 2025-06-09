@@ -5,7 +5,7 @@ namespace Modules\Inventory\Transformers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class lotResource extends JsonResource
+class LotResource extends JsonResource
 {
     /**
      * Transform the resource into an array.

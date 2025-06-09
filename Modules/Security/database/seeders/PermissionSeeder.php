@@ -57,7 +57,33 @@ class PermissionSeeder extends Seeder
             'crm.interactions.create',
             'crm.interactions.update',
             'crm.interactions.delete',
-            
+
+
+            // MODULE INVENTORY
+            'inventory.access',
+            'inventory.manzanas.view',
+            'inventory.manzanas.create',
+            'inventory.manzanas.update',
+            'inventory.manzanas.delete',
+            'inventory.lots.view',
+            'inventory.lots.create',
+            'inventory.lots.update',
+            'inventory.lots.delete',
+            'inventory.media.manage',
+
+            // MODULE SALES
+            'sales.reservations.access',
+            'sales.reservations.view',
+            'sales.reservations.create',
+            'sales.reservations.update',
+            'sales.reservations.cancel',
+            'sales.reservations.convert',
+            'sales.access',
+            'sales.contracts.view',
+            'sales.contracts.create',
+            'sales.contracts.update',
+            'sales.contracts.delete',
+            'sales.conversions.process',
             
 
           
@@ -65,7 +91,10 @@ class PermissionSeeder extends Seeder
         ];
 
         foreach ($permissions as $perm) {
-            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'sanctum']);
+            Permission::firstOrCreate([
+                'name' => $perm,
+                'guard_name' => 'sanctum',
+            ]);
         }
     }
 }

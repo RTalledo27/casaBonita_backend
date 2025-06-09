@@ -6,6 +6,7 @@ use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Modules\CRM\Database\Seeders\CRMDatabaseSeeder;
+use Modules\Inventory\Database\Seeders\InventoryDatabaseSeeder;
 use Modules\Security\Database\Seeders\SecuritySeeder;
 
 class DatabaseSeeder extends Seeder
@@ -20,6 +21,7 @@ class DatabaseSeeder extends Seeder
         $this->call(SecuritySeeder::class);
         //CRMDatabaseSeeder::class);
         $this->call(CRMDatabaseSeeder::class);
+        $this->call(InventoryDatabaseSeeder::class);
 
     }
 }
