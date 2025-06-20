@@ -33,7 +33,7 @@ class StreetTypeController extends Controller
     public function __construct(private StreetTypeRepository $repository)
     {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:inventory.street-types.index')->only(['index', 'show']);
+        $this->middleware('permission:inventory.street-types.view')->only(['index', 'show']);
         $this->middleware('permission:inventory.street-types.store')->only(['store']);
         $this->middleware('permission:inventory.street-types.update')->only(['update']);
         $this->middleware('permission:inventory.street-types.destroy')->only(['destroy']);

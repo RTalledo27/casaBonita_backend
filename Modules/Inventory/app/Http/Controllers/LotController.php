@@ -32,7 +32,7 @@ class LotController extends Controller
     public function __construct(private LotRepository $repository)
     {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:inventory.lots.index')->only(['index', 'show']);
+        $this->middleware('permission:inventory.lots.view')->only(['index', 'show']);
         $this->middleware('permission:inventory.lots.store')->only(['store']);
         $this->middleware('permission:inventory.lots.update')->only(['update']);
         $this->middleware('permission:inventory.lots.destroy')->only(['destroy']);

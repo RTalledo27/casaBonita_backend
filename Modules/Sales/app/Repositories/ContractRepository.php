@@ -67,4 +67,19 @@ class ContractRepository
             return $contract;
         });
     }
+
+    public function update(Contract $contract, array $data): Contract
+    {
+        $contract->update($data);
+        return $contract->load(['reservation', 'schedules', 'invoices']);
+    }
+
+    public function delete(Contract $contract): void
+    {
+        $lot = $contract->reservation->lot ?? null;
+        $contract->delete();
+        if ($lot && !$lot->contracts()->exists()) {
+            $lot->update(['status' => $lot->reservations()->exists() ? 'reservado' : 'disponible']);
+        }
+    }
 }

@@ -37,7 +37,7 @@ class UserSeeder extends Seeder
             'first_name'    => 'Admin',
             'last_name'     => 'User',
             'email'         => 'admin@casabonita.com',
-            'password_hash' => bcrypt('Romaim27'),
+            'password_hash' => bcrypt('Romaim27!'),
             'status'        => 'active',
             'photo_profile' => 'https://img.freepik.com/free-vector/business-user-cog_78370-7040.jpg?semt=ais_hybrid&w=740'
 

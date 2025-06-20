@@ -31,8 +31,12 @@ class UserResource extends JsonResource
             'status'       => $this->status,
             'photo_url'     => $this->photo_profile
                 ? Storage::url($this->photo_profile)
-                : null,            
-                'created_by'   => $this->created_by,
+                :null,
+            'cv_url'        => $this->cv_file
+                ? Storage::url($this->cv_file)
+                : null,
+            'created_by'   => $this->created_by,
+
             'roles'        => $this->roles->pluck('name')->toArray(),
             'permissions'    => $this->getAllPermissions()                              // Spatie permisos
                 ->pluck('name')

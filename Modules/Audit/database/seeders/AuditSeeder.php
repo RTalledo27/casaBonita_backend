@@ -13,8 +13,8 @@ class AuditSeeder extends Seeder
     public function run(): void
     {
         // $this->call([]);
-        Permission::firstOrCreate(['name' => 'audit.access']);
-        Permission::firstOrCreate(['name' => 'audit.logs.view']);
-        Permission::firstOrCreate(['name' => 'audit.actions.track']);
+        Permission::firstOrCreate(['name' => 'audit.access', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'audit.logs.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'audit.actions.track', 'guard_name' => 'sanctum']);
     }
 }

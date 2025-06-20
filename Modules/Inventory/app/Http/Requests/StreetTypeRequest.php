@@ -12,7 +12,7 @@ class StreetTypeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|unique:street_type,name' . ($this->street_type?->street_type_id ? ',' . $this->street_type->street_type_id . ',street_type_id' : ''),
+            'name' => 'required|string|unique:street_types,name' . ($this->street_type?->street_type_id ? ',' . $this->street_type->street_type_id . ',street_type_id' : ''),
         ];
         }
 

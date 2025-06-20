@@ -48,13 +48,13 @@ class PermissionSeeder extends Seeder
             'crm.clients.delete',
 
             'crm.clients.spouses.view',
-            'crm.clients.spouses.create',
+            'crm.clients.spouses.store',
             'crm.clients.spouses.delete',
             'crm.clients.export',
             //MODULE CRM - INTERACTIONS
             'crm.access', //Permiso para acceder a la sección de CRM
             'crm.interactions.view',
-            'crm.interactions.create',
+            'crm.interactions.store',
             'crm.interactions.update',
             'crm.interactions.delete',
 
@@ -62,11 +62,17 @@ class PermissionSeeder extends Seeder
             // MODULE INVENTORY
             'inventory.access',
             'inventory.manzanas.view',
-            'inventory.manzanas.create',
+            'inventory.manzanas.store',
             'inventory.manzanas.update',
             'inventory.manzanas.delete',
+
+           'inventory.street-types.view',
+           'inventory.street-types.store',
+            'inventory.street-types.update',
+           'inventory.street-types.delete',
+
             'inventory.lots.view',
-            'inventory.lots.create',
+            'inventory.lots.store',
             'inventory.lots.update',
             'inventory.lots.delete',
             'inventory.media.manage',
@@ -74,16 +80,22 @@ class PermissionSeeder extends Seeder
             // MODULE SALES
             'sales.reservations.access',
             'sales.reservations.view',
-            'sales.reservations.create',
+            'sales.reservations.store',
             'sales.reservations.update',
             'sales.reservations.cancel',
             'sales.reservations.convert',
             'sales.access',
             'sales.contracts.view',
-            'sales.contracts.create',
+            'sales.contracts.store',
             'sales.contracts.update',
             'sales.contracts.delete',
             'sales.conversions.process',
+
+            //lot-media:
+            'inventory.media.index',
+            'inventory.media.store',
+            'inventory.media.update',
+            'inventory.media.destroy',
             
 
           

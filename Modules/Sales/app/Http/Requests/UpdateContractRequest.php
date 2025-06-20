@@ -13,10 +13,10 @@ class UpdateContractRequest extends FormRequest
 {
 
         return [
-        'sign_date'   => 'sometimes|date',
-        'total_price' => 'sometimes|numeric',
-        'currency'    => 'sometimes|string|size:3',
-        'status'      => 'sometimes|in:vigente,resuelto,cancelado',
+            'sign_date'   => 'sometimes|date',
+            'total_price' => 'sometimes|numeric',
+            'currency'    => 'sometimes|string|size:3',
+            'status'      => 'sometimes|in:pendiente_aprobacion,vigente,resuelto,cancelado',
     ];
 }
 

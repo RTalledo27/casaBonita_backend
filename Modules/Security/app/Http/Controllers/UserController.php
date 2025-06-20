@@ -104,7 +104,12 @@ class UserController extends Controller
             DB::beginTransaction();
 
 
-            $user = $this->repository->create($request->validated());
+            $data = $request->validated();
+            $data['photo_profile'] = $request->file('photo_profile');
+            $data['cv_file'] = $request->file('cv_file');
+
+            $user = $this->repository->create($data);
+
 
             if ($request->has('roles')) {
                 $user->syncRoles($request->input('roles'));
@@ -170,8 +175,12 @@ class UserController extends Controller
         try {
             DB::beginTransaction();
 
-            $this->repository->update($user, $request->validated());
+            $data = $request->validated();
+            $data['photo_profile'] = $request->file('photo_profile');
+            $data['cv_file'] = $request->file('cv_file');
 
+            $this->repository->update($user, $data);
+            
             if ($request->has('roles')) {
                 $user->syncRoles($request->input('roles'));
             }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Modules\Inventory\Http\Requests\LotMediaRequest;
 use Modules\Inventory\Models\LotMedia;
 use Modules\Inventory\Repositories\LotMediaRepository;
@@ -53,7 +54,7 @@ class LotMediaController extends Controller
     public function store(LotMediaRequest $request)
     {
         try {
-            DB::beginTransaction();
+            /*DB::beginTransaction();
 
             $media = $this->repository->create($request->validated());
 
@@ -73,6 +74,40 @@ class LotMediaController extends Controller
                 'message' => 'Error al crear media',
                 'error'   => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }*/
+
+            DB::beginTransaction();
+
+            // 1) Subir archivo
+            $path = $request->file('file')
+                ->store('lots/media', 'public'); // storage/app/public/lots/media
+
+            // 2) Crear registro con URL generada
+            $media = LotMedia::create([
+                'lot_id'   => $request->lot_id,
+                'url'      => Storage::url($path), // genera /storage/…
+                'type'     => $request->type,
+                'position' => LotMedia::where('lot_id', $request->lot_id)->max('position') + 1,
+                'uploaded_at' => now(),
+            ]);
+
+            DB::commit();
+
+            // Pusher
+            $this->pusherInstance()->trigger(
+                'lot-media-channel',
+                'created',
+                ['media' => new LotMediaResource($media)]
+            );
+
+            return response()->json(['data' => new LotMediaResource($media)], 201);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al crear media',
+                'error'   => $e->getMessage(),
+            ], 500);
+        
         }
     }
 

@@ -13,7 +13,7 @@ class LotMediaRequest extends FormRequest
     {
         return [
             'lot_id'   => 'required|exists:lots,lot_id',
-            'url'      => 'required|url',
+            //'url'      => 'required|url',
             'type'     => 'required|in:foto,plano,video,doc',
             'position' => 'nullable|integer|min:1',
         ];    

@@ -21,21 +21,21 @@ class SecuritySeeder extends Seeder
             'name' => 'admin',
             'guard_name' => 'sanctum'
         ]);
-                //$sellerRole  = Role::firstOrCreate(['name' => 'vendedor', 'guard_name' => 'sanctum']);
+        //$sellerRole  = Role::firstOrCreate(['name' => 'vendedor', 'guard_name' => 'sanctum']);
         //$accountRole = Role::firstOrCreate(['name' => 'contador', 'guard_name' => 'sanctum']);
 
 
-        Permission::firstOrCreate(['name' => 'security.access']);
-        Permission::firstOrCreate(['name' => 'security.users.view']);
-        Permission::firstOrCreate(['name' => 'security.users.index']);
-        Permission::firstOrCreate(['name' => 'security.users.create']);
-        Permission::firstOrCreate(['name' => 'security.users.update']);
-        Permission::firstOrCreate(['name' => 'security.users.delete']);
-        Permission::firstOrCreate(['name' => 'security.roles.view']);
-        Permission::firstOrCreate(['name' => 'security.roles.create']);
-        Permission::firstOrCreate(['name' => 'security.roles.update']);
-        Permission::firstOrCreate(['name' => 'security.roles.delete']);
-        Permission::firstOrCreate(['name' => 'security.permissions.view']);
+        Permission::firstOrCreate(['name' => 'security.access', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.users.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.users.index', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.users.create', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.users.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.users.delete', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.roles.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.roles.create', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.roles.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.roles.delete', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'security.permissions.view', 'guard_name' => 'sanctum']);
         $this->call(PermissionSeeder::class);
 
 

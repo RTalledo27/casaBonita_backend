@@ -12,8 +12,8 @@ class StoreLotRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'manzana_id'           => 'required|exists:manzana,manzana_id',
-            'street_type_id'       => 'required|exists:street_type,street_type_id',
+            'manzana_id'           => 'required|exists:manzanas,manzana_id',
+            'street_type_id'       => 'required|exists:street_types,street_type_id',
             'num_lot'              => 'required|integer',
             'area_m2'              => 'required|numeric',
             'area_construction_m2' => 'nullable|numeric',

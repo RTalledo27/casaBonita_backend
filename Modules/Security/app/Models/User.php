@@ -51,6 +51,8 @@ class User extends Authenticatable
         'hire_date',
         'birth_date',
         'photo_profile',
+        'photo_profile',
+        'cv_file',
         'password_hash',
         'created_by'
     ];

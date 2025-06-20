@@ -12,8 +12,8 @@ class UpdateLotRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'manzana_id'           => 'sometimes|exists:manzana,manzana_id',
-            'street_type_id'       => 'sometimes|exists:street_type,street_type_id',
+            'manzana_id'           => 'sometimes|exists:manzanas,manzana_id',
+            'street_type_id'       => 'sometimes|exists:street_types,street_type_id',
             'num_lot'              => 'sometimes|integer',
             'area_m2'              => 'sometimes|numeric',
             'area_construction_m2' => 'nullable|numeric',

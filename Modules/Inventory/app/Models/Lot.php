@@ -40,12 +40,14 @@ class Lot extends Model
     {
         return $this->belongsTo(Manzana::class, 'manzana_id');
     }
+    
     public function streetType()
     {
-        return $this->belongsTo(StreetType::class);
+        return $this->belongsTo(StreetType::class, 'street_type_id', 'street_type_id');
     }
+    
     public function media()
     {
-        return $this->hasMany(LotMedia::class);
+        return $this->hasMany(LotMedia::class, 'lot_id','lot_id');
     }
 }

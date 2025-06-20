@@ -10,8 +10,8 @@ class Manzana extends Model
 {
     use HasFactory;
 
-    protected $table = 'manzana';
-    protected $primaryKey = 'manzana_id';   
+    protected $table = 'manzanas';
+    protected $primaryKey = 'manzana_id';
     public $timestamps = false;
     /**
      * The attributes that are mass assignable.

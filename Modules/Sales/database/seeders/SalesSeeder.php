@@ -12,18 +12,18 @@ class SalesSeeder extends Seeder
      */
     public function run(): void
     {
-        Permission::firstOrCreate(['name' => 'sales.reservations.access']);
-        Permission::firstOrCreate(['name' => 'sales.reservations.view']);
-        Permission::firstOrCreate(['name' => 'sales.reservations.create']);
-        Permission::firstOrCreate(['name' => 'sales.reservations.update']);
-        Permission::firstOrCreate(['name' => 'sales.reservations.cancel']);
-        Permission::firstOrCreate(['name' => 'sales.reservations.convert']);
+        Permission::firstOrCreate(['name' => 'sales.reservations.access', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.reservations.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.reservations.create', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.reservations.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.reservations.cancel', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.reservations.convert', 'guard_name' => 'sanctum']);
         // $this->call([]);
-        Permission::firstOrCreate(['name' => 'sales.access']);
-        Permission::firstOrCreate(['name' => 'sales.contracts.view']);
-        Permission::firstOrCreate(['name' => 'sales.contracts.create']);
-        Permission::firstOrCreate(['name' => 'sales.contracts.update']);
-        Permission::firstOrCreate(['name' => 'sales.contracts.delete']);
-        Permission::firstOrCreate(['name' => 'sales.conversions.process']);
+        Permission::firstOrCreate(['name' => 'sales.access', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.contracts.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.contracts.create', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.contracts.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.contracts.delete', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'sales.conversions.process', 'guard_name' => 'sanctum']);
     }
 }

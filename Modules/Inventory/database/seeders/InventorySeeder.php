@@ -13,15 +13,19 @@ class InventorySeeder extends Seeder
     public function run(): void
     {
         // $this->call([]);
-        Permission::firstOrCreate(['name' => 'inventory.access']);
-        Permission::firstOrCreate(['name' => 'inventory.manzanas.view']);
-        Permission::firstOrCreate(['name' => 'inventory.manzanas.create']);
-        Permission::firstOrCreate(['name' => 'inventory.manzanas.update']);
-        Permission::firstOrCreate(['name' => 'inventory.manzanas.delete']);
-        Permission::firstOrCreate(['name' => 'inventory.lots.view']);
-        Permission::firstOrCreate(['name' => 'inventory.lots.create']);
-        Permission::firstOrCreate(['name' => 'inventory.lots.update']);
-        Permission::firstOrCreate(['name' => 'inventory.lots.delete']);
-        Permission::firstOrCreate(['name' => 'inventory.media.manage']);
+        Permission::firstOrCreate(['name' => 'inventory.access', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.manzanas.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.manzanas.store', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.manzanas.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.manzanas.delete', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.street-types.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.street-types.store', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.street-types.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.street-types.delete', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.lots.view', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.lots.store', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.lots.update', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.lots.delete', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'inventory.media.manage', 'guard_name' => 'sanctum']);
     }
 }

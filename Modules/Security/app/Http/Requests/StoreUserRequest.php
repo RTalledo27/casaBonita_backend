@@ -34,6 +34,8 @@ class StoreUserRequest extends FormRequest
             // WORK INFO
             'position'              => ['required', 'string', 'max:60'],
             'department'            => ['required', 'string', 'max:60'],
+            'cv_file'              => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:2048'],
+            //PERFIL DEL USUARIO(POSIBLE OBTENCION DESDE EL CV O QUE EL ENCARGADO LE AGREGUE HABILIDADES)
             'hire_date'             => ['nullable', 'date', 'before_or_equal:today'],
 
             // PHOTO
@@ -68,6 +70,8 @@ class StoreUserRequest extends FormRequest
             'hire_date.before_or_equal'   => 'La fecha de ingreso no puede ser futura.',
             'photo_profile.image'         => 'El archivo debe ser una imagen.',
             'photo_profile.max'           => 'La imagen no puede superar los 2 MB.',
+            'cv_file.mimes'              => 'El CV debe ser un archivo PDF o Word.',
+            'cv_file.max'                => 'El CV no puede superar los 2 MB.',
             'roles.required'              => 'Debes asignar al menos un rol.',
             'email.unique'                => 'El correo ya esta en uso.',
             'username.unique'             => 'El nombre de usuario ya está en uso.',

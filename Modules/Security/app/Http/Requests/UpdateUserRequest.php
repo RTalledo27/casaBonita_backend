@@ -47,6 +47,8 @@ class UpdateUserRequest extends FormRequest
             // WORK INFO
             'position'              => ['sometimes', 'required', 'string', 'max:60'],
             'department'            => ['sometimes', 'required', 'string', 'max:60'],
+            'cv_file'              => ['sometimes', 'nullable', 'file', 'mimes:pdf,doc,docx', 'max:2048'],
+
             'hire_date'             => ['sometimes', 'nullable', 'date', 'before_or_equal:today'],
 
             // PHOTO
@@ -78,6 +80,8 @@ class UpdateUserRequest extends FormRequest
             'hire_date.before_or_equal'   => 'La fecha de ingreso no puede ser futura.',
             'photo_profile.image'         => 'El archivo debe ser una imagen.',
             'photo_profile.max'           => 'La imagen no puede superar los 2 MB.',
+            'cv_file.mimes'              => 'El CV debe ser un archivo PDF o Word.',
+            'cv_file.max'                => 'El CV no puede superar los 2 MB.',
             'roles.required'              => 'Debes asignar al menos un rol.',
             'roles.*.exists'              => 'El rol seleccionado no existe.',
             'dni.unique' => 'El DNI ya se encuentra registrado.'

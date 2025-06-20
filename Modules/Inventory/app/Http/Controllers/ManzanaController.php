@@ -32,7 +32,7 @@ class ManzanaController extends Controller
     public function __construct(private ManzanaRepository $repository)
     {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:inventory.manzanas.index')->only(['index', 'show']);
+        $this->middleware('permission:inventory.manzanas.view')->only(['index', 'show']);
         $this->middleware('permission:inventory.manzanas.store')->only(['store']);
         $this->middleware('permission:inventory.manzanas.update')->only(['update']);
         $this->middleware('permission:inventory.manzanas.destroy')->only(['destroy']);

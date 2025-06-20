@@ -13,8 +13,8 @@ class IntegrationsSeeder extends Seeder
     public function run(): void
     {
         // $this->call([]);
-        Permission::firstOrCreate(['name' => 'integrations.access']);
-        Permission::firstOrCreate(['name' => 'integrations.api.sunat']);
-        Permission::firstOrCreate(['name' => 'integrations.api.payment']);
-    }
+        Permission::firstOrCreate(['name' => 'integrations.access', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'integrations.api.sunat', 'guard_name' => 'sanctum']);
+        Permission::firstOrCreate(['name' => 'integrations.api.payment', 'guard_name' => 'sanctum']);
+      }
 }
