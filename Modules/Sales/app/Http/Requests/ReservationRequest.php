@@ -17,7 +17,7 @@ class ReservationRequest extends FormRequest
             'reservation_date' => 'required|date',
             'expiration_date'  => 'required|date|after_or_equal:reservation_date',
             'deposit_amount'   => 'nullable|numeric',
-            'status'           => 'required|in:activa,expirada,cancelada,convertida',
+            'status'           => 'required|in:pendiente_pago,completada,cancelada,convertida',
         ];    }
 
     /**

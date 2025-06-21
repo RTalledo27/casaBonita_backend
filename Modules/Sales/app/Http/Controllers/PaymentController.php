@@ -4,50 +4,103 @@ namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Modules\Sales\Http\Requests\PaymentRequest;
+use Modules\Sales\Http\Requests\UpdatePaymentRequest;
 use Modules\Sales\Models\Payment;
+use Modules\Sales\Repositories\PaymentRepository;
+use Modules\Sales\Transformers\PaymentResource;
+use Modules\services\PusherNotifier;
 
 class PaymentController extends Controller
 {
-    public function index()
-    {
-        return Payment::with('schedule', 'journalEntry')->paginate(15);
+    public function __construct(
+        private PaymentRepository $payments,
+        private PusherNotifier $pusher
+    ) {
+        $this->middleware('auth:sanctum');
+        $this->middleware('permission:sales.payments.index')->only(['index', 'show']);
+        $this->middleware('permission:sales.payments.store')->only('store');
+        $this->middleware('permission:sales.payments.update')->only('update');
+        $this->middleware('permission:sales.payments.destroy')->only('destroy');
     }
 
-    public function store(Request $request)
+    public function index()
     {
-        $data = $request->validate([
-            'schedule_id'      => 'required|exists:payment_schedules,schedule_id',
-            'journal_entry_id' => 'nullable|exists:journal_entries,journal_entry_id',
-            'payment_date'     => 'required|date',
-            'amount'           => 'required|numeric',
-            'method'           => 'required|in:transferencia,efectivo,tarjeta',
-            'reference'        => 'nullable|string|max:60',
-        ]);
+        return PaymentResource::collection(
+            $this->payments->paginate()
+        );
+    }
 
-        return Payment::create($data);
+    public function store(PaymentRequest $request)
+    {
+        DB::beginTransaction();
+        try {
+            $payment = $this->payments->create($request->validated());
+            DB::commit();
+
+            $this->pusher->notify('payment-channel', 'created', [
+                'payment' => (new PaymentResource($payment))->toArray($request),
+            ]);
+
+            return (new PaymentResource($payment))
+                ->response()
+                ->setStatusCode(Response::HTTP_CREATED);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al registrar pago',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     public function show(Payment $payment)
     {
-        return $payment->load('schedule', 'journalEntry');
+        return new PaymentResource($payment->load(['schedule', 'journalEntry']));
     }
 
-    public function update(Request $request, Payment $payment)
+    public function update(UpdatePaymentRequest $request, Payment $payment)
     {
-        $data = $request->validate([
-            'payment_date'     => 'sometimes|date',
-            'amount'           => 'sometimes|numeric',
-            'method'           => 'sometimes|in:transferencia,efectivo,tarjeta',
-            'reference'        => 'nullable|string|max:60',
-        ]);
+        DB::beginTransaction();
+        try {
+            $updated = $this->payments->update($payment, $request->validated());
+            DB::commit();
 
-        $payment->update($data);
-        return $payment->load('schedule', 'journalEntry');
+            $this->pusher->notify('payment-channel', 'updated', [
+                'payment' => (new PaymentResource($updated))->toArray($request),
+            ]);
+
+            return new PaymentResource($updated);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al actualizar pago',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 
     public function destroy(Payment $payment)
     {
-        $payment->delete();
-        return response()->noContent();
+        try {
+            DB::beginTransaction();
+            $resource = new PaymentResource($payment->load(['schedule', 'journalEntry']));
+            $this->payments->delete($payment);
+            DB::commit();
+
+            $this->pusher->notify('payment-channel', 'deleted', [
+                'payment' => $resource->toArray(request()),
+            ]);
+
+            return response()->json(['message' => 'Pago eliminado correctamente']);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'message' => 'Error al eliminar pago',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }

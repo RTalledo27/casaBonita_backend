@@ -16,7 +16,11 @@ class ClientRepository
      */
     public function paginate(array $filters = [], int $perPage = 20): LengthAwarePaginator
     {
-        return Client::with(['addresses', 'interactions'])
+        return Client::with([
+            'addresses',
+            'interactions',
+            'familyMembers',
+        ])
             ->filter($filters)
             ->paginate($filters['per_page'] ?? $perPage);
     }

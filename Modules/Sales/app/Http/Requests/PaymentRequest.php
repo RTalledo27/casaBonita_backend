@@ -11,7 +11,14 @@ class PaymentRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'schedule_id'      => 'required|exists:payment_schedules,schedule_id',
+            'journal_entry_id' => 'nullable|exists:journal_entries,journal_entry_id',
+            'payment_date'     => 'required|date',
+            'amount'           => 'required|numeric',
+            'method'           => 'required|in:transferencia,efectivo,tarjeta',
+            'reference'        => 'nullable|string|max:60',
+        ];
     }
 
     /**
@@ -19,6 +26,6 @@ class PaymentRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->can('sales.payments.store') ?? false;
     }
 }

@@ -63,7 +63,7 @@ class ClientController extends Controller
      */
     public function show(Client $client)
     {
-        $client->load(['addresses', 'interactions', 'spouses']);
+        $client->load(['addresses', 'interactions', 'spouses', 'familyMembers']);
         return new ClientResource($client);
     }
 

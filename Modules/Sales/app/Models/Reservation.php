@@ -26,8 +26,16 @@ class Reservation extends Model
         'reservation_date',
         'expiration_date',
         'deposit_amount',
+        'deposit_method',
+        'deposit_reference',
+        'deposit_paid_at',
         'status'
     ];
+
+    protected $casts = [
+        'deposit_paid_at' => 'datetime',
+    ];
+
 
     // protected static function newFactory(): ReservationFactory
     // {

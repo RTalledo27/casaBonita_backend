@@ -4,6 +4,7 @@ namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\Sales\Http\Requests\ConfirmReservationPaymentRequest;
 use Modules\Sales\Http\Requests\ContractRequest;
 use Modules\Sales\Http\Requests\ConvertReservationRequest;
 use Modules\Sales\Http\Requests\ReservationRequest;
@@ -26,7 +27,7 @@ class ReservationController extends Controller
         $this->middleware('auth:sanctum');
         $this->middleware('permission:sales.reservations.index')->only(['index', 'show']);
         $this->middleware('permission:sales.reservations.store')->only(['store']);
-        $this->middleware('permission:sales.reservations.update')->only(['update', 'convert']);
+        $this->middleware('permission:sales.reservations.update')->only(['update', 'convert', 'confirmPayment']);
         $this->middleware('permission:sales.reservations.destroy')->only(['destroy']);
 
         $this->authorizeResource(Reservation::class, 'reservation');
@@ -47,10 +48,24 @@ class ReservationController extends Controller
      */
     public function store(ReservationRequest $request)
     {
-        $reservation = $this->reservations->create($request->validated());
-        $this->pusher->notify('reservation', 'created', ['reservation' => new ReservationResource($reservation)]);
+        $reservation = $this->reservations->create($request->validated()); // Persist reservation
+        // Broadcast that a reservation was created
+        $this->pusher->notify('reservation-channel', 'created', ['reservation' => new ReservationResource($reservation)]);
         return new ReservationResource($reservation);
     }
+
+    /**
+     * Confirm reservation payment.
+     */
+    public function confirmPayment(ConfirmReservationPaymentRequest $request, Reservation $reservation)
+    {
+        $updated = $this->reservations->confirmPayment($reservation, $request->validated());
+        $this->pusher->notify('reservation-channel', 'payment_confirmed', [
+            'reservation' => new ReservationResource($updated)
+        ]);
+        return new ReservationResource($updated);
+    }
+
 
     /**
      * Show the specified resource.
@@ -79,11 +94,12 @@ class ReservationController extends Controller
         if ($reservation->contract) {
             return response()->json(['message' => 'Reservation already converted'], 409);
         }
-        $reservation->update(['status' => 'convertida']);
+        $reservation->update(['status' => 'convertida']); // Mark reservation as converted
         $contract = $this->contracts->create(array_merge($request->validated(), [
             'reservation_id' => $reservation->reservation_id,
             'status'         => 'vigente',
-        ]));
+        ])); // Create the new contract
+        // Broadcast conversion event
         $this->pusher->notify('reservation-channel', 'converted', ['reservation' => new ReservationResource($reservation)]);
         return new ContractResource($contract);
     }
@@ -94,9 +110,10 @@ class ReservationController extends Controller
      */
     public function destroy(Reservation $reservation)
     {
-       
-        $id = $reservation->reservation_id;
-        $this->reservations->delete($reservation);
+
+        $id = $reservation->reservation_id; // Preserve ID for notification
+        $this->reservations->delete($reservation); // Remove reservation
+        // Notify about the deletion
         $this->pusher->notify('reservation', 'deleted', ['reservation' => ['reservation_id' => $id]]);
         return response()->json(['message' => 'Reservation deleted successfully']);
     }

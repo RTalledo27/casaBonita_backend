@@ -41,13 +41,12 @@ class ClientResource extends JsonResource
             'occupation'       => $this->occupation,
             'salary'           => $this->salary,
             'family_group'     => $this->family_group,
-            'family_members'   => FamilyMemberResource::collection($this->whenLoaded('familyMembers')),
             'created_at'       => $this->created_at,
-
             // relaciones opcionales
             'addresses'        => AddressResource::collection($this->whenLoaded('addresses')),
             'interactions'     => CrmInteractionResource::collection($this->whenLoaded('interactions')),
             'spouses'          => ClientResource::collection($this->whenLoaded('spouses')),
+            'family_members'   => FamilyMemberResource::collection($this->whenLoaded('familyMembers')),
         ];
 
     }

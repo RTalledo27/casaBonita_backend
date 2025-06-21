@@ -15,16 +15,16 @@ class PaymentScheduleResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'reservation_id'  => $this->reservation_id,
-            'lot_id'          => $this->lot_id,
-            'client_id'       => $this->client_id,
-            'reservation_date' => $this->reservation_date,
-            'expiration_date' => $this->expiration_date,
-            'deposit_amount'  => $this->deposit_amount,
-            'status'          => $this->status,
-            'lot'             => new lotResource($this->whenLoaded('lot')),
-            'client'          => new ClientResource($this->whenLoaded('client')),
-            'contract'        => new ContractResource($this->whenLoaded('contract')),
+            
+            //
+            'schedule_id' => $this->schedule_id,
+            'contract_id' => $this->contract_id,
+            'due_date'    => $this->due_date,
+            'amount'      => $this->amount,
+            'status'      => $this->status,
+            'contract'    => new ContractResource($this->whenLoaded('contract')),
+            'payments'    => PaymentResource::collection($this->whenLoaded('payments')),
+
         ];
         }
 }

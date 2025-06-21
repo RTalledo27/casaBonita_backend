@@ -18,7 +18,9 @@ Route::prefix('v1')->group(function () {
     Route::prefix('sales')->middleware('auth:sanctum')->group(function () {
         Route::apiResource('reservations', ReservationController::class);
         Route::apiResource('contracts',    ContractController::class);
+        Route::get('contracts/{contract}/preview', [ContractController::class, 'preview']);
         Route::post('reservations/{reservation}/convert', [ReservationController::class, 'convert']);
+        Route::post('reservations/{reservation}/confirm-payment', [ReservationController::class, 'confirmPayment']);
         Route::apiResource('schedules',    PaymentScheduleController::class);
         Route::apiResource('payments',     PaymentController::class);
         Route::post('contract-approvals/{approval}/approve', [ContractApprovalController::class, 'approve']);

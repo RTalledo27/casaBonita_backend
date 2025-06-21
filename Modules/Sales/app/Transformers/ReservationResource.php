@@ -21,9 +21,9 @@ class ReservationResource extends JsonResource
             'reservation_date' => $this->reservation_date,
             'expiration_date' => $this->expiration_date,
             'deposit_amount'  => $this->deposit_amount,
-            'status'          => $this->status,
-            'lot'             => new lotResource($this->whenLoaded('lot')),
-            'client'          => new ClientResource($this->whenLoaded('client')),
-            'contract'        => new ContractResource($this->whenLoaded('contract')),
-        ];    }
+            'deposit_method'  => $this->deposit_method,
+            'deposit_reference' => $this->deposit_reference,
+            'deposit_paid_at' => $this->deposit_paid_at?->toDateTimeString(),
+        ];
+    }
 }

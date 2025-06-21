@@ -11,7 +11,8 @@ class ContractRepository
 {
     public function paginate(int $perPage = 15)
     {
-        return Contract::with(['reservation', 'schedules', 'invoices'])->paginate($perPage);
+        return Contract::with(['reservation', 'schedules', 'invoices', 'approvals'])
+            ->paginate($perPage);
     }
 
     public function create(array $data, array $approvers = []): Contract
@@ -52,7 +53,7 @@ class ContractRepository
         }
             */
 
-        return DB::transaction(function () use ($data, $approvers) {
+        /* return DB::transaction(function () use ($data, $approvers) {
             $data['status'] = 'pendiente_aprobacion';
             $contract = Contract::create($data);
 
@@ -65,7 +66,39 @@ class ContractRepository
             }
 
             return $contract;
-        });
+        });*/
+
+        $schedules = $data['schedules'] ?? [];
+        unset($data['schedules']);
+
+        return DB::transaction(
+            function () use ($data, $schedules, $approvers) {
+                $data['status'] = 'pendiente_aprobacion';
+                $contract = Contract::create($data);
+
+                foreach ($schedules as $sch) {
+                    PaymentSchedule::create([
+                        'contract_id' => $contract->contract_id,
+                        'due_date'    => $sch['due_date'],
+                        'amount'      => $sch['amount'],
+                        'status'      => 'pendiente',
+                    ]);
+                }
+                foreach ($approvers as $userId) {
+                    ContractApproval::create([
+                        'contract_id' => $contract->contract_id,
+                        'user_id'     => $userId,
+                        'status'      => 'pendiente',
+                    ]);
+                }
+
+                if ($lot = $contract->reservation->lot ?? null) {
+                    $lot->update(['status' => 'vendido']);
+                }
+
+                return $contract->load(['reservation', 'schedules', 'approvals']);
+            }
+        );
     }
 
     public function update(Contract $contract, array $data): Contract
