@@ -2,37 +2,51 @@
 
 namespace Modules\ServiceDesk\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Controller;
+use Modules\ServiceDesk\Http\Requests\ServiceActionRequest;
 use Modules\ServiceDesk\Models\ServiceAction;
+use Modules\ServiceDesk\Repositories\ServiceActionRepository;
+use Modules\ServiceDesk\Repositories\ServiceRequestRepository;
+use Modules\ServiceDesk\Transformers\ServiceActionResource;
 
 class ServiceActionController extends Controller
 {
-    public function index()
-    {
-        return ServiceAction::with('request', 'user')->paginate(15);
+
+    protected $actionRepo;
+    protected $requestRepo;
+
+    public function __construct(
+        ServiceActionRepository $actionRepo,
+        ServiceRequestRepository $requestRepo
+    ) {
+        $this->actionRepo = $actionRepo;
+        $this->requestRepo = $requestRepo;
     }
 
-    public function store(Request $r)
+    public function index($ticket_id)
     {
-        $data = $r->validate([
-            'ticket_id'        => 'required|exists:service_requests,ticket_id',
-            'user_id'          => 'nullable|exists:users,user_id',
-            'performed_at'     => 'required|date',
-            'notes'            => 'nullable|string',
-            'next_action_date' => 'nullable|date',
-        ]);
-        return ServiceAction::create($data);
+        $ticket = $this->requestRepo->find($ticket_id);
+        $this->authorize('view', $ticket);
+
+        $actions = $this->actionRepo->listByTicket($ticket_id);
+        return ServiceActionResource::collection($actions);
     }
 
-    public function show(ServiceAction $serviceAction)
+    public function store(ServiceActionRequest $request, $ticket_id)
     {
-        return $serviceAction->load('request', 'user');
-    }
+        $ticket = $this->requestRepo->find($ticket_id);
+        $this->authorize('addAction', $ticket);
 
-    public function destroy(ServiceAction $sa)
-    {
-        $sa->delete();
-        return response()->noContent();
+        $data = $request->validated();
+        $data['user_id'] = auth()->user()->user_id;
+        $data['ticket_id'] = $ticket_id;
+        $data['performed_at'] = now();
+
+        $action = $this->actionRepo->create($data);
+
+        // Si action_type es 'cambio_estado', puedes actualizar status aquí
+
+        return new ServiceActionResource($action);
     }
 }

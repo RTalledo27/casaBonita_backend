@@ -76,6 +76,7 @@ class ClientController extends Controller
         $this->pusher->notify('client-channel', 'updated', ['client' => new ClientResource($updated)]);
         return new ClientResource($updated);
     }
+    
 
     /**
      * Eliminar un cliente del sistema.

@@ -20,7 +20,10 @@ class ContractApprovalResource extends JsonResource
             'status'      => $this->status,
             'approved_at' => $this->approved_at,
             'comments'    => $this->comments,
-            'contract'    => new ContractResource($this->whenLoaded('contract')),
-            'approver'    => new UserResource($this->whenLoaded('approver')) ];
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+            'contract' => new ContractResource($this->whenLoaded('contract')), // Cuidado con la recursión si ContractResource carga approvals
+            //'approver' => new UserResource($this->whenLoaded('approver')),
+        ];
     }
 }

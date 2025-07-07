@@ -96,9 +96,25 @@ class PermissionSeeder extends Seeder
             'inventory.media.store',
             'inventory.media.update',
             'inventory.media.destroy',
-            
 
-          
+
+
+            // MODULE SERVICE DESK - TICKETS
+            'service-desk.tickets.view',       // Ver lista y detalle de tickets
+            'service-desk.tickets.store',      // Crear ticket
+            'service-desk.tickets.update',     // Editar ticket
+            'service-desk.tickets.delete',     // Eliminar ticket
+            'service-desk.tickets.assign',     // Asignar ticket
+            'service-desk.tickets.actions',    // Agregar acción al ticket (comentario/cambio estado)
+            'service-desk.tickets.close',      // Cerrar ticket
+
+            // MODULE SERVICE DESK - ACCIONES (HISTORIAL)
+            'service-desk.actions.view',       // Ver historial/acciones de tickets
+            'service-desk.actions.store',      // Agregar acción (comentario, cambio de estado)
+            'service-desk.actions.update',     // Editar acción
+            'service-desk.actions.delete',     // Eliminar acción
+
+
 
         ];
 

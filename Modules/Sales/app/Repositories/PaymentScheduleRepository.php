@@ -12,6 +12,12 @@ class PaymentScheduleRepository
         return PaymentSchedule::with(['contract', 'payments'])->paginate($perPage);
     }
 
+
+    public function find($id): ?PaymentSchedule
+    {
+        return PaymentSchedule::find($id);
+    }
+    
     public function create(array $data): PaymentSchedule
     {
         $schedule = PaymentSchedule::create($data);

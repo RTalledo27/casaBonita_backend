@@ -13,6 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Sales\Models\ContractApproval;
 use Modules\Security\Models\Role;
+use Modules\ServiceDesk\Models\ServiceRequest;
 
 // use Modules\Security\Database\Factories\UserFactory;
 
@@ -63,6 +64,12 @@ class User extends Authenticatable
     //     // return UserFactory::new();
     // }}
 
+
+    public function assignedTickets()
+    {
+        return $this->hasMany(ServiceRequest::class, 'assigned_to', 'user_id');
+    }
+
     //ROLES:
     public function roles()
     {
@@ -91,4 +98,6 @@ class User extends Authenticatable
     public function contractApprovals(){
         return $this->hasMany(ContractApproval::class, 'user_id');
     }
+
+    
 }

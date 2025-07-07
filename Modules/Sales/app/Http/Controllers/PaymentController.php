@@ -20,7 +20,7 @@ class PaymentController extends Controller
         private PusherNotifier $pusher
     ) {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:sales.payments.index')->only(['index', 'show']);
+        $this->middleware('permission:sales.payments.view')->only(['index', 'show']);
         $this->middleware('permission:sales.payments.store')->only('store');
         $this->middleware('permission:sales.payments.update')->only('update');
         $this->middleware('permission:sales.payments.destroy')->only('destroy');

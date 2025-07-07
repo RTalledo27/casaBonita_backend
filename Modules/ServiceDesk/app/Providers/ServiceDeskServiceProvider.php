@@ -2,8 +2,18 @@
 
 namespace Modules\ServiceDesk\Providers;
 
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
+use Modules\ServiceDesk\Console\AutoAssignCriticalTickets;
+use Modules\ServiceDesk\Console\EscalateTierOneTickets;
+use Modules\ServiceDesk\Models\ServiceAction;
+use Modules\ServiceDesk\Models\ServiceRequest;
+use Modules\ServiceDesk\Policies\ServiceActionPolicy;
+use Modules\ServiceDesk\Policies\ServiceRequestPolicy;
+use Modules\ServiceDesk\Repositories\ServiceActionRepository;
+use Modules\ServiceDesk\Repositories\ServiceRequestRepository;
 use Nwidart\Modules\Traits\PathNamespace;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -16,6 +26,12 @@ class ServiceDeskServiceProvider extends ServiceProvider
 
     protected string $nameLower = 'servicedesk';
 
+
+    protected $policies = [
+        ServiceRequest::class => ServiceRequestPolicy::class,
+        ServiceAction::class  => ServiceActionPolicy::class,
+    ];
+
     /**
      * Boot the application events.
      */
@@ -27,6 +43,19 @@ class ServiceDeskServiceProvider extends ServiceProvider
         $this->registerConfig();
         $this->registerViews();
         $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
+        Gate::policy(ServiceRequest::class, ServiceRequestPolicy::class);
+        Gate::policy(ServiceAction::class, ServiceActionPolicy::class);
+    }
+
+
+    /**
+     * Register the policies for the module.
+     */
+    protected function registerPolicies(): void
+    {
+        foreach ($this->policies as $model => $policy) {
+            Gate::policy($model, $policy);
+        }
     }
 
     /**
@@ -36,6 +65,8 @@ class ServiceDeskServiceProvider extends ServiceProvider
     {
         $this->app->register(EventServiceProvider::class);
         $this->app->register(RouteServiceProvider::class);
+        $this->app->singleton(ServiceActionRepository::class, ServiceActionRepository::class);
+        $this->app->singleton(ServiceRequestRepository::class, ServiceRequestRepository::class);
     }
 
     /**
@@ -44,6 +75,10 @@ class ServiceDeskServiceProvider extends ServiceProvider
     protected function registerCommands(): void
     {
         // $this->commands([]);
+
+        $this->commands([
+            AutoAssignCriticalTickets::class,
+        ]);
     }
 
     /**
@@ -55,6 +90,11 @@ class ServiceDeskServiceProvider extends ServiceProvider
         //     $schedule = $this->app->make(Schedule::class);
         //     $schedule->command('inspire')->hourly();
         // });
+
+        $this->app->booted(function () {
+            $schedule = $this->app->make(Schedule::class);
+            $schedule->command('servicedesk:escalate-tier1')->everyFiveMinutes();
+        });
     }
 
     /**

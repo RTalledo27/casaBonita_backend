@@ -15,10 +15,11 @@ class ConvertReservationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'contract_number' => 'required|string|unique:contracts,contract_number',
-            'sign_date'       => 'required|date',
-            'total_price'     => 'required|numeric',
-            'currency'        => 'required|string|size:3',
+            'contract_number' => 'required|string|max:255|unique:contracts,contract_number',
+            'sign_date' => 'required|date',
+            'total_price' => 'required|numeric|min:0',
+            'currency' => 'required|string|max:3',
+
             'approvers'       => 'sometimes|array',
             'approvers.*'     => 'integer|exists:users,user_id',
         ];

@@ -12,8 +12,10 @@ class ConfirmReservationPaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'deposit_method'   => 'required|in:transferencia,efectivo,tarjeta,yape,plin,otro',
-            'deposit_reference' => 'nullable|string|max:60',
+            'deposit_method' => 'required|string|max:255',
+            'deposit_reference' => 'nullable|string|max:255',
+            // Puedes añadir más validaciones si es necesario, por ejemplo, para el monto
+            // 'amount_paid' => 'required|numeric|min:0',
         ];
     }
 

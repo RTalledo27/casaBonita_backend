@@ -33,8 +33,9 @@ class PaymentSchedule extends Model
     //RELACIONES
     public function contract()
     {
-        return $this->belongsTo(Contract::class);
+        return $this->belongsTo(Contract::class, 'contract_id');
     }
+
     public function payments()
     {
         return $this->hasMany(Payment::class);

@@ -45,14 +45,14 @@ class Reservation extends Model
     //RELACIONES
     public function lot()
     {
-        return $this->belongsTo(Lot::class);
+        return $this->belongsTo(Lot::class, 'lot_id');
     }
     public function client()
     {
-        return $this->belongsTo(Client::class);
+        return $this->belongsTo(Client::class, 'client_id');
     }
     public function contract()
     {
-        return $this->hasOne(Contract::class);
+        return $this->hasOne(Contract::class, 'reservation_id');
     }
 }

@@ -29,7 +29,7 @@ class ContractPolicy
 
     public function create(User $user)
     {
-        return $user->hasPermissionTo('sales.contracts.create');
+        return $user->hasPermissionTo('sales.contracts.store');
     }
 
     public function update(User $user, Contract $contract)
@@ -42,3 +42,4 @@ class ContractPolicy
         return $user->hasPermissionTo('sales.contracts.delete');
     }
 }
+

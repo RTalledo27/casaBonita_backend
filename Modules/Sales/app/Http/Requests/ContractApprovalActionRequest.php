@@ -12,7 +12,7 @@ class ContractApprovalActionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'comments' => 'nullable|string|max:500',
+            'comments' => 'nullable|string|max:1000',
         ];    }
 
     /**

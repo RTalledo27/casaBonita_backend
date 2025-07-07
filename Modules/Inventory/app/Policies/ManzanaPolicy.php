@@ -14,7 +14,6 @@ class ManzanaPolicy
      * Create a new policy instance.
      */
     public function __construct() {}
-    use HandlesAuthorization;
 
     public function viewAny(User $user)
     {

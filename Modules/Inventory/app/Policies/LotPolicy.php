@@ -15,7 +15,6 @@ class LotPolicy
      */
     public function __construct() {}
 
-    use HandlesAuthorization;
 
     public function viewAny(User $user)
     {

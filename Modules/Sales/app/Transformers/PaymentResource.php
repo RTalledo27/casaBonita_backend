@@ -20,6 +20,8 @@ class PaymentResource extends JsonResource
             'amount'          => $this->amount,
             'method'          => $this->method,
             'reference'       => $this->reference,
+            'schedule'        => new PaymentScheduleResource($this->whenLoaded('schedule')),
+            //'journal_entry'   => new JournalEntryResource($this->whenLoaded('journalEntry')),
         ];
     }
 }

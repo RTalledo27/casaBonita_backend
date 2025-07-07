@@ -10,8 +10,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 });
 
 Route::prefix('v1')->group(function () {
-    Route::prefix('service')->middleware('auth:sanctum')->group(function () {
+    Route::prefix('servicedesk')->middleware('auth:sanctum')->group(function () {
         Route::apiResource('requests', ServiceRequestController::class);
         Route::apiResource('actions',  ServiceActionController::class);
+        Route::get('dashboard', [ServiceDeskController::class, 'dashboard'])->name('servicedesk.dashboard');
+        Route::get('/requests/{ticket_id}/actions', [ServiceActionController::class, 'index']);
     });
 });
+ 

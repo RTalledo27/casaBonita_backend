@@ -10,7 +10,7 @@ use Modules\Sales\Http\Controllers\SalesController;
 use Modules\Sales\Models\ContractApproval;
 
 Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('sales', SalesController::class)->names('sales');
+    Route::apiResource('sale', SalesController::class)->names('sales');
 });
 
 

@@ -11,8 +11,14 @@ class ServiceActionRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
-    }
+        return [
+            'action_type'       => 'required|in:comentario,cambio_estado,escalado',
+            'notes'             => 'nullable|string|max:3000',
+            'next_action_date'  => 'nullable|date',
+            'performed_at'      => 'nullable|date',
+            'ticket_id'         => 'required|exists:service_requests,ticket_id',
+        ];
+        }
 
     /**
      * Determine if the user is authorized to make this request.

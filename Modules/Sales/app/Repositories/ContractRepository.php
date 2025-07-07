@@ -68,7 +68,7 @@ class ContractRepository
             return $contract;
         });*/
 
-        $schedules = $data['schedules'] ?? [];
+        /* $schedules = $data['schedules'] ?? [];
         unset($data['schedules']);
 
         return DB::transaction(
@@ -98,7 +98,54 @@ class ContractRepository
 
                 return $contract->load(['reservation', 'schedules', 'approvals']);
             }
-        );
+        ); */
+
+        // Lógica para manejar la reemisión de contratos
+        if (isset($data['previous_contract_id']) && $data['previous_contract_id']) {
+            $previousContract = $this->find($data['previous_contract_id']);
+            if ($previousContract) {
+                // Marcar el contrato anterior como 'reemplazado'
+                $previousContract->update(['status' => 'reemplazado']);
+
+                // Lógica para calcular el monto transferido del contrato anterior.
+                // Esto es un ejemplo y debe ajustarse a tu lógica de negocio exacta.
+                // Podría ser la suma de todos los pagos ya realizados en el contrato anterior,
+                // o el saldo a favor del cliente, etc.
+                if (!isset($data['transferred_amount_from_previous_contract'])) {
+                    // Ejemplo: Suma de todos los pagos asociados al contrato anterior
+                    // Asumiendo que PaymentSchedule tiene una relación 'payments'
+                    $paidAmount = 0;
+                    foreach ($previousContract->paymentSchedules as $schedule) {
+                        $paidAmount += $schedule->payments()->sum('amount');
+                    }
+                    $data['transferred_amount_from_previous_contract'] = $paidAmount;
+                }
+            }
+        }
+
+        $contract = Contract::create($data);
+
+        // Aquí podrías añadir lógica para generar el PaymentSchedule inicial
+        // si no se hace en otro lugar o si depende de la creación del contrato.
+        // Por ejemplo, si el contrato tiene un total_price y se divide en cuotas.
+        // if (isset($data['total_price']) && $data['total_price'] > 0) {
+        //     // Lógica para crear PaymentSchedule basada en total_price y otros términos
+        //     // Esto podría ser un método separado o un servicio
+        //     // Ejemplo simple: una sola cuota inicial
+        //     PaymentSchedule::create([
+        //         'contract_id' => $contract->contract_id,
+        //         'due_date' => $contract->sign_date,
+        //         'amount' => $data['total_price'],
+        //         'status' => 'pendiente',
+        //     ]);
+        // }
+
+        return $contract->load(['reservation', 'schedules', 'invoices', 'approvals']);
+    }
+
+     public function find($id): ?Contract
+    {
+        return Contract::find($id);
     }
 
     public function update(Contract $contract, array $data): Contract

@@ -16,7 +16,11 @@ class PaymentRepository
     public function create(array $data): Payment
     {
         $payment = Payment::create($data);
-        return $payment->load(['schedule', 'journalEntry']);
+        // Lógica adicional después de crear el pago, por ejemplo, actualizar el estado del PaymentSchedule
+        // if ($payment->schedule) {
+        //     $payment->schedule->update(['status' => 'pagado']); // O lógica más compleja si hay pagos parciales
+        // }
+        return $payment;
     }
 
     public function update(Payment $payment, array $data): Payment

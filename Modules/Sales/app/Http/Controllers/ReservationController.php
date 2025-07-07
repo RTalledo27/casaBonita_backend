@@ -25,7 +25,7 @@ class ReservationController extends Controller
         private PusherNotifier $pusher
     ) {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:sales.reservations.index')->only(['index', 'show']);
+        $this->middleware('permission:sales.reservations.view')->only(['index', 'show']);
         $this->middleware('permission:sales.reservations.store')->only(['store']);
         $this->middleware('permission:sales.reservations.update')->only(['update', 'convert', 'confirmPayment']);
         $this->middleware('permission:sales.reservations.destroy')->only(['destroy']);
@@ -38,7 +38,6 @@ class ReservationController extends Controller
      */
     public function index()
     {
-        //
 
         return ReservationResource::collection($this->reservations->paginate());
     }

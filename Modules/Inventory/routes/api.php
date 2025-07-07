@@ -17,7 +17,6 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('manzanas',      ManzanaController::class);
         Route::apiResource('street-types', StreetTypeController::class);
         Route::apiResource('lots',        LotController::class);
-        Route::apiResource('lot-media',   LotMediaController::class)
-            ->only(['index', 'store', 'show', 'destroy']);
+        Route::apiResource('lot-media',   LotMediaController::class);
     });
 });

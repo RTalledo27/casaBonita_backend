@@ -11,7 +11,17 @@ class ServiceRequestRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'contract_id'    => 'nullable|exists:contracts,contract_id',
+            'ticket_type'    => 'required|in:garantia,mantenimiento,otro',
+            'priority'       => 'required|in:baja,media,alta,critica',
+            'status'         => 'sometimes|in:abierto,en_proceso,cerrado',
+            'description'    => 'nullable|string|max:3000',
+            'opened_at'      => 'nullable|date',
+            'sla_due_at'     => 'nullable|date',
+            'escalated_at'   => 'nullable|date',
+
+        ];
     }
 
     /**

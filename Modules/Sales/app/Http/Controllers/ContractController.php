@@ -20,7 +20,7 @@ class ContractController extends Controller
     public function __construct(private ContractRepository $repository, private PusherNotifier $pusher)
     {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:sales.contracts.index')->only(['index', 'show']);
+        $this->middleware('permission:sales.contracts.view')->only(['index', 'show']);
         $this->middleware('permission:sales.contracts.store')->only(['store']);
         $this->middleware('permission:sales.contracts.update')->only(['update']);
         $this->middleware('permission:sales.contracts.destroy')->only(['destroy']);
@@ -50,7 +50,7 @@ class ContractController extends Controller
             // Start a database transaction to ensure data integrity
             // If any error occurs, the transaction will be rolled back
             // If the contract is created successfully, commit the transaction
-            DB::beginTransaction(); // Start transaction
+            /*   DB::beginTransaction(); // Start transaction
 
             $contract = $this->repository->create($request->validated());
 
@@ -70,8 +70,18 @@ class ContractController extends Controller
                 'message' => 'Error al crear contrato',
                 'error'   => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        } */
+
+
+            // Si el contrato se crea a partir de una reserva, actualizar el estado de la reserva
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Error al crear contrato',
+                'error'   => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
-    }
+                
+        }
     /**
      * Display a single contract with its related data.
      *

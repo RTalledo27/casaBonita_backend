@@ -4,53 +4,26 @@ namespace Modules\ServiceDesk\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Modules\ServiceDesk\Repositories\ServiceDeskDashRepository;
+use Modules\ServiceDesk\Repositories\ServiceRequestRepository;
+use Modules\ServiceDesk\Transformers\ServiceDeskDashResource;
 
 class ServiceDeskController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    protected $dashboardRepo;
+
+    public function __construct(ServiceDeskDashRepository $dashboardRepo)
     {
-        return view('servicedesk::index');
+        $this->dashboardRepo = $dashboardRepo;
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function dashboard(Request $request)
     {
-        return view('servicedesk::create');
+        // Opcional: autoriza si tienes policy especial
+        // $this->authorize('viewDashboard', ServiceRequest::class);
+        $params = $request->query(); 
+
+        $data = $this->dashboardRepo->getDashboardData($params);
+        return new ServiceDeskDashResource($data);
     }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request) {}
-
-    /**
-     * Show the specified resource.
-     */
-    public function show($id)
-    {
-        return view('servicedesk::show');
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit($id)
-    {
-        return view('servicedesk::edit');
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id) {}
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy($id) {}
 }

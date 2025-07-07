@@ -13,9 +13,9 @@ class PaymentScheduleRequest extends FormRequest
     {
         return [
             'contract_id' => 'required|exists:contracts,contract_id',
-            'due_date'    => 'required|date',
-            'amount'      => 'required|numeric',
-            'status'      => 'required|in:pendiente,pagado,vencido',
+            'due_date' => 'required|date',
+            'amount' => 'required|numeric|min:0',
+            'status' => 'required|string|in:pendiente,pagado,vencido,anulado', // Ajusta los estados si es necesario 
         ];
     }
 

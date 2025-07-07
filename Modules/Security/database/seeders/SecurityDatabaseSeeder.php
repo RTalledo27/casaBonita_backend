@@ -12,5 +12,9 @@ class SecurityDatabaseSeeder extends Seeder
     public function run(): void
     {
         // $this->call([]);
+        $this->call(PermissionSeeder::class);
+        $this->call(RoleSeeder::class);
+        $this->call(SecuritySeeder::class);
+        $this->call(UserSeeder::class);
     }
 }
