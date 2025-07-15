@@ -51,7 +51,7 @@ class ServiceRequestController extends Controller
         $request->load(['creator', 'actions.user', 'contract']);
     
         // Log (opcional, para depuración)
-        \Log::info('Ticket cargado', [
+        Log::info('Ticket cargado', [
             'ticket_id' => $request->ticket_id,
             'opened_by' => $request->opened_by,
             'user_id'   => auth()->id(),

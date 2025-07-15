@@ -6,5 +6,8 @@
     "Accounting": true,
     "Integrations": true,
     "ServiceDesk": true,
-    "Audit": true
+    "Audit": true,
+    "Finance": true,
+    "Collections": true,
+    "HumanResources": true
 }
