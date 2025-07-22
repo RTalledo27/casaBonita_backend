@@ -124,9 +124,12 @@ class CommissionRepository
     {
         return $this->model->with(['employee.user', 'contract'])
             ->pending()
-            ->forPeriod($month, $year)
+            ->byPeriod($month, $year)
             ->get();
     }
+
+
+    
 
     public function getByEmployee(int $employeeId, int $month = null, int $year = null): Collection
     {
@@ -134,7 +137,7 @@ class CommissionRepository
             ->byEmployee($employeeId);
 
         if ($month && $year) {
-            $query->forPeriod($month, $year);
+            $query->byPeriod($month, $year);
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -151,7 +154,7 @@ class CommissionRepository
 
     public function getTotalCommissionsForPeriod(int $month, int $year): float
     {
-        return $this->model->forPeriod($month, $year)
+        return $this->model->byPeriod($month, $year)
             ->sum('commission_amount');
     }
 }

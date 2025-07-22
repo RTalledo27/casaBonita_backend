@@ -82,6 +82,16 @@ class Payroll extends Model
         return $query->where('status', 'procesado');
     }
 
+    // Alias para compatibilidad con el repositorio
+    public function processedByEmployee()
+    {
+        return $this->belongsTo(Employee::class, 'processed_by', 'employee_id');
+    }
+    public function approvedByEmployee()
+    {
+        return $this->belongsTo(Employee::class, 'approved_by', 'employee_id');
+    }
+
     public function scopeApproved($query)
     {
         return $query->where('status', 'aprobado');

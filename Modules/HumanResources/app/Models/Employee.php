@@ -136,8 +136,60 @@ class Employee extends Model
         return $this->contracts()
             ->whereMonth('sign_date', $month)
             ->whereYear('sign_date', $year)
-            ->where('status', 'aprobado')
+            ->where('status', 'vigente')
             ->get();
+    }
+
+    /**
+     * Calcular CANTIDAD de contratos/ventas del mes
+     */
+    public function calculateMonthlySalesCount($month, $year)
+    {
+        return $this->contracts()
+            ->whereMonth('sign_date', $month)
+            ->whereYear('sign_date', $year)
+            ->where('status', 'vigente')
+            ->count();
+    }
+
+    /**
+     * Calcular efectividad basada en CANTIDAD de ventas vs meta
+     */
+    public function calculateSalesCountAchievement($month, $year, $targetCount = 10)
+    {
+        $salesCount = $this->calculateMonthlySalesCount($month, $year);
+        return $targetCount > 0 ? ($salesCount / $targetCount) * 100 : 0;
+    }
+
+    /**
+     * Calcular CANTIDAD de contratos/ventas quincenales
+     * $fortnight: 1 = primera quincena (1-15), 2 = segunda quincena (16-fin)
+     */
+    public function calculateFortnightlySalesCount($month, $year, $fortnight = 1)
+    {
+        $query = $this->contracts()
+            ->whereMonth('sign_date', $month)
+            ->whereYear('sign_date', $year)
+            ->where('status', 'vigente');
+
+        if ($fortnight == 1) {
+            // Primera quincena: días 1-15
+            $query->whereDay('sign_date', '<=', 15);
+        } else {
+            // Segunda quincena: días 16-fin del mes
+            $query->whereDay('sign_date', '>', 15);
+        }
+
+        return $query->count();
+    }
+
+    /**
+     * Calcular efectividad quincenal basada en CANTIDAD de ventas vs meta
+     */
+    public function calculateFortnightlyAchievement($month, $year, $fortnight, $targetCount = 6)
+    {
+        $salesCount = $this->calculateFortnightlySalesCount($month, $year, $fortnight);
+        return $targetCount > 0 ? ($salesCount / $targetCount) * 100 : 0;
     }
 
     public function calculateGoalAchievement($month, $year)
@@ -167,5 +219,19 @@ class Employee extends Model
         $commissions = $this->calculateMonthlyCommissions($month, $year);
         $bonuses = $this->calculateMonthlyBonuses($month, $year);
         return $this->base_salary + $commissions + $bonuses;
+    }
+
+    public function currentMonthCommissions()
+    {
+        return $this->hasMany(Commission::class, 'employee_id', 'employee_id')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year);
+    }
+
+    public function currentMonthBonuses()
+    {
+        return $this->hasMany(Bonus::class, 'employee_id', 'employee_id')
+            ->whereMonth('created_at', now()->month)
+            ->whereYear('created_at', now()->year);
     }
 }

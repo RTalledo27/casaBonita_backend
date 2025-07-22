@@ -5,20 +5,22 @@ namespace Modules\HumanResources\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Modules\HumanResources\Http\Requests\StoreEmployeeRequest;
 use Modules\HumanResources\Http\Requests\UpdateEmployeeRequest;
 use Modules\HumanResources\Repositories\EmployeeRepository;
+use Modules\HumanResources\Services\BonusService;
 use Modules\HumanResources\Services\CommissionService;
 use Modules\HumanResources\Transformers\EmployeeResource;
 
 class EmployeeController extends Controller
 {
-    //
     public function __construct(
         protected EmployeeRepository $employeeRepo,
-        protected CommissionService $commissionService
+        protected CommissionService $commissionService,
+        protected BonusService $bonusService
     ) {}
-    
+
     public function index(Request $request): JsonResponse
     {
         $filters = $request->only(['employee_type', 'team_id', 'status', 'search']);
@@ -50,7 +52,6 @@ class EmployeeController extends Controller
         try {
             $data = $request->validated();
 
-            // Generar código de empleado si no se proporciona
             if (!isset($data['employee_code'])) {
                 $data['employee_code'] = $this->employeeRepo->generateEmployeeCode();
             }
@@ -70,8 +71,9 @@ class EmployeeController extends Controller
         }
     }
 
-    public function show(int $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
+        $id = (int) $id;
         $employee = $this->employeeRepo->findById($id);
 
         if (!$employee) {
@@ -150,11 +152,30 @@ class EmployeeController extends Controller
 
     public function dashboard(Request $request, int $id): JsonResponse
     {
+        $user = $request->user();
         $month = $request->get('month', now()->month);
         $year = $request->get('year', now()->year);
 
         try {
+            // Verificar que el empleado existe
+            $employee = $this->employeeRepo->findById($id);
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Empleado no encontrado'
+                ], 404);
+            }
+
+            // Si no es admin, verificar que solo pueda ver su propio dashboard
+            if (!$user->hasRole('admin') && $user->employee && $user->employee->employee_id !== $id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No tienes permisos para ver este dashboard'
+                ], 403);
+            }
+
             $dashboard = $this->commissionService->getAdvisorDashboard($id, $month, $year);
+            $dashboard['bonuses'] = $this->bonusService->getBonusesForDashboard($id);
 
             return response()->json([
                 'success' => true,
@@ -162,6 +183,44 @@ class EmployeeController extends Controller
                 'message' => 'Dashboard obtenido exitosamente'
             ]);
         } catch (\Exception $e) {
+            Log::error('Error en dashboard: ' . $e->getMessage(), [
+                'exception' => $e,
+                'employee_id' => $id,
+                'month' => $month,
+                'year' => $year,
+                'user_id' => $user->user_id ?? null
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        }
+    }
+
+    public function adminDashboard(Request $request): JsonResponse
+    {
+        $month = $request->get('month', now()->month);
+        $year = $request->get('year', now()->year);
+
+        try {
+            $dashboard = $this->commissionService->getAdminDashboard($month, $year);
+            $dashboard['bonuses'] = $this->bonusService->getBonusesForAdminDashboard($month, $year);
+            //$dashboard['employees'] = $this->employeeRepo->getAdvisors();
+            $dashboard['employees'] = $this->employeeRepo->getAll();
+
+            return response()->json([
+                'success' => true,
+                'data' => $dashboard,
+                'message' => 'Admin dashboard obtenido exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            Log::info('Error en adminDashboard: ' . $e->getMessage(), [
+                'exception' => $e,
+                'month' => $month,
+                'year' => $year,
+                'user_id' => $request->user() ? $request->user()->user_id : null
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()

@@ -9,7 +9,7 @@ class ReservationRepository
 {
     public function paginate(int $perPage = 15)
     {
-        return Reservation::with(['lot', 'client', 'contract'])->paginate($perPage);
+        return Reservation::with(['lot', 'client', 'advisor', 'contract'])->paginate($perPage);
     }
 
     public function create(array $data): Reservation
@@ -18,13 +18,13 @@ class ReservationRepository
         if ($lot = Lot::find($data['lot_id'])) {
             $lot->update(['status' => 'reservado']);
         }
-        return $reservation->load(['lot', 'client']);
+        return $reservation->load(['lot', 'client', 'advisor']);
     }
 
     public function update(Reservation $res, array $data): Reservation
     {
         $res->update($data);
-        return $res->load(['lot', 'client', 'contract']);
+        return $res->load(['lot', 'client', 'advisor', 'contract']);
     }
 
     public function delete(Reservation $res): void
@@ -44,6 +44,6 @@ class ReservationRepository
             'deposit_method' => $data['deposit_method'] ?? $reservation->deposit_method,
             'deposit_reference' => $data['deposit_reference'] ?? $reservation->deposit_reference,
         ]);
-        return $reservation->load(['lot', 'client', 'contract']);
+        return $reservation->load(['lot', 'client', 'advisor', 'contract']);
     }
 }

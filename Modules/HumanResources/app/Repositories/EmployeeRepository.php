@@ -22,10 +22,10 @@ class EmployeeRepository
             $query->where('team_id', $filters['team_id']);
         }
 
-        if (isset($filters['status'])) {
-            $query->where('status', $filters['status']);
+        if (isset($filters['employment_status'])) {
+            $query->where('employment_status', $filters['employment_status']);
         } else {
-            $query->where('status', 'active');
+            $query->where('employment_status', 'activo');
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -42,10 +42,10 @@ class EmployeeRepository
             $query->where('team_id', $filters['team_id']);
         }
 
-        if (isset($filters['status'])) {
-            $query->where('status', $filters['status']);
+        if (isset($filters['employment_status'])) {
+            $query->where('employment_status', $filters['employment_status']);
         } else {
-            $query->where('status', 'active');
+            $query->where('employment_status', 'activo');
         }
 
         if (isset($filters['search'])) {
@@ -101,10 +101,13 @@ class EmployeeRepository
     public function getByType(string $type): Collection
     {
         return $this->model->with(['user', 'team'])
-            ->byType($type)
+            ->where('employee_type', $type)
             ->active()
             ->get();
     }
+
+
+    
 
     public function generateEmployeeCode(): string
     {
@@ -119,6 +122,7 @@ class EmployeeRepository
             $query->byPeriod($month, $year);
         }])
             ->advisors()
+            ->active()
             ->get()
             ->sortByDesc(function ($employee) use ($month, $year) {
                 return $employee->commissions->sum('commission_amount');
@@ -150,6 +154,6 @@ class EmployeeRepository
                 $query->where('period_month', $month)
                     ->where('period_year', $year);
             }
-        ])->advisors()->get();
+        ])->advisors()->active()->get();
     }
 }

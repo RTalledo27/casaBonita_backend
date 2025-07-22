@@ -19,18 +19,37 @@ class Team extends Model
         'team_code',
         'description',
         'team_leader_id',
+        'is_active',
         'monthly_goal',
-        'is_active'
     ];
 
     protected $casts = [
         'monthly_goal' => 'decimal:2',
-        'is_active' => 'boolean'
+        'is_active' => 'boolean',
     ];
+
+    protected $appends = ['status'];
+
+    // Accessor for status (for frontend compatibility)
+    public function getStatusAttribute()
+    {
+        return $this->is_active ? 'active' : 'inactive';
+    }
+
+    // Mutator for status (for frontend compatibility)
+    public function setStatusAttribute($value)
+    {
+        $this->attributes['is_active'] = $value === 'active';
+    }
 
     public function leader()
     {
         return $this->belongsTo(Employee::class, 'team_leader_id', 'employee_id');
+    }
+
+    public function employees()
+    {
+        return $this->hasMany(Employee::class, 'team_id', 'team_id');
     }
 
     public function members()

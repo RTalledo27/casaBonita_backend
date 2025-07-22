@@ -43,9 +43,9 @@ class PayrollController extends Controller
         }
     }
 
-    public function show(int $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
-        $payroll = $this->payrollRepo->findById($id);
+        $payroll = $this->payrollRepo->findById((int) $id);
 
         if (!$payroll) {
             return response()->json([
@@ -103,10 +103,10 @@ class PayrollController extends Controller
         }
     }
 
-    public function process(int $id): JsonResponse
+    public function process(string $id): JsonResponse
     {
         try {
-            $processed = $this->payrollService->processPayroll($id, auth()->user()->employee->employee_id);
+            $processed = $this->payrollService->processPayroll((int) $id, auth()->user()->employee->employee_id);
 
             if (!$processed) {
                 return response()->json([
@@ -127,10 +127,10 @@ class PayrollController extends Controller
         }
     }
 
-    public function approve(int $id): JsonResponse
+    public function approve(string $id): JsonResponse
     {
         try {
-            $approved = $this->payrollService->approvePayroll($id, auth()->user()->employee->employee_id);
+            $approved = $this->payrollService->approvePayroll((int) $id, auth()->user()->employee->employee_id);
 
             if (!$approved) {
                 return response()->json([
@@ -147,6 +147,36 @@ class PayrollController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al aprobar nómina: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function processBulk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'period' => 'required|string|regex:/^\d{4}-\d{2}$/',
+            'status' => 'nullable|string|in:borrador,pendiente'
+        ]);
+
+        try {
+            $processed = $this->payrollService->processBulkPayrolls(
+                $request->period,
+                $request->status ?? 'borrador',
+                auth()->user()->employee->employee_id
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'processed_count' => $processed['count'],
+                    'processed_payrolls' => PayrollResource::collection($processed['payrolls'])
+                ],
+                'message' => "Se procesaron {$processed['count']} nóminas exitosamente"
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar nóminas: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -26,14 +26,19 @@ class Commission extends Model
         'payment_date',
         'period_month',
         'period_year',
-        'notes'
+        'notes',
+        'payment_type',
+        'total_commission_amount',
+        'sales_count'
     ];
 
     protected $casts = [
         'sale_amount' => 'decimal:2',
         'commission_percentage' => 'decimal:2',
         'commission_amount' => 'decimal:2',
-        'payment_date' => 'date'
+        'total_commission_amount' => 'decimal:2',
+        'payment_date' => 'date',
+        'sales_count' => 'integer'
     ];
 
     public function employee()
@@ -76,4 +81,6 @@ class Commission extends Model
     {
         return $query->where('period_month', $month)->where('period_year', $year);
     }
+
+   
 }

@@ -14,6 +14,7 @@ class AccountReceivable extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $table = 'accounts_receivable';
     protected $primaryKey = 'ar_id';
 
     protected $fillable = [

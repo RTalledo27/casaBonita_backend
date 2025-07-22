@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('commissions', function (Blueprint $table) {
             $table->id('commission_id');
             $table->foreignId('employee_id')->constrained('employees', 'employee_id')->onDelete('cascade');
-            $table->foreignId('contract_id')->unique()->constrained('contracts', 'contract_id')->onDelete('cascade');
+            $table->foreignId('contract_id')->constrained('contracts', 'contract_id')->onDelete('cascade');
             $table->string('commission_type');
             $table->decimal('sale_amount', 12, 2);
             $table->integer('installment_plan')->nullable();

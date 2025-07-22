@@ -15,15 +15,15 @@ class PayrollRepository
         $query = $this->model->with(['employee.user', 'processedByEmployee.user', 'approvedByEmployee.user']);
 
         if (isset($filters['period'])) {
-            $query->forPeriod($filters['period']);
+            $query->byPeriod($filters['period']);
         }
 
         if (isset($filters['status'])) {
-            $query->byStatus($filters['status']);
+            $query->where('status', $filters['status']);
         }
 
         if (isset($filters['employee_id'])) {
-            $query->byEmployee($filters['employee_id']);
+            $query->where('employee_id', $filters['employee_id']);
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -35,20 +35,19 @@ class PayrollRepository
         $query = $this->model->with(['employee.user', 'processedByEmployee.user', 'approvedByEmployee.user']);
 
         if (isset($filters['period'])) {
-            $query->forPeriod($filters['period']);
+            $query->byPeriod($filters['period']);
         }
 
         if (isset($filters['status'])) {
-            $query->byStatus($filters['status']);
+            $query->where('status', $filters['status']);
         }
 
         if (isset($filters['employee_id'])) {
-            $query->byEmployee($filters['employee_id']);
+            $query->where('employee_id', $filters['employee_id']);
         }
 
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
     }
-
 
     public function findById(int $id): ?Payroll
     {
@@ -81,21 +80,29 @@ class PayrollRepository
     public function findByEmployeeAndPeriod(int $employeeId, string $period): ?Payroll
     {
         return $this->model->where('employee_id', $employeeId)
-            ->where('period', $period)
+            ->where('payroll_period', $period)
             ->first();
     }
+
+    public function getByEmployeeAndPeriod(int $employeeId, string $period): ?Payroll
+    {
+        return $this->model->where('employee_id', $employeeId)
+            ->where('payroll_period', $period)
+            ->first();
+    }
+
 
     public function getByStatus(string $status): Collection
     {
         return $this->model->with(['employee.user'])
-            ->byStatus($status)
+            ->where('status', $status)
             ->get();
     }
 
     public function getForPeriod(string $period): Collection
     {
         return $this->model->with(['employee.user'])
-            ->forPeriod($period)
+            ->byPeriod($period)
             ->get();
     }
 }

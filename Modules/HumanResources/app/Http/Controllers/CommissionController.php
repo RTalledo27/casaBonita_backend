@@ -44,9 +44,9 @@ class CommissionController extends Controller
     }
 
 
-    public function show(int $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
-        $commission = $this->commissionRepo->findById($id);
+        $commission = $this->commissionRepo->findById((int) $id);
 
         if (!$commission) {
             return response()->json([
@@ -116,5 +116,32 @@ class CommissionController extends Controller
                 'message' => 'Error al pagar comisiones: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Obtiene el detalle de ventas individuales con sus comisiones para un asesor
+     */
+    public function getSalesDetail(Request $request): JsonResponse
+    {
+        $request->validate([
+            'employee_id' => 'required|integer|exists:employees,employee_id',
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2020|max:2030'
+        ]);
+
+        try {
+            $salesDetail = $this->commissionService->getAdvisorSalesDetail(
+                $request->employee_id,
+                $request->month,
+                $request->year
+            );
+
+            return response()->json($salesDetail);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener detalle de ventas: ' . $e->getMessage()
+            ], 500);
         }
+    }
 }

@@ -15,6 +15,6 @@ class SecurityDatabaseSeeder extends Seeder
         $this->call(PermissionSeeder::class);
         $this->call(RoleSeeder::class);
         $this->call(SecuritySeeder::class);
-        $this->call(UserSeeder::class);
+        //$this->call(UserSeeder::class);
     }
 }

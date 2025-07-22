@@ -18,10 +18,10 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        $this->call(SecuritySeeder::class);
+        //$this->call(SecuritySeeder::class);
         //CRMDatabaseSeeder::class);
-        $this->call(CRMDatabaseSeeder::class);
-        $this->call(InventoryDatabaseSeeder::class);
-
+        //$this->call(CRMDatabaseSeeder::class);
+        //$this->call(InventoryDatabaseSeeder::class);
+        $this->call(CompleteTestSeeder::class);
     }
 }

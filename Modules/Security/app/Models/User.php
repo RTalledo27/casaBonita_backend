@@ -11,6 +11,7 @@ use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Modules\HumanResources\Models\Employee;
 use Modules\Sales\Models\ContractApproval;
 use Modules\Security\Models\Role;
 use Modules\ServiceDesk\Models\ServiceRequest;
@@ -84,6 +85,11 @@ class User extends Authenticatable
     public function interactions()
     {
         return $this->hasMany(CrmInteraction::class, 'user_id');
+    }
+
+    public function employee()
+    {
+        return $this->hasOne(Employee::class, 'user_id');
     }
 
     //POR IMPLEMENTAR

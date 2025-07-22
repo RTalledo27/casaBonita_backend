@@ -11,19 +11,17 @@ class ReservationRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            'lot_id'           => 'required|exists:lots,lot_id',
-            'client_id'        => 'required|exists:clients,client_id',
-            'reservation_date' => 'required|date',
-            'deposit_amount'   => 'nullable|numeric|min:0',
-
-            'expiration_date' => 'required|date|after_or_equal:reservation_date',
-            'deposit_amount' => 'required|numeric|min:0',
-            'deposit_method' => 'nullable|string|max:255',
+        return[
+            'lot_id'            => 'required|exists:lots,lot_id',
+            'client_id'         => 'required|exists:clients,client_id',
+            'advisor_id'        => 'required|exists:employees,employee_id',
+            'reservation_date'  => 'required|date',
+            'expiration_date'   => 'required|date|after_or_equal:reservation_date',
+            'deposit_amount'    => 'required|numeric|min:0',
+            'deposit_method'    => 'nullable|string|max:255',
             'deposit_reference' => 'nullable|string|max:255',
-            'deposit_paid_at' => 'nullable|date',
-            'status' => 'required|string|in:pendiente,confirmada,cancelada,convertida', // 'convertida' añadido
-
+            'deposit_paid_at'   => 'nullable|date',
+            'status'            => 'required|string|in:pendiente_pago,completada,cancelada,convertida',
         ];
     }
 

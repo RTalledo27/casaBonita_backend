@@ -74,7 +74,7 @@ class EmployeeResource extends JsonResource
 
             // Atributos calculados
             'full_name' => $this->full_name,
-            'is_advisor' => $this->is_advisor,
+            'is_advisor' => $this->isAdvisor,
 
             // Estadísticas (cuando se incluyan)
             'total_commissions' => $this->when(isset($this->total_commissions), $this->total_commissions),

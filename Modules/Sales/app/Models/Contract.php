@@ -27,10 +27,31 @@ class Contract extends Model
         'contract_number',
         'sign_date',
         'total_price',
+        'down_payment',
+        'financing_amount',
+        'interest_rate',
+        'term_months',
+        'monthly_payment',
         'currency',
         'status',
         'transferred_amount_from_previous_contract'
     ];
+
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'sign_date' => 'date',
+        'total_price' => 'decimal:2',
+        'down_payment' => 'decimal:2',
+        'financing_amount' => 'decimal:2',
+        'interest_rate' => 'decimal:4',
+        'monthly_payment' => 'decimal:2',
+        'transferred_amount_from_previous_contract' => 'decimal:2',
+    ];
+
+
 
 
     // --- RELACIONES ---
@@ -72,5 +93,31 @@ class Contract extends Model
     public function commission()
     {
         return $this->hasOne(Commission::class, 'contract_id', 'contract_id');
+    }
+
+    // --- MÉTODOS AUXILIARES ---
+
+    /**
+     * Calcula el pago mensual basado en los datos del contrato
+     */
+    public function calculateMonthlyPayment(): float
+    {
+        if ($this->financing_amount <= 0 || $this->term_months <= 0 || $this->interest_rate <= 0) {
+            return 0;
+        }
+
+        $monthlyRate = $this->interest_rate / 12;
+        $numerator = $this->financing_amount * $monthlyRate * pow(1 + $monthlyRate, $this->term_months);
+        $denominator = pow(1 + $monthlyRate, $this->term_months) - 1;
+
+        return round($numerator / $denominator, 2);
+    }
+
+    /**
+     * Valida que los montos financieros sean consistentes
+     */
+    public function validateFinancialConsistency(): bool
+    {
+        return abs(($this->down_payment + $this->financing_amount) - $this->total_price) < 0.01;
     }
 }

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
 {
-    protected $table      = 'audit_log';
+    protected $table      = 'audit_logs';
     protected $primaryKey = 'log_id';
     public $timestamps    = false;
     protected $fillable   = [

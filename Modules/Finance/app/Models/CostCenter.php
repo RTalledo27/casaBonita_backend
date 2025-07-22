@@ -22,27 +22,21 @@ class CostCenter extends Model
      */
     protected $fillable = [
         'code', 'name', 'description', 'parent_id',
-        'manager_id', 'budget_amount', 'currency', 'is_active',
-        'start_date', 'end_date'
+        'manager_id', 'is_active'
     ];
 
     /**
      * Casting de tipos
      */
     protected $casts = [
-        'budget_amount' => 'decimal:2',
-        'is_active' => 'boolean',
-        'start_date' => 'date',
-        'end_date' => 'date'
+        'is_active' => 'boolean'
     ];
 
     /**
      * Valores por defecto
      */
     protected $attributes = [
-        'currency' => 'PEN',
-        'is_active' => true,
-        'type' => 'DEPARTMENT'
+        'is_active' => true
     ];
 
     /**

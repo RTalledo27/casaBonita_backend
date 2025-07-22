@@ -12,11 +12,9 @@ use Modules\Sales\Models\Contract;
 use Modules\Sales\Repositories\ContractRepository;
 use Modules\Sales\Transformers\ContractResource;
 use Modules\services\PusherNotifier;
-use Pusher\Pusher;
 
 class ContractController extends Controller
 {
-
     public function __construct(private ContractRepository $repository, private PusherNotifier $pusher)
     {
         $this->middleware('auth:sanctum');
@@ -27,98 +25,78 @@ class ContractController extends Controller
 
         $this->authorizeResource(Contract::class, 'contract');
     }
+
     /**
      * List registered contracts in a paginated collection.
-     *
-     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection     */
+     */
     public function index()
     {
-        //
-        // Return a paginated resource collection of contracts
-
         return ContractResource::collection(
             $this->repository->paginate()
         );
     }
+
     /**
      * Store a newly created resource in storage.
      */
     public function store(ContractRequest $request)
     {
         try {
-            // Validate and create a new contract
-            // Start a database transaction to ensure data integrity
-            // If any error occurs, the transaction will be rolled back
-            // If the contract is created successfully, commit the transaction
-            /*   DB::beginTransaction(); // Start transaction
+            DB::beginTransaction();
 
-            $contract = $this->repository->create($request->validated());
+            $approvers = $request->input('approvers', []);
+            $contract = $this->repository->create($request->validated(), $approvers);
 
-            DB::commit(); // Commit transaction
+            DB::commit();
 
             // Notify listeners a new contract was created
             $this->pusher->notify('contract-channel', 'created', [
-                'contract' => (new ContractResource($contract->load(['reservation', 'schedules', 'invoices'])))->toArray($request),
+                'contract' => (new ContractResource($contract->load(['reservation', 'advisor', 'schedules', 'approvals'])))->toArray($request),
             ]);
 
             return (new ContractResource($contract))
                 ->response()
                 ->setStatusCode(Response::HTTP_CREATED);
         } catch (\Throwable $e) {
-            DB::rollBack(); // Undo transaction
-            return response()->json([
-                'message' => 'Error al crear contrato',
-                'error'   => $e->getMessage(),
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
-        } */
-
-
-            // Si el contrato se crea a partir de una reserva, actualizar el estado de la reserva
-        } catch (\Throwable $e) {
+            DB::rollBack();
             return response()->json([
                 'message' => 'Error al crear contrato',
                 'error'   => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
-                
-        }
+    }
+
     /**
      * Display a single contract with its related data.
-     *
-     * @param Contract $contract
-     * @return ContractResource     */
+     */
     public function show(Contract $contract)
     {
-        // Load related reservation, schedules and invoices
         return new ContractResource(
-            $contract->load(['reservation', 'schedules', 'invoices'])
+            $contract->load(['reservation', 'advisor', 'schedules', 'invoices', 'approvals', 'previousContract'])
         );
-        }
+    }
 
     /**
      * Update the given contract with validated data.
-     *
-     * A transaction ensures data integrity and the updated contract is
-     * broadcasted through Pusher once committed.
-    */
+     */
     public function update(UpdateContractRequest $request, Contract $contract)
     {
         try {
-            DB::beginTransaction(); // Start transaction
+            DB::beginTransaction();
 
-            $this->repository->update($contract, $request->validated()); // Update contract
+            $updatedContract = $this->repository->update($contract, $request->validated());
 
-            DB::commit(); // Commit transaction
+            DB::commit();
             
-            $fresh = $contract->fresh()->load(['reservation', 'schedules', 'invoices']);
             // Notify listeners about the update
             $this->pusher->notify('contract-channel', 'updated', [
-                'contract' => (new ContractResource($fresh))->toArray($request),
+                'contract' => (new ContractResource($updatedContract))->toArray($request),
             ]);
 
-            return new ContractResource($fresh);
+            return new ContractResource($updatedContract);
+
         } catch (\Throwable $e) {
-            DB::rollBack(); // Undo transaction
+            DB::rollBack();
             return response()->json([
                 'message' => 'Error al actualizar contrato',
                 'error'   => $e->getMessage(),
@@ -128,23 +106,22 @@ class ContractController extends Controller
 
     /**
      * Delete a contract from storage.
-     *
-     * The deleted contract is broadcasted so connected clients can remove
-     * it from their lists.     */
+     */
     public function destroy(Contract $contract)
     {
-        //
-        try {
+        try{
             // Prepare resource for notification before deletion
-            $resource = new ContractResource($contract->load(['reservation', 'schedules', 'invoices']));
+            $resource = new ContractResource($contract->load(['reservation', 'advisor', 'schedules', 'invoices', 'approvals']));
 
-            $this->repository->delete($contract); // Remove contract from database
+            $this->repository->delete($contract);
+
             // Broadcast the deleted contract information
             $this->pusher->notify('contract-channel', 'deleted', [
                 'contract' => $resource->toArray(request()),
             ]);
 
             return response()->json(['message' => 'Contrato eliminado correctamente']);
+
         } catch (\Throwable $e) {
             return response()->json([
                 'message' => 'Error al eliminar contrato',
@@ -153,11 +130,42 @@ class ContractController extends Controller
         }
     }
 
-
+    /**
+     * Generate contract preview PDF
+     */
     public function preview(Contract $contract, \Modules\Sales\Services\ContractPdfService $pdf)
     {
         $this->authorize('view', $contract);
         $path = $pdf->preview($contract);
         return response()->json(['pdf_path' => $path]);
+    }
+
+    /**
+     * Calculate monthly payment for given financial parameters
+     */
+    public function calculatePayment(Request $request)
+    {
+        $request->validate([
+            'financing_amount' => 'required|numeric|min:0',
+            'interest_rate' => 'required|numeric|min:0|max:1',
+            'term_months' => 'required|integer|min:1|max:600',
+        ]);
+
+        $financingAmount = $request->input('financing_amount');
+        $interestRate = $request->input('interest_rate');
+        $termMonths = $request->input('term_months');
+
+        if ($interestRate == 0) {
+            $monthlyPayment = $financingAmount / $termMonths;
+        } else {
+            $monthlyRate = $interestRate / 12;
+            $monthlyPayment = $financingAmount * ($monthlyRate * pow(1 + $monthlyRate, $termMonths)) / (pow(1 + $monthlyRate, $termMonths) - 1);
+        }
+
+        return response()->json([
+            'monthly_payment' => round($monthlyPayment, 2),
+            'total_interest' => round(($monthlyPayment * $termMonths) - $financingAmount, 2),
+            'total_to_pay' => round($monthlyPayment * $termMonths, 2),
+        ]);
     }
 }

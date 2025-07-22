@@ -136,6 +136,49 @@ class PayrollService
         ]) !== null;
     }
 
+    public function processBulkPayrolls(string $period, string $status, int $processedBy): array
+    {
+        $payrolls = $this->payrollRepo->getAll([
+            'period' => $period,
+            'status' => $status
+        ]);
+
+        if ($payrolls->isEmpty()) {
+            throw new \Exception('No se encontraron nóminas para procesar en el período especificado');
+        }
+
+        $processedPayrolls = [];
+        $processedCount = 0;
+
+        DB::beginTransaction();
+        try {
+            foreach ($payrolls as $payroll) {
+                if ($payroll->status === 'borrador' || $payroll->status === 'pendiente') {
+                    $updated = $this->payrollRepo->update($payroll->payroll_id, [
+                        'status' => 'procesado',
+                        'processed_by' => $processedBy,
+                        'processed_at' => now()
+                    ]);
+
+                    if ($updated) {
+                        $processedPayrolls[] = $updated;
+                        $processedCount++;
+                    }
+                }
+            }
+
+            DB::commit();
+
+            return [
+                'count' => $processedCount,
+                'payrolls' => collect($processedPayrolls)
+            ];
+        } catch (\Exception $e) {
+            DB::rollback();
+            throw $e;
+        }
+    }
+
     protected function calculateOvertimeAmount(int $employeeId, int $month, int $year): float
     {
         $employee = Employee::find($employeeId);
