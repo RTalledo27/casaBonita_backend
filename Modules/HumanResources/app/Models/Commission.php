@@ -26,6 +26,12 @@ class Commission extends Model
         'payment_date',
         'period_month',
         'period_year',
+        'commission_period',
+        'payment_period',
+        'payment_percentage',
+        'status',
+        'parent_commission_id',
+        'payment_part',
         'notes',
         'payment_type',
         'total_commission_amount',
@@ -37,8 +43,10 @@ class Commission extends Model
         'commission_percentage' => 'decimal:2',
         'commission_amount' => 'decimal:2',
         'total_commission_amount' => 'decimal:2',
+        'payment_percentage' => 'decimal:2',
         'payment_date' => 'date',
-        'sales_count' => 'integer'
+        'sales_count' => 'integer',
+        'payment_part' => 'integer'
     ];
 
     public function employee()
@@ -82,5 +90,84 @@ class Commission extends Model
         return $query->where('period_month', $month)->where('period_year', $year);
     }
 
-   
+    public function scopeByCommissionPeriod($query, $period)
+    {
+        return $query->where('commission_period', $period);
+    }
+
+    public function scopeByPaymentPeriod($query, $period)
+    {
+        return $query->where('payment_period', $period);
+    }
+
+    public function scopeGenerated($query)
+    {
+        return $query->where('status', 'generated');
+    }
+
+    public function scopePartiallyPaid($query)
+    {
+        return $query->where('status', 'partially_paid');
+    }
+
+    public function scopeFullyPaid($query)
+    {
+        return $query->where('status', 'fully_paid');
+    }
+
+    // Relación con comisión padre (para pagos divididos)
+    public function parentCommission()
+    {
+        return $this->belongsTo(Commission::class, 'parent_commission_id', 'commission_id');
+    }
+
+    // Relación con comisiones hijas (partes del pago)
+    public function childCommissions()
+    {
+        return $this->hasMany(Commission::class, 'parent_commission_id', 'commission_id');
+    }
+
+    /**
+     * Verifica si esta comisión es un pago dividido
+     */
+    public function isSplitPayment(): bool
+    {
+        return !is_null($this->parent_commission_id);
+    }
+
+    /**
+     * Verifica si esta comisión tiene pagos divididos
+     */
+    public function hasSplitPayments(): bool
+    {
+        return $this->childCommissions()->exists();
+    }
+
+    /**
+     * Obtiene el monto total de todos los pagos relacionados
+     */
+    public function getTotalSplitAmount(): float
+    {
+        if ($this->isSplitPayment()) {
+            return $this->parentCommission->childCommissions()->sum('commission_amount');
+        }
+        
+        return $this->childCommissions()->sum('commission_amount') + $this->commission_amount;
+    }
+
+    /**
+     * Genera el período de comisión basado en mes y año
+     */
+    public static function generateCommissionPeriod(int $month, int $year): string
+    {
+        return sprintf('%04d-%02d', $year, $month);
+    }
+
+    /**
+     * Genera el período de pago con sufijo de parte
+     */
+    public static function generatePaymentPeriod(int $month, int $year, int $part = 1): string
+    {
+        return sprintf('%04d-%02d-P%d', $year, $month, $part);
+    }
 }

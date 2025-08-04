@@ -30,6 +30,12 @@ class ContractResource extends JsonResource
             'pdf_path'       => $this->pdf_path,
             'previous_contract_id' => $this->previous_contract_id,
             'transferred_amount_from_previous_contract' => $this->transferred_amount_from_previous_contract,
+            
+            // Campos financieros migrados desde Lot
+            'funding'        => $this->funding,
+            'bpp'            => $this->bpp,
+            'bfh'            => $this->bfh,
+            'initial_quota'  => $this->initial_quota,
 
             // Relaciones
             'reservation'    => new ReservationResource($this->whenLoaded('reservation')),

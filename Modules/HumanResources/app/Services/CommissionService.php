@@ -2,6 +2,7 @@
 
 namespace Modules\HumanResources\Services;
 
+use Exception;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Modules\HumanResources\Models\Commission;
@@ -136,8 +137,11 @@ class CommissionService
     ): array {
         $commissions = [];
         
+        // Generar período de comisión (YYYY-MM)
+        $commissionPeriod = Commission::generateCommissionPeriod($month, $year);
+        
         // Determinar porcentajes de división según número de ventas
-        if ($salesCount > 10) {
+        if ($salesCount >= 10) {
             // Más de 10 ventas: 70% primer mes, 30% segundo mes
             $firstPaymentPercentage = 70;
             $secondPaymentPercentage = 30;
@@ -147,40 +151,84 @@ class CommissionService
             $secondPaymentPercentage = 50;
         }
         
-        // Crear primera comisión (mes actual)
-        $firstAmount = ($totalAmount * $firstPaymentPercentage) / 100;
-        $firstCommission = $this->commissionRepo->create([
+        // Crear comisión principal (padre)
+        $parentCommission = $this->commissionRepo->create([
             'employee_id' => $contract->advisor_id,
             'contract_id' => $contract->contract_id,
             'commission_type' => 'venta_financiada',
             'sale_amount' => $contract->financing_amount,
             'installment_plan' => $contract->term_months,
             'commission_percentage' => $commissionRate,
-            'commission_amount' => round($firstAmount, 2),
+            'commission_amount' => $totalAmount,
             'period_month' => $month,
             'period_year' => $year,
+            'commission_period' => $commissionPeriod,
+            'payment_period' => null, // Se asignará cuando se procese el pago
+            'payment_percentage' => 100.0,
+            'status' => 'generated',
             'payment_status' => 'pendiente',
-            'payment_type' => $secondPaymentPercentage > 0 ? 'first_payment' : 'full_payment',
+            'parent_commission_id' => null,
+            'payment_part' => 1,
             'total_commission_amount' => $totalAmount,
             'sales_count' => $salesCount,
-            'notes' => "Comisión por venta financiada - {$salesCount} ventas - Pago 1 de " . ($secondPaymentPercentage > 0 ? '2' : '1')
+            'notes' => "Comisión por venta financiada - {$salesCount} ventas - Total: $" . number_format($totalAmount, 2)
         ]);
         
-        $commissions[] = $firstCommission;
+        $commissions[] = $parentCommission;
         
-        // Crear segunda comisión si es necesario (mes siguiente)
+        // Si hay división de pagos, crear los registros de pago dividido
         if ($secondPaymentPercentage > 0) {
-            $secondAmount = ($totalAmount * $secondPaymentPercentage) / 100;
-            $nextMonth = $month + 1;
-            $nextYear = $year;
+            // Primer pago (mes siguiente al de generación)
+            $paymentMonth = $month + 1;
+            $paymentYear = $year;
             
             // Ajustar año si es diciembre
-            if ($nextMonth > 12) {
-                $nextMonth = 1;
-                $nextYear++;
+            if ($paymentMonth > 12) {
+                $paymentMonth = 1;
+                $paymentYear++;
             }
             
-            $secondCommission = $this->commissionRepo->create([
+            $firstPaymentPeriod = Commission::generatePaymentPeriod($paymentMonth, $paymentYear, 1);
+            $firstAmount = ($totalAmount * $firstPaymentPercentage) / 100;
+            
+            $firstPayment = $this->commissionRepo->create([
+                'employee_id' => $contract->advisor_id,
+                'contract_id' => $contract->contract_id,
+                'commission_type' => 'venta_financiada',
+                'sale_amount' => $contract->financing_amount,
+                'installment_plan' => $contract->term_months,
+                'commission_percentage' => $commissionRate,
+                'commission_amount' => round($firstAmount, 2),
+                'period_month' => $month,
+                'period_year' => $year,
+                'commission_period' => $commissionPeriod,
+                'payment_period' => $firstPaymentPeriod,
+                'payment_percentage' => $firstPaymentPercentage,
+                'status' => 'generated',
+                'payment_status' => 'pendiente',
+                'parent_commission_id' => $parentCommission->commission_id,
+                'payment_part' => 1,
+                'total_commission_amount' => $totalAmount,
+                'sales_count' => $salesCount,
+                'notes' => "Pago dividido 1/2 - {$firstPaymentPercentage}% - Período: {$firstPaymentPeriod}"
+            ]);
+            
+            $commissions[] = $firstPayment;
+            
+            // Segundo pago (dos meses después de la generación)
+            $secondPaymentMonth = $month + 2;
+            $secondPaymentYear = $year;
+            
+            // Ajustar año si es necesario
+            if ($secondPaymentMonth > 12) {
+                $secondPaymentMonth -= 12;
+                $secondPaymentYear++;
+            }
+            
+            $secondPaymentPeriod = Commission::generatePaymentPeriod($secondPaymentMonth, $secondPaymentYear, 2);
+            $secondAmount = ($totalAmount * $secondPaymentPercentage) / 100;
+            
+            $secondPayment = $this->commissionRepo->create([
                 'employee_id' => $contract->advisor_id,
                 'contract_id' => $contract->contract_id,
                 'commission_type' => 'venta_financiada',
@@ -188,16 +236,21 @@ class CommissionService
                 'installment_plan' => $contract->term_months,
                 'commission_percentage' => $commissionRate,
                 'commission_amount' => round($secondAmount, 2),
-                'period_month' => $nextMonth,
-                'period_year' => $nextYear,
+                'period_month' => $month,
+                'period_year' => $year,
+                'commission_period' => $commissionPeriod,
+                'payment_period' => $secondPaymentPeriod,
+                'payment_percentage' => $secondPaymentPercentage,
+                'status' => 'generated',
                 'payment_status' => 'pendiente',
-                'payment_type' => 'second_payment',
+                'parent_commission_id' => $parentCommission->commission_id,
+                'payment_part' => 2,
                 'total_commission_amount' => $totalAmount,
                 'sales_count' => $salesCount,
-                'notes' => "Comisión por venta financiada - {$salesCount} ventas - Pago 2 de 2"
+                'notes' => "Pago dividido 2/2 - {$secondPaymentPercentage}% - Período: {$secondPaymentPeriod}"
             ]);
             
-            $commissions[] = $secondCommission;
+            $commissions[] = $secondPayment;
         }
         
         return $commissions;
@@ -209,6 +262,200 @@ class CommissionService
             $updated = $this->commissionRepo->markMultipleAsPaid($commissionIds);
             return $updated > 0;
         });
+    }
+
+    public function markMultipleAsPaid(array $commissionIds): array
+    {
+        try {
+            $updatedCount = $this->commissionRepo->markMultipleAsPaid($commissionIds);
+            
+            return [
+                'success' => true,
+                'message' => "Se marcaron {$updatedCount} comisiones como pagadas",
+                'updated_count' => $updatedCount
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al marcar comisiones como pagadas: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Crea un pago dividido para una comisión
+     */
+    public function createSplitPayment(int $commissionId, array $splitData): array
+    {
+        try {
+            // Validar que la comisión existe
+            $commission = $this->commissionRepo->findById($commissionId);
+            if (!$commission) {
+                return [
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ];
+            }
+
+            // Validar que no esté completamente pagada
+            if ($commission->status === 'fully_paid') {
+                return [
+                    'success' => false,
+                    'message' => 'La comisión ya está completamente pagada'
+                ];
+            }
+
+            // Validar porcentajes
+            $totalPaid = $commission->childCommissions()->sum('payment_percentage');
+            $newTotal = $totalPaid + $splitData['percentage'];
+            
+            if ($newTotal > 100) {
+                return [
+                    'success' => false,
+                    'message' => "El porcentaje excede el límite. Ya pagado: {$totalPaid}%, intentando agregar: {$splitData['percentage']}%"
+                ];
+            }
+
+            // Determinar el número de parte del pago
+            $paymentPart = $commission->childCommissions()->max('payment_part') + 1;
+
+            $splitPayment = $this->commissionRepo->processSplitPayment(
+                $commissionId,
+                $splitData['percentage'],
+                $splitData['payment_period'],
+                $paymentPart
+            );
+
+            return [
+                'success' => true,
+                'message' => 'Pago dividido creado exitosamente',
+                'split_payment' => $splitPayment,
+                'summary' => $this->commissionRepo->getSplitPaymentSummary($commissionId)
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al crear pago dividido: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Obtiene comisiones por período de generación
+     */
+    public function getCommissionsByPeriod(string $period): array
+    {
+        try {
+            $commissions = $this->commissionRepo->getByCommissionPeriod($period);
+            
+            return [
+                'success' => true,
+                'commissions' => $commissions,
+                'total_amount' => $commissions->sum('commission_amount'),
+                'count' => $commissions->count()
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al obtener comisiones: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Obtiene comisiones pendientes para un período
+     */
+    public function getPendingCommissions(string $period): array
+    {
+        try {
+            $commissions = $this->commissionRepo->getPendingForCommissionPeriod($period);
+            
+            return [
+                'success' => true,
+                'commissions' => $commissions,
+                'total_amount' => $commissions->sum('commission_amount'),
+                'count' => $commissions->count()
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al obtener comisiones pendientes: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Procesa comisiones para incluir en nómina
+     */
+    public function processCommissionsForPayroll(string $commissionPeriod, string $paymentPeriod, array $commissionIds = []): array
+    {
+        try {
+            $query = $this->commissionRepo->getPendingForCommissionPeriod($commissionPeriod);
+            
+            if (!empty($commissionIds)) {
+                $commissions = $query->whereIn('commission_id', $commissionIds);
+            } else {
+                $commissions = $query;
+            }
+
+            $processedCount = 0;
+            $totalAmount = 0;
+
+            foreach ($commissions as $commission) {
+                // Actualizar período de pago y estado
+                $commission->update([
+                    'payment_period' => $paymentPeriod,
+                    'status' => 'fully_paid',
+                    'payment_status' => 'pagado',
+                    'payment_date' => now()->toDateString(),
+                    'payment_percentage' => 100.0
+                ]);
+                
+                $processedCount++;
+                $totalAmount += $commission->commission_amount;
+            }
+
+            return [
+                'success' => true,
+                'message' => "Se procesaron {$processedCount} comisiones para nómina",
+                'processed_count' => $processedCount,
+                'total_amount' => $totalAmount,
+                'commission_period' => $commissionPeriod,
+                'payment_period' => $paymentPeriod
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al procesar comisiones para nómina: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Obtiene el resumen de pagos divididos
+     */
+    public function getSplitPaymentSummary(int $commissionId): array
+    {
+        try {
+            $summary = $this->commissionRepo->getSplitPaymentSummary($commissionId);
+            
+            if (empty($summary)) {
+                return [
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ];
+            }
+
+            return [
+                'success' => true,
+                'summary' => $summary
+            ];
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al obtener resumen de pagos: ' . $e->getMessage()
+            ];
+        }
     }
 
     /**
@@ -243,23 +490,31 @@ class CommissionService
         $secondPercentage = $salesCount > 10 ? 30 : 50;
 
         foreach ($contracts as $index => $contract) {
-            $saleNumber = $index + 1;
-            
-            // Calcular comisión para esta venta específica
-            $commissionRate = $this->getCommissionRate($saleNumber, $contract->term_months);
-            $commissionAmount = $contract->financing_amount * ($commissionRate / 100);
-            
-            // Calcular división de pagos
-            $firstPayment = $commissionAmount * ($firstPercentage / 100);
-            $secondPayment = $commissionAmount * ($secondPercentage / 100);
-            
-            $firstMonthTotal += $firstPayment;
-            $secondMonthTotal += $secondPayment;
-            
             // Obtener las comisiones reales creadas para este contrato
             $commissions = Commission::where('contract_id', $contract->contract_id)
                 ->where('employee_id', $employeeId)
                 ->get();
+            
+            // Usar datos reales de comisiones en lugar de calcular
+            $commissionAmount = $commissions->sum('commission_amount');
+            $commissionRate = $commissions->isNotEmpty() ? 
+                ($commissionAmount / $contract->financing_amount) * 100 : 0;
+            
+            // Calcular pagos basado en comisiones padre e hijas
+            $parentCommissions = $commissions->whereNull('parent_commission_id');
+            $childCommissions = $commissions->whereNotNull('parent_commission_id');
+            
+            // Obtener pagos divididos (comisiones hijas)
+            $firstPayment = $childCommissions->where('payment_part', 1)->sum('commission_amount');
+            $secondPayment = $childCommissions->where('payment_part', 2)->sum('commission_amount');
+            
+            // Si no hay comisiones hijas, usar la comisión padre completa como primer pago
+            if ($firstPayment == 0 && $secondPayment == 0 && $parentCommissions->isNotEmpty()) {
+                $firstPayment = $parentCommissions->sum('commission_amount');
+            }
+            
+            $firstMonthTotal += $firstPayment;
+            $secondMonthTotal += $secondPayment;
 
             $saleDetail = [
                 'contract_number' => $contract->contract_number,
@@ -277,16 +532,18 @@ class CommissionService
                 'commissions' => []
             ];
 
-            // Agregar detalles de las comisiones divididas
+            // Agregar detalles de las comisiones (padre e hijas)
             foreach ($commissions as $commission) {
                 $saleDetail['commissions'][] = [
                     'commission_id' => $commission->commission_id,
-                    'payment_type' => $commission->payment_type,
+                    'is_parent' => is_null($commission->parent_commission_id),
+                    'payment_part' => $commission->payment_part,
                     'commission_amount' => $commission->commission_amount,
                     'payment_status' => $commission->payment_status,
                     'payment_date' => $commission->payment_date?->format('Y-m-d'),
                     'period_month' => $commission->period_month,
-                    'period_year' => $commission->period_year
+                    'period_year' => $commission->period_year,
+                    'payment_period' => $commission->payment_period
                 ];
             }
 
@@ -394,11 +651,26 @@ class CommissionService
 
     public function getAdminDashboard(int $month, int $year): array
     {
-        $totalCommissions = $this->commissionRepo->getTotalCommissionsForPeriod($month, $year);
-        $commissionsCount = $this->commissionRepo->getAll([
+        // Obtener todas las comisiones del período
+        $allCommissions = $this->commissionRepo->getAll([
             'period_month' => $month,
             'period_year' => $year
-        ])->count();
+        ]);
+
+        // Calcular totales por estado
+        $totalAmount = $allCommissions->sum('commission_amount');
+        $totalCount = $allCommissions->count();
+        
+        // Agrupar por estado y calcular montos
+        $byStatus = $allCommissions->groupBy('payment_status');
+        
+        $paidAmount = $byStatus->get('pagado', collect())->sum('commission_amount');
+        $pendingAmount = $byStatus->get('pendiente', collect())->sum('commission_amount');
+        $processingAmount = $byStatus->get('procesando', collect())->sum('commission_amount');
+        
+        $paidCount = $byStatus->get('pagado', collect())->count();
+        $pendingCount = $byStatus->get('pendiente', collect())->count();
+        $processingCount = $byStatus->get('procesando', collect())->count();
 
         $topPerformers = $this->getTopPerformers($month, $year);
 
@@ -412,8 +684,28 @@ class CommissionService
                 'label' => $this->getMonthLabel($month) . ' ' . $year
             ],
             'commissions_summary' => [
-                'total_amount' => $totalCommissions,
-                'count' => $commissionsCount
+                'total_amount' => $totalAmount,
+                'count' => $totalCount,
+                'paid' => $paidCount,
+                'pending' => $pendingCount,
+                'processing' => $processingCount,
+                'paid_amount' => $paidAmount,
+                'pending_amount' => $pendingAmount,
+                'processing_amount' => $processingAmount,
+                'by_status' => [
+                    'pagado' => [
+                        'count' => $paidCount,
+                        'total_amount' => $paidAmount
+                    ],
+                    'pendiente' => [
+                        'count' => $pendingCount,
+                        'total_amount' => $pendingAmount
+                    ],
+                    'procesando' => [
+                        'count' => $processingCount,
+                        'total_amount' => $processingAmount
+                    ]
+                ]
             ],
             'bonuses_summary' => $bonusSummary,
             'top_performers' => $topPerformers

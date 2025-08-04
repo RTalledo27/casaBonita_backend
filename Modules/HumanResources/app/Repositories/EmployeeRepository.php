@@ -12,7 +12,21 @@ class EmployeeRepository
 
     public function getAll(array $filters = []): Collection
     {
-        $query = $this->model->with(['user', 'team']);
+        $month = $filters['month'] ?? now()->month;
+        $year = $filters['year'] ?? now()->year;
+        
+        $query = $this->model->with([
+            'user', 
+            'team',
+            'commissions' => function ($query) use ($month, $year) {
+                $query->where('period_month', $month)
+                      ->where('period_year', $year);
+            },
+            'bonuses' => function ($query) use ($month, $year) {
+                $query->where('period_month', $month)
+                      ->where('period_year', $year);
+            }
+        ]);
 
         if (isset($filters['employee_type'])) {
             $query->where('employee_type', $filters['employee_type']);
@@ -118,14 +132,23 @@ class EmployeeRepository
 
     public function getTopPerformers(int $month, int $year, int $limit = 10): Collection
     {
-        return $this->model->with(['user', 'commissions' => function ($query) use ($month, $year) {
-            $query->byPeriod($month, $year);
-        }])
+        return $this->model->with([
+            'user', 
+            'commissions' => function ($query) use ($month, $year) {
+                $query->byPeriod($month, $year);
+            },
+            'bonuses' => function ($query) use ($month, $year) {
+                $query->where('period_month', $month)
+                      ->where('period_year', $year);
+            }
+        ])
             ->advisors()
             ->active()
             ->get()
             ->sortByDesc(function ($employee) use ($month, $year) {
-                return $employee->commissions->sum('commission_amount');
+                $commissions = $employee->commissions->sum('commission_amount');
+                $bonuses = $employee->bonuses->sum('bonus_amount');
+                return $commissions + $bonuses;
             })
             ->take($limit);
     }
@@ -155,5 +178,16 @@ class EmployeeRepository
                     ->where('period_year', $year);
             }
         ])->advisors()->active()->get();
+    }
+
+    /**
+     * Obtener empleados que no tienen usuario asociado
+     */
+    public function getEmployeesWithoutUser(): Collection
+    {
+        return $this->model->whereNull('user_id')
+            ->where('employment_status', 'activo')
+            ->orderBy('created_at', 'desc')
+            ->get();
     }
 }

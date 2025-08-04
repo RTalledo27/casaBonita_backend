@@ -38,6 +38,14 @@ class User extends Authenticatable
 
     protected $hidden     = ['password_hash'];
 
+    protected $casts = [
+        'must_change_password' => 'boolean',
+        'password_changed_at' => 'datetime',
+        'last_login_at' => 'datetime',
+        'hire_date' => 'date',
+        'birth_date' => 'date',
+    ];
+
 
     protected $fillable = [
         'username',
@@ -56,6 +64,9 @@ class User extends Authenticatable
         'photo_profile',
         'cv_file',
         'password_hash',
+        'must_change_password',
+        'password_changed_at',
+        'last_login_at',
         'created_by'
     ];
 

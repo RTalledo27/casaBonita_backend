@@ -8,11 +8,6 @@ use Modules\Security\Http\Controllers\SecurityController;
 use Modules\Security\Http\Controllers\UserController;
 use Modules\Security\Models\Role;
 
-Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
-    Route::apiResource('securities', SecurityController::class)->names('security');
-});
-
-
 Route::prefix('v1')->group(function () {
     // Login (sin token)
     Route::post('security/login', [AuthController::class, 'login']);
@@ -22,22 +17,30 @@ Route::prefix('v1')->group(function () {
         ->prefix('security')
         ->group(function () {
 
-            // Usuarios
-            Route::apiResource('users', UserController::class);
-            Route::post('users/{user}/roles',          [UserController::class, 'syncRoles']);
-            Route::post('users/{user}/change-password', [UserController::class, 'changePassword']);
-            Route::post('users/{user}/toggle-status',  [UserController::class, 'toggleStatus']);
+            // Rutas que NO requieren cambio de contraseña (permitidas siempre)
+            Route::post('logout', [AuthController::class, 'logout']);
+            Route::get('me', [AuthController::class, 'me']);
+            Route::post('change-password', [AuthController::class, 'changePassword']);
 
-            // Roles
-            Route::apiResource('roles', RoleController::class);
-            Route::post('roles/{role}/permissions',    [RoleController::class, 'syncPermissions']);
+            // Rutas que SÍ requieren cambio de contraseña obligatorio
+            Route::middleware('check.password.change')->group(function () {
+                // Usuarios
+                Route::apiResource('users', UserController::class);
+                Route::post('users/{user}/roles',          [UserController::class, 'syncRoles']);
+                Route::post('users/{user}/change-password', [UserController::class, 'changePassword']);
+                Route::post('users/{user}/toggle-status',  [UserController::class, 'toggleStatus']);
 
-        // Permisos
-        Route::apiResource('permissions', PermissionController::class);
+                // Roles
+                Route::apiResource('roles', RoleController::class);
+                Route::post('roles/{role}/permissions',    [RoleController::class, 'syncPermissions']);
 
-
-        // Logout y perfil
-        Route::post('logout', [AuthController::class, 'logout']);
-            Route::get('me',      [AuthController::class, 'me']);
+                // Permisos
+                Route::apiResource('permissions', PermissionController::class);
+            });
         });
+
+    // Ruta de securities también requiere cambio de contraseña
+    Route::middleware(['auth:sanctum', 'check.password.change'])->group(function () {
+        Route::apiResource('securities', SecurityController::class)->names('securities');
+    });
 });

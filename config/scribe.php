@@ -102,7 +102,7 @@ return [
         'default' => false,
 
         // Where is the auth value meant to be sent in a request?
-        'in' => AuthIn::BEARER->value,
+        'in' => 'bearer',
 
         // The name of the auth parameter (e.g. token, key, apiKey) or header (e.g. Authorization, Api-Key).
         'name' => 'key',
@@ -206,38 +206,13 @@ return [
     // Use configureStrategy() to specify settings for a strategy in the list.
     // Use removeStrategies() to remove an included strategy.
     'strategies' => [
-        'metadata' => [
-            ...Defaults::METADATA_STRATEGIES,
-        ],
-        'headers' => [
-            ...Defaults::HEADERS_STRATEGIES,
-            Strategies\StaticData::withSettings(data: [
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ]),
-        ],
-        'urlParameters' => [
-            ...Defaults::URL_PARAMETERS_STRATEGIES,
-        ],
-        'queryParameters' => [
-            ...Defaults::QUERY_PARAMETERS_STRATEGIES,
-        ],
-        'bodyParameters' => [
-            ...Defaults::BODY_PARAMETERS_STRATEGIES,
-        ],
-        'responses' => configureStrategy(
-            Defaults::RESPONSES_STRATEGIES,
-            Strategies\Responses\ResponseCalls::withSettings(
-                only: ['GET *'],
-                // Recommended: disable debug mode in response calls to avoid error stack traces in responses
-                config: [
-                    'app.debug' => false,
-                ]
-            )
-        ),
-        'responseFields' => [
-            ...Defaults::RESPONSE_FIELDS_STRATEGIES,
-        ]
+        'metadata' => [],
+        'headers' => [],
+        'urlParameters' => [],
+        'queryParameters' => [],
+        'bodyParameters' => [],
+        'responses' => [],
+        'responseFields' => []
     ],
 
     // For response calls, API resource responses and transformer responses,

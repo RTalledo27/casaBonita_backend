@@ -50,12 +50,16 @@ class AuthController extends Controller
             ]);
         }
 
+        // Actualizamos el último login
+        $user->update(['last_login_at' => now()]);
+
         // Generamos token
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
             'token' => $token,
             'user'  => new UserResource($user),
+            'must_change_password' => $user->must_change_password,
         ], 200);
     }
 
@@ -76,6 +80,38 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         return response()->json($request->user());
+    }
+
+    /**
+     * Cambiar contraseña obligatorio (primer login)
+     */
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+
+        // Verificar contraseña actual
+        if (!Hash::check($request->current_password, $user->password_hash)) {
+            return response()->json([
+                'message' => 'La contraseña actual es incorrecta.'
+            ], 422);
+        }
+
+        // Actualizar contraseña
+        $user->update([
+            'password_hash' => Hash::make($request->new_password),
+            'must_change_password' => false,
+            'password_changed_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Contraseña actualizada correctamente.',
+            'must_change_password' => false,
+        ]);
     }
 
 

@@ -18,7 +18,15 @@ class CommissionController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $filters = $request->only(['employee_id', 'payment_status', 'period_month', 'period_year']);
+        $filters = $request->only([
+            'employee_id', 
+            'payment_status', 
+            'period_month', 
+            'period_year',
+            'commission_period',
+            'payment_period',
+            'status'
+        ]);
 
         if ($request->has('paginate') && $request->paginate === 'true') {
             $commissions = $this->commissionRepo->getPaginated($filters, $request->get('per_page', 15));
@@ -141,6 +149,182 @@ class CommissionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al obtener detalle de ventas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Crea un pago dividido para una comisión
+     */
+    public function createSplitPayment(Request $request, int $commissionId): JsonResponse
+    {
+        $request->validate([
+            'percentage' => 'required|numeric|min:0.01|max:100',
+            'payment_period' => 'required|string|regex:/^\d{4}-\d{2}$/'
+        ]);
+
+        try {
+            $result = $this->commissionService->createSplitPayment($commissionId, [
+                'percentage' => $request->percentage,
+                'payment_period' => $request->payment_period
+            ]);
+
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al crear pago dividido: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtiene comisiones por período de generación
+     */
+    public function getByCommissionPeriod(Request $request): JsonResponse
+    {
+        $request->validate([
+            'period' => 'required|string|regex:/^\d{4}-\d{2}$/'
+        ]);
+
+        try {
+            $result = $this->commissionService->getCommissionsByPeriod($request->period);
+            
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'data' => CommissionResource::collection($result['commissions']),
+                    'meta' => [
+                        'total_amount' => $result['total_amount'],
+                        'count' => $result['count'],
+                        'period' => $request->period
+                    ],
+                    'message' => 'Comisiones obtenidas exitosamente'
+                ]);
+            } else {
+                return response()->json($result, 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener comisiones: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtiene comisiones pendientes para un período
+     */
+    public function getPendingCommissions(Request $request): JsonResponse
+    {
+        $request->validate([
+            'period' => 'required|string|regex:/^\d{4}-\d{2}$/'
+        ]);
+
+        try {
+            $result = $this->commissionService->getPendingCommissions($request->period);
+            
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'data' => CommissionResource::collection($result['commissions']),
+                    'meta' => [
+                        'total_amount' => $result['total_amount'],
+                        'count' => $result['count'],
+                        'period' => $request->period
+                    ],
+                    'message' => 'Comisiones pendientes obtenidas exitosamente'
+                ]);
+            } else {
+                return response()->json($result, 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener comisiones pendientes: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Procesa comisiones para incluir en nómina
+     */
+    public function processForPayroll(Request $request): JsonResponse
+    {
+        $request->validate([
+            'commission_period' => 'required|string|regex:/^\d{4}-\d{2}$/',
+            'payment_period' => 'required|string|regex:/^\d{4}-\d{2}$/',
+            'commission_ids' => 'sometimes|array',
+            'commission_ids.*' => 'integer|exists:commissions,commission_id'
+        ]);
+
+        try {
+            $result = $this->commissionService->processCommissionsForPayroll(
+                $request->commission_period,
+                $request->payment_period,
+                $request->get('commission_ids', [])
+            );
+
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar comisiones para nómina: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtiene el resumen de pagos divididos para una comisión
+     */
+    public function getSplitPaymentSummary(int $commissionId): JsonResponse
+    {
+        try {
+            $result = $this->commissionService->getSplitPaymentSummary($commissionId);
+            
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 404);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener resumen de pagos: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Marca múltiples comisiones como pagadas
+     */
+    public function markMultipleAsPaid(Request $request): JsonResponse
+    {
+        $request->validate([
+            'commission_ids' => 'required|array',
+            'commission_ids.*' => 'integer|exists:commissions,commission_id'
+        ]);
+
+        try {
+            $result = $this->commissionService->markMultipleAsPaid($request->commission_ids);
+            
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 400);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al marcar comisiones como pagadas: ' . $e->getMessage()
             ], 500);
         }
     }

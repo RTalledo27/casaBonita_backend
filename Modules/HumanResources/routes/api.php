@@ -6,6 +6,7 @@ use Modules\HumanResources\Http\Controllers\BonusGoalController;
 use Modules\HumanResources\Http\Controllers\BonusTypeController;
 use Modules\HumanResources\Http\Controllers\CommissionController;
 use Modules\HumanResources\Http\Controllers\EmployeeController;
+use Modules\HumanResources\app\Http\Controllers\EmployeeImportController;
 use Modules\HumanResources\Http\Controllers\HumanResourcesController;
 use Modules\HumanResources\Http\Controllers\PayrollController;
 use Modules\HumanResources\Http\Controllers\TeamController;
@@ -16,7 +17,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
 
 Route::prefix('v1')->group(function () {
-    Route::middleware(['auth:sanctum'])->prefix('hr')->group(
+    Route::middleware(['auth:sanctum', 'check.password.change'])->prefix('hr')->group(
         function () {
 
             // Rutas de Empleados
@@ -25,30 +26,39 @@ Route::prefix('v1')->group(function () {
                 Route::get('/', [EmployeeController::class, 'index'])->name('hr.employees.index');
                 Route::get('admin-dashboard', [EmployeeController::class, 'adminDashboard']);
                 Route::get('advisors', [EmployeeController::class, 'advisors'])->name('hr.employees.advisors');
+                Route::get('/without-user', [EmployeeController::class, 'getEmployeesWithoutUser'])->name('hr.employees.without-user');
                 Route::get('/{employee}', [EmployeeController::class,'show'])->name('hr.employees.show');
                 Route::post('/', [EmployeeController::class, 'store'])->name('hr.employees.store');
+                Route::post('/{employee}/generate-user', [EmployeeController::class, 'generateUser'])->name('hr.employees.generate-user');
                 
                 Route::get('{employee}/dashboard', [EmployeeController::class, 'dashboard']);
-                Route::apiResource('/', EmployeeController::class)->names('hr.employees');
+            });
+
+            // Rutas de Importación de Empleados
+            Route::prefix('employee-import')->group(function () {
+                Route::post('/validate', [EmployeeImportController::class, 'validateImport'])->name('hr.employee-import.validate');
+                Route::post('/import', [EmployeeImportController::class, 'import'])->name('hr.employee-import.import');
+                Route::get('/template', [EmployeeImportController::class, 'downloadTemplate'])->name('hr.employee-import.template');
             });
 
             // Rutas de Comisiones
             Route::prefix('commissions')->group(function () {
                 Route::get('/', [CommissionController::class, 'index'])->name('hr.commissions.index');
                 Route::get('/sales-detail', [CommissionController::class, 'getSalesDetail'])->name('hr.commissions.sales-detail');
-
+                Route::get('/by-commission-period', [CommissionController::class, 'getByCommissionPeriod'])->name('hr.commissions.by-commission-period');
+                Route::get('/pending', [CommissionController::class, 'getPendingCommissions'])->name('hr.commissions.pending');
                 Route::get('/{commission}', [CommissionController::class, 'show'])->name('hr.commissions.show');
+                Route::get('/{commission}/split-summary', [CommissionController::class, 'getSplitPaymentSummary'])->name('hr.commissions.split-summary');
+                
                 Route::post('/process-period', [CommissionController::class, 'processForPeriod'])->name('hr.commissions.process-period');
+                Route::post('/process-for-payroll', [CommissionController::class, 'processForPayroll'])->name('hr.commissions.process-for-payroll');
                 Route::post('/pay', [CommissionController::class, 'pay'])->name('hr.commissions.pay');
+                Route::post('/mark-multiple-paid', [CommissionController::class, 'markMultipleAsPaid'])->name('hr.commissions.mark-multiple-paid');
+                Route::post('/{commission}/split-payment', [CommissionController::class, 'createSplitPayment'])->name('hr.commissions.split-payment');
             });
 
             // Bonus routes
             Route::prefix('bonuses')->group(function () {
-                Route::get('/', [BonusController::class, 'index'])->name('hr.bonuses.index');
-                Route::get('/{id}', [BonusController::class, 'show'])->name('hr.bonuses.show');
-                Route::post('/', [BonusController::class, 'store'])->name('hr.bonuses.store');
-                Route::post('/process-automatic', [BonusController::class, 'processAutomaticBonuses'])->name('hr.bonuses.process-automatic');
-
                 Route::get('/', [BonusController::class, 'index'])->name('hr.bonuses.index');
                 Route::get('/{id}', [BonusController::class, 'show'])->name('hr.bonuses.show');
                 Route::post('/', [BonusController::class, 'store'])->name('hr.bonuses.store');

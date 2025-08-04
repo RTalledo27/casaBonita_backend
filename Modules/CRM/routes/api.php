@@ -17,7 +17,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
 Route::prefix('v1')->group(function () {
     Route::prefix('crm')
-        ->middleware(['auth:sanctum', 'can:crm.access'])
+        ->middleware(['auth:sanctum', 'check.password.change', 'can:crm.access'])
         ->group(function () {
             // CRUD estándar
             Route::apiResource('clients',       ClientController::class);

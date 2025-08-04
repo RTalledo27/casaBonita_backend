@@ -32,9 +32,15 @@ class Contract extends Model
         'interest_rate',
         'term_months',
         'monthly_payment',
+        'balloon_payment',
         'currency',
         'status',
-        'transferred_amount_from_previous_contract'
+        'transferred_amount_from_previous_contract',
+        // Nuevos campos financieros migrados desde Lot:
+        'funding',
+        'bpp',
+        'bfh',
+        'initial_quota'
     ];
 
 
@@ -48,7 +54,13 @@ class Contract extends Model
         'financing_amount' => 'decimal:2',
         'interest_rate' => 'decimal:4',
         'monthly_payment' => 'decimal:2',
+        'balloon_payment' => 'decimal:2',
         'transferred_amount_from_previous_contract' => 'decimal:2',
+        // Nuevos campos financieros:
+        'funding' => 'decimal:2',
+        'bpp' => 'decimal:2',
+        'bfh' => 'decimal:2',
+        'initial_quota' => 'decimal:2',
     ];
 
 

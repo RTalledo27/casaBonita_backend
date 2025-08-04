@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\CRM\Models\Client;
 use Modules\Inventory\Models\Lot;
+use Modules\HumanResources\Models\Employee;
 
 // use Modules\Sales\Database\Factories\ReservationFactory;
 
@@ -23,6 +24,7 @@ class Reservation extends Model
     protected $fillable = [
         'lot_id',
         'client_id',
+        'advisor_id',
         'reservation_date',
         'expiration_date',
         'deposit_amount',
@@ -50,6 +52,10 @@ class Reservation extends Model
     public function client()
     {
         return $this->belongsTo(Client::class, 'client_id');
+    }
+    public function advisor()
+    {
+        return $this->belongsTo(Employee::class, 'advisor_id', 'employee_id');
     }
     public function contract()
     {

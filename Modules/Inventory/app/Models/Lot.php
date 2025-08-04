@@ -21,13 +21,10 @@ class Lot extends Model
         'num_lot',
         'area_m2',
         'area_construction_m2',
-        'total_price',
-        'funding',
-        'BPP',
-        'BFH',
-        'initial_quota',
+        'total_price',  // Mantener precio base
         'currency',
         'status'
+        // Campos financieros removidos: funding, BPP, BFH, initial_quota
     ];
 
     // protected static function newFactory(): LotFactory

@@ -10,7 +10,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 });
 
 Route::prefix('v1')->group(function () {
-    Route::prefix('servicedesk')->middleware('auth:sanctum')->group(function () {
+    Route::prefix('servicedesk')->middleware(['auth:sanctum', 'check.password.change'])->group(function () {
         Route::apiResource('requests', ServiceRequestController::class);
         Route::apiResource('actions',  ServiceActionController::class);
         Route::get('dashboard', [ServiceDeskController::class, 'dashboard'])->name('servicedesk.dashboard');

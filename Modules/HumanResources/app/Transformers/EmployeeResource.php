@@ -77,7 +77,9 @@ class EmployeeResource extends JsonResource
             'is_advisor' => $this->isAdvisor,
 
             // Estadísticas (cuando se incluyan)
-            'total_commissions' => $this->when(isset($this->total_commissions), $this->total_commissions),
+            'total_commissions' => $this->when(isset($this->total_commissions), $this->total_commissions) ?: $this->whenLoaded('commissions', $this->commissions->sum('commission_amount'), 0),
+            'total_bonuses' => $this->when(isset($this->total_bonuses), $this->total_bonuses) ?: $this->whenLoaded('bonuses', $this->bonuses->sum('bonus_amount'), 0),
+            'total_earnings' => $this->when(isset($this->total_earnings), $this->total_earnings) ?: ($this->whenLoaded('commissions', $this->commissions->sum('commission_amount'), 0) + $this->whenLoaded('bonuses', $this->bonuses->sum('bonus_amount'), 0)),
             'monthly_sales_count' => $this->when(isset($this->monthly_sales_count), $this->monthly_sales_count),
             'goal_achievement' => $this->when(isset($this->goal_achievement), $this->goal_achievement)
         ];

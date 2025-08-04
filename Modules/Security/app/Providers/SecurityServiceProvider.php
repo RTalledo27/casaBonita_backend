@@ -2,142 +2,118 @@
 
 namespace Modules\Security\Providers;
 
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
-use Modules\Security\Repositories\UserRepository;
-use Nwidart\Modules\Traits\PathNamespace;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
+use Illuminate\Routing\Router;
+use Modules\Security\Http\Middleware\CheckPasswordChange;
 
 class SecurityServiceProvider extends ServiceProvider
 {
-    use PathNamespace;
+    /**
+     * @var string $moduleName
+     */
+    protected $moduleName = 'Security';
 
-    protected string $name = 'Security';
-
-    protected string $nameLower = 'security';
+    /**
+     * @var string $moduleNameLower
+     */
+    protected $moduleNameLower = 'security';
 
     /**
      * Boot the application events.
+     *
+     * @return void
      */
-    public function boot(): void
+    public function boot()
     {
-        $this->registerCommands();
-        $this->registerCommandSchedules();
         $this->registerTranslations();
         $this->registerConfig();
         $this->registerViews();
-        $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
+        $this->loadMigrationsFrom(module_path($this->moduleName, 'database/migrations'));
+        $this->registerMiddleware();
     }
 
     /**
      * Register the service provider.
+     *
+     * @return void
      */
-    public function register(): void
+    public function register()
     {
-        $this->app->register(EventServiceProvider::class);
         $this->app->register(RouteServiceProvider::class);
-        $this->app->singleton(UserRepository::class, UserRepository::class);
-    }
-
-    /**
-     * Register commands in the format of Command::class
-     */
-    protected function registerCommands(): void
-    {
-        // $this->commands([]);
-    }
-
-    /**
-     * Register command Schedules.
-     */
-    protected function registerCommandSchedules(): void
-    {
-        // $this->app->booted(function () {
-        //     $schedule = $this->app->make(Schedule::class);
-        //     $schedule->command('inspire')->hourly();
-        // });
-    }
-
-    /**
-     * Register translations.
-     */
-    public function registerTranslations(): void
-    {
-        $langPath = resource_path('lang/modules/'.$this->nameLower);
-
-        if (is_dir($langPath)) {
-            $this->loadTranslationsFrom($langPath, $this->nameLower);
-            $this->loadJsonTranslationsFrom($langPath);
-        } else {
-            $this->loadTranslationsFrom(module_path($this->name, 'lang'), $this->nameLower);
-            $this->loadJsonTranslationsFrom(module_path($this->name, 'lang'));
-        }
     }
 
     /**
      * Register config.
+     *
+     * @return void
      */
-    protected function registerConfig(): void
+    protected function registerConfig()
     {
-        $configPath = module_path($this->name, config('modules.paths.generator.config.path'));
-
-        if (is_dir($configPath)) {
-            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($configPath));
-
-            foreach ($iterator as $file) {
-                if ($file->isFile() && $file->getExtension() === 'php') {
-                    $config = str_replace($configPath.DIRECTORY_SEPARATOR, '', $file->getPathname());
-                    $config_key = str_replace([DIRECTORY_SEPARATOR, '.php'], ['.', ''], $config);
-                    $segments = explode('.', $this->nameLower.'.'.$config_key);
-
-                    // Remove duplicated adjacent segments
-                    $normalized = [];
-                    foreach ($segments as $segment) {
-                        if (end($normalized) !== $segment) {
-                            $normalized[] = $segment;
-                        }
-                    }
-
-                    $key = ($config === 'config.php') ? $this->nameLower : implode('.', $normalized);
-
-                    $this->publishes([$file->getPathname() => config_path($config)], 'config');
-                    $this->merge_config_from($file->getPathname(), $key);
-                }
-            }
-        }
-    }
-
-    /**
-     * Merge config from the given path recursively.
-     */
-    protected function merge_config_from(string $path, string $key): void
-    {
-        $existing = config($key, []);
-        $module_config = require $path;
-
-        config([$key => array_replace_recursive($existing, $module_config)]);
+        $this->publishes([
+            module_path($this->moduleName, 'config/config.php') => config_path($this->moduleNameLower . '.php'),
+        ], 'config');
+        $this->mergeConfigFrom(
+            module_path($this->moduleName, 'config/config.php'), $this->moduleNameLower
+        );
     }
 
     /**
      * Register views.
+     *
+     * @return void
      */
-    public function registerViews(): void
+    public function registerViews()
     {
-        $viewPath = resource_path('views/modules/'.$this->nameLower);
-        $sourcePath = module_path($this->name, 'resources/views');
+        $viewPath = resource_path('views/modules/' . $this->moduleNameLower);
 
-        $this->publishes([$sourcePath => $viewPath], ['views', $this->nameLower.'-module-views']);
+        $sourcePath = module_path($this->moduleName, 'resources/views');
 
-        $this->loadViewsFrom(array_merge($this->getPublishableViewPaths(), [$sourcePath]), $this->nameLower);
+        $this->publishes([
+            $sourcePath => $viewPath
+        ], ['views', $this->moduleNameLower . '-module-views']);
 
-        Blade::componentNamespace(config('modules.namespace').'\\' . $this->name . '\\View\\Components', $this->nameLower);
+        $this->loadViewsFrom(array_merge($this->getPublishableViewPaths(), [$sourcePath]), $this->moduleNameLower);
+    }
+
+    /**
+     * Register translations.
+     *
+     * @return void
+     */
+    public function registerTranslations()
+    {
+        $langPath = resource_path('lang/modules/' . $this->moduleNameLower);
+
+        if (is_dir($langPath)) {
+            $this->loadTranslationsFrom($langPath, $this->moduleNameLower);
+            $this->loadJsonTranslationsFrom($langPath);
+        } else {
+            $this->loadTranslationsFrom(module_path($this->moduleName, 'resources/lang'), $this->moduleNameLower);
+            $this->loadJsonTranslationsFrom(module_path($this->moduleName, 'resources/lang'));
+        }
+    }
+
+    /**
+     * Register middleware.
+     *
+     * @return void
+     */
+    protected function registerMiddleware()
+    {
+        $router = $this->app->make(Router::class);
+        
+        // Registrar el middleware
+        $router->aliasMiddleware('check.password.change', CheckPasswordChange::class);
+        
+        // No aplicar globalmente - se aplica específicamente en las rutas que lo necesitan
     }
 
     /**
      * Get the services provided by the provider.
+     *
+     * @return array
      */
-    public function provides(): array
+    public function provides()
     {
         return [];
     }
@@ -145,12 +121,11 @@ class SecurityServiceProvider extends ServiceProvider
     private function getPublishableViewPaths(): array
     {
         $paths = [];
-        foreach (config('view.paths') as $path) {
-            if (is_dir($path.'/modules/'.$this->nameLower)) {
-                $paths[] = $path.'/modules/'.$this->nameLower;
+        foreach (\Config::get('view.paths') as $path) {
+            if (is_dir($path . '/modules/' . $this->moduleNameLower)) {
+                $paths[] = $path . '/modules/' . $this->moduleNameLower;
             }
         }
-
         return $paths;
     }
 }

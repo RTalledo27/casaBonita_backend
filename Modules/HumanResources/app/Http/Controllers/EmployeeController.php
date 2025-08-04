@@ -207,7 +207,7 @@ class EmployeeController extends Controller
             $dashboard = $this->commissionService->getAdminDashboard($month, $year);
             $dashboard['bonuses'] = $this->bonusService->getBonusesForAdminDashboard($month, $year);
             //$dashboard['employees'] = $this->employeeRepo->getAdvisors();
-            $dashboard['employees'] = $this->employeeRepo->getAll();
+            $dashboard['employees'] = $this->employeeRepo->getAll(['month' => $month, 'year' => $year]);
 
             return response()->json([
                 'success' => true,
@@ -241,5 +241,102 @@ class EmployeeController extends Controller
             'data' => EmployeeResource::collection($topPerformers),
             'message' => 'Top performers obtenidos exitosamente'
         ]);
+    }
+
+    /**
+     * Obtener empleados que no tienen usuario asociado
+     */
+    public function getEmployeesWithoutUser(): JsonResponse
+    {
+        try {
+            $employees = $this->employeeRepo->getEmployeesWithoutUser();
+
+            return response()->json([
+                'success' => true,
+                'data' => EmployeeResource::collection($employees),
+                'message' => 'Empleados sin usuario obtenidos exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener empleados: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generar usuario para un empleado existente
+     */
+    public function generateUser(Request $request, int $employeeId): JsonResponse
+    {
+        try {
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'username' => 'required|string|max:60|unique:users,username',
+                'email' => 'required|email|max:120|unique:users,email',
+                'password' => 'required|string|min:6',
+                'first_name' => 'required|string|max:50',
+                'last_name' => 'required|string|max:50'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Datos inválidos',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Verificar que el empleado existe
+            $employee = $this->employeeRepo->findById($employeeId);
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Empleado no encontrado'
+                ], 404);
+            }
+
+            // Verificar que el empleado no tenga usuario
+            if ($employee->user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Este empleado ya tiene un usuario asociado'
+                ], 422);
+            }
+
+            \Illuminate\Support\Facades\DB::beginTransaction();
+
+            try {
+                // Crear usuario
+                $userData = $request->only(['username', 'email', 'first_name', 'last_name']);
+                $userData['password_hash'] = \Illuminate\Support\Facades\Hash::make($request->password);
+                $userData['status'] = 'active';
+
+                $user = \Modules\Security\app\Models\User::create($userData);
+
+                // Actualizar empleado con el user_id
+                $employee->update(['user_id' => $user->user_id]);
+
+                \Illuminate\Support\Facades\DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'user' => new \Modules\Security\app\Transformers\UserResource($user),
+                        'employee' => new EmployeeResource($employee->load('user'))
+                    ],
+                    'message' => 'Usuario creado y asociado exitosamente'
+                ], 201);
+
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\DB::rollBack();
+                throw $e;
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al generar usuario: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

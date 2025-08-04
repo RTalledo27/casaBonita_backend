@@ -19,13 +19,12 @@ class LotResource extends JsonResource
             'num_lot'              => $this->num_lot,
             'area_m2'              => $this->area_m2,
             'area_construction_m2' => $this->area_construction_m2,
-            'total_price'          => $this->total_price,
-            'funding'              => $this->funding,
-            'BPP'                  => $this->BPP,
-            'BFH'                  => $this->BFH,
-            'initial_quota'        => $this->initial_quota,
+            'total_price'          => $this->total_price,  // Precio base del lote
             'currency'             => $this->currency,
             'status'               => $this->status,
+            // Campos financieros removidos: funding, BPP, BFH, initial_quota
+            
+            // Relaciones
             'manzana'              => new ManzanaResource($this->whenLoaded('manzana')),
             'street_type'          => new StreetTypeResource($this->whenLoaded('streetType')),
             'media'                => LotMediaResource::collection($this->whenLoaded('media')),

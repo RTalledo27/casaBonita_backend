@@ -92,6 +92,10 @@ class TestRHSeeder extends Seeder
             $this->seedCRMModule();
             $this->seedInventoryModule();
             $this->seedHRModule();
+            
+            // Asignar roles después de crear usuarios y empleados
+            $this->assignRolesToUsers();
+            
             $this->seedSalesModule();
             $this->seedAccountingModule();
             $this->seedFinanceModule();
@@ -115,56 +119,218 @@ class TestRHSeeder extends Seeder
     {
         $this->command->info('🔐 Seeding Security Module...');
         
-        // Crear usuarios de prueba
-        $users = [
+        // Crear usuarios con datos reales
+        $realUsers = [
             [
-                'username' => 'admin',
-                'email' => 'admin@casabonita.com',
-                'first_name' => 'Administrador',
-                'last_name' => 'Sistema',
+                'username' => 'luistavara',
+                'email' => 'luistavara03080401@gmail.com',
+                'first_name' => 'LUIS ENRIQUE',
+                'last_name' => 'TAVARA CASTILLO',
                 'password_hash' => Hash::make('password'),
                 'status' => 'active',
-                'department' => 'TI',
+                'department' => 'asesor_inmobiliario',
             ],
             [
-                'username' => 'gerente',
-                'email' => 'gerente@casabonita.com',
-                'first_name' => 'Gerente',
-                'last_name' => 'Ventas',
+                'username' => 'lewisfarfan',
+                'email' => 'lewisfarfan.m21@gmail.com',
+                'first_name' => 'LEWIS TEODORO',
+                'last_name' => 'FARFÁN MERINO',
                 'password_hash' => Hash::make('password'),
                 'status' => 'active',
-                'department' => 'Ventas',
+                'department' => 'asesor_inmobiliario',
             ],
             [
-                'username' => 'asesor1',
-                'email' => 'asesor1@casabonita.com',
-                'first_name' => 'Asesor',
-                'last_name' => 'Inmobiliario 1',
+                'username' => 'adrianaasto',
+                'email' => 'adriserasto@gmail.com',
+                'first_name' => 'ADRIANA JOSELINE',
+                'last_name' => 'ASTOCONDOR SERNAQUE',
                 'password_hash' => Hash::make('password'),
                 'status' => 'active',
-                'department' => 'Ventas',
+                'department' => 'asesor_inmobiliario',
             ],
             [
-                'username' => 'asesor2',
-                'email' => 'asesor2@casabonita.com',
-                'first_name' => 'Asesor',
-                'last_name' => 'Inmobiliario 2',
+                'username' => 'renatomoran',
+                'email' => 'eduardo.rodriguez.guillen2018@gmail.com',
+                'first_name' => 'RENATO JUVENAL',
+                'last_name' => 'MORAN QUIROZ',
                 'password_hash' => Hash::make('password'),
                 'status' => 'active',
-                'department' => 'Ventas',
+                'department' => 'asesor_inmobiliario',
             ],
             [
-                'username' => 'contador',
-                'email' => 'contador@casabonita.com',
-                'first_name' => 'Contador',
-                'last_name' => 'Principal',
+                'username' => 'fernandofeijoo',
+                'email' => 'fernandogarcia13@hotmail.com',
+                'first_name' => 'FERNANDO DAVID',
+                'last_name' => 'FEIJOÓ QUIROZ',
                 'password_hash' => Hash::make('password'),
                 'status' => 'active',
-                'department' => 'Contabilidad',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'nuitsuarez',
+                'email' => 'alexia26.97@gmail.com',
+                'first_name' => 'NUIT ALEXANDRA',
+                'last_name' => 'SUAREZ TUSE',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'paolacandela',
+                'email' => 'candelaneirapaola@gmail.com',
+                'first_name' => 'PAOLA JUDITH',
+                'last_name' => 'CANDELA NEIRA',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'danielamerino',
+                'email' => 'airam.valiente@gmail.com',
+                'first_name' => 'DANIELA AIRAM',
+                'last_name' => 'MERINO VALIENTE',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'marnieperales',
+                'email' => 'marnie.perales@casabonita.com',
+                'first_name' => 'MARNIE JULIA SUSAN',
+                'last_name' => 'PERALES ESPINOZA',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'jefa_ventas',
+            ],
+            [
+                'username' => 'joabcasahuaman',
+                'email' => 'jsamuelcastro23@gmail.com',
+                'first_name' => 'JOAB SAMUEL',
+                'last_name' => 'CASAHUAMAN CASTRO',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'arquitecto',
+            ],
+            [
+                'username' => 'lilianneira',
+                'email' => 'lilian.neira@casabonita.com',
+                'first_name' => 'LILIAN PATRICIA',
+                'last_name' => 'NEIRA ESPINOZA',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'arquitecta',
+            ],
+            [
+                'username' => 'markosalvador',
+                'email' => 'marko.salvador.17@gmail.com',
+                'first_name' => 'MARKO ANGELLO',
+                'last_name' => 'SALVADOR MUÑOZ',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'marketing',
+            ],
+            [
+                'username' => 'romaimtalledo',
+                'email' => 'rogitaco@gmail.com',
+                'first_name' => 'ROMAIM GIANFRANCO',
+                'last_name' => 'TALLEDO CORONADO',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'sistemas',
+            ],
+            [
+                'username' => 'juandiegomogollon',
+                'email' => 'juandiegomg2003@gmail.com',
+                'first_name' => 'JUAN DIEGO',
+                'last_name' => 'MOGOLLON GUERRERO',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'sistemas',
+            ],
+            [
+                'username' => 'manueldiaz',
+                'email' => 'manuelgarnique123@gmail.com',
+                'first_name' => 'MANUEL ENRIQUE',
+                'last_name' => 'DIAZ GARNIQUE',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'marketing',
+            ],
+            [
+                'username' => 'josecastillo',
+                'email' => 'j0taront0021@gmail.com',
+                'first_name' => 'JOSÉ EDUARDO',
+                'last_name' => 'CASTILLO ABRAMONTE',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'ti',
+            ],
+            [
+                'username' => 'eloycarrion',
+                'email' => 'ecarrions190563@gmail.com',
+                'first_name' => 'ELOY MIGUEL',
+                'last_name' => 'CARRION SEBASTIANI',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'direccion',
+            ],
+            [
+                'username' => 'renzocastillo',
+                'email' => 'alexanderabramonte24@gmail.com',
+                'first_name' => 'RENZO ALEXANDER',
+                'last_name' => 'CASTILLO ABRAMONTE',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'jimyocana',
+                'email' => 'jimy_joch.92@hotmail.com',
+                'first_name' => 'JIMY',
+                'last_name' => 'OCAÑA CHOQUEHUANCA',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'christianromero',
+                'email' => 'christian.romeroalama@gmail.com',
+                'first_name' => 'CHRISTIAN CLARK',
+                'last_name' => 'ROMERO ALAMA',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'asesor_inmobiliario',
+            ],
+            [
+                'username' => 'rubydelgado',
+                'email' => 'rubydelgadonanquen@gmail.com',
+                'first_name' => 'RUBY MERCEDES',
+                'last_name' => 'DELGADO NANQUEN',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'administracion',
+            ],
+            [
+                'username' => 'mariaromero',
+                'email' => 'maria12belen@gmail.com',
+                'first_name' => 'MARIA BELEN',
+                'last_name' => 'ROMERO ZAPATA',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'tracker',
+            ],
+            [
+                'username' => 'giullianaadmin',
+                'email' => 'giuva2548@hotmail.com',
+                'first_name' => 'GIULLIANA VANESSA',
+                'last_name' => 'BORRERO NARVAEZ',
+                'password_hash' => Hash::make('password'),
+                'status' => 'active',
+                'department' => 'contabilidad',
             ]
         ];
         
-        foreach ($users as $userData) {
+        foreach ($realUsers as $userData) {
             User::firstOrCreate(['email' => $userData['email']], $userData);
         }
         
@@ -324,25 +490,59 @@ class TestRHSeeder extends Seeder
             Team::firstOrCreate(['team_code' => $teamData['team_code']], $teamData);
         }
         
-        // Crear empleados
+        // Crear empleados con datos reales
         $users = User::all();
         $teams = Team::all();
         
-        foreach ($users as $index => $user) {
-            // Asegurar que al menos los primeros 2 empleados sean asesores inmobiliarios
-            $employeeTypes = ['asesor_inmobiliario', 'vendedor', 'administrativo', 'gerente', 'jefe_ventas'];
-            $employeeType = $index < 2 ? 'asesor_inmobiliario' : $employeeTypes[rand(0, 4)];
+        // Mapeo de empleados reales con sus códigos y departamentos
+        $realEmployees = [
+            ['code' => 'EMP01', 'email' => 'luistavara03080401@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP02', 'email' => 'lewisfarfan.m21@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP03', 'email' => 'adriserasto@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP04', 'email' => 'eduardo.rodriguez.guillen2018@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP05', 'email' => 'fernandogarcia13@hotmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP06', 'email' => 'alexia26.97@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP07', 'email' => 'candelaneirapaola@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP08', 'email' => 'airam.valiente@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP09', 'email' => 'marnie.perales@casabonita.com', 'type' => 'jefe_ventas', 'salary' => 5500],
+            ['code' => 'EMP10', 'email' => 'jsamuelcastro23@gmail.com', 'type' => 'administrativo', 'salary' => 4500],
+            ['code' => 'EMP11', 'email' => 'lilian.neira@casabonita.com', 'type' => 'administrativo', 'salary' => 4500],
+            ['code' => 'EMP12', 'email' => 'marko.salvador.17@gmail.com', 'type' => 'administrativo', 'salary' => 3000],
+            ['code' => 'EMP13', 'email' => 'rogitaco@gmail.com', 'type' => 'administrativo', 'salary' => 6000],
+            ['code' => 'EMP14', 'email' => 'juandiegomg2003@gmail.com', 'type' => 'administrativo', 'salary' => 4000],
+            ['code' => 'EMP15', 'email' => 'manuelgarnique123@gmail.com', 'type' => 'administrativo', 'salary' => 3200],
+            ['code' => 'EMP16', 'email' => 'j0taront0021@gmail.com', 'type' => 'administrativo', 'salary' => 5000],
+            ['code' => 'EMP17', 'email' => 'ecarrions190563@gmail.com', 'type' => 'gerente', 'salary' => 8000],
+            ['code' => 'EMP18', 'email' => 'alexanderabramonte24@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP19', 'email' => 'jimy_joch.92@hotmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP20', 'email' => 'christian.romeroalama@gmail.com', 'type' => 'asesor_inmobiliario', 'salary' => 1130],
+            ['code' => 'EMP21', 'email' => 'rubydelgadonanquen@gmail.com', 'type' => 'administrativo', 'salary' => 3800],
+            ['code' => 'EMP22', 'email' => 'maria12belen@gmail.com', 'type' => 'administrativo', 'salary' => 3000],
+            ['code' => 'EMP23', 'email' => 'giuva2548@hotmail.com', 'type' => 'administrativo', 'salary' => 4200]
+        ];
+        
+        foreach ($realEmployees as $empData) {
+            $user = $users->where('email', $empData['email'])->first();
+            if (!$user) continue;
+            
+            // Asignar equipo basado en el tipo de empleado
+            $teamId = null;
+            if (in_array($empData['type'], ['asesor_inmobiliario', 'jefe_ventas'])) {
+                $teamId = $teams->where('team_code', 'VN')->first()->team_id;
+            } else {
+                $teamId = $teams->where('team_code', 'ADM')->first()->team_id;
+            }
             
             $employee = Employee::firstOrCreate([
                 'user_id' => $user->user_id
             ], [
-                'employee_code' => 'EMP' . str_pad($index + 1, 3, '0', STR_PAD_LEFT),
-                'team_id' => $teams->random()->team_id,
-                'employee_type' => $employeeType,
-                'hire_date' => Carbon::now()->subMonths(rand(1, 24)),
-                'base_salary' => rand(2500, 8000),
-                'commission_percentage' => rand(2, 8),
-                'is_commission_eligible' => true,
+                'employee_code' => $empData['code'],
+                'team_id' => $teamId,
+                'employee_type' => $empData['type'],
+                'hire_date' => Carbon::now()->subMonths(rand(6, 36)),
+                'base_salary' => $empData['salary'],
+                'commission_percentage' => in_array($empData['type'], ['asesor_inmobiliario']) ? 5 : 0,
+                'is_commission_eligible' => in_array($empData['type'], ['asesor_inmobiliario']),
                 'is_bonus_eligible' => true
             ]);
             
@@ -477,11 +677,21 @@ class TestRHSeeder extends Seeder
             ['amount' => 21168.00, 'term' => '>36']
         ];
         
-        // Seleccionar un asesor para todas las ventas (simulando un mes de ventas)
-        $advisor = $employees->first();
+        // Buscar específicamente a Fernando David Feijoo para asignarle las ventas
+        $fernandoUser = User::where('email', 'fernandogarcia13@hotmail.com')->first();
+        $advisor = null;
+        if ($fernandoUser) {
+            $advisor = Employee::where('user_id', $fernandoUser->user_id)->first();
+        }
+        
         if (!$advisor) {
-            $this->command->warn('No hay asesores inmobiliarios disponibles');
-            return;
+            $this->command->warn('No se encontró a Fernando David Feijoo como asesor inmobiliario');
+            // Usar el primer asesor disponible como fallback
+            $advisor = $employees->first();
+            if (!$advisor) {
+                $this->command->warn('No hay asesores inmobiliarios disponibles');
+                return;
+            }
         }
         
         $totalCommissions = 0;
@@ -1244,63 +1454,92 @@ class TestRHSeeder extends Seeder
     
     private function assignRolesToUsers(): void
     {
-        $this->command->info('🔗 Asignando roles a usuarios...');
-        
-        // Obtener usuarios
-        $adminUser = User::where('email', 'admin@casabonita.com')->first();
-        $gerenteUser = User::where('email', 'gerente@casabonita.com')->first();
-        $asesor1User = User::where('email', 'asesor1@casabonita.com')->first();
-        $asesor2User = User::where('email', 'asesor2@casabonita.com')->first();
-        $contadorUser = User::where('email', 'contador@casabonita.com')->first();
+        $this->command->info('🔗 Asignando roles a usuarios reales...');
         
         // Obtener roles
         $adminRole = Role::where('name', 'admin')->first();
         $managerRole = Role::where('name', 'manager')->first();
         $salesRole = Role::where('name', 'sales_advisor')->first();
         $accountantRole = Role::where('name', 'accountant')->first();
+        $hrRole = Role::where('name', 'hr_specialist')->first();
+        $supportRole = Role::where('name', 'support')->first();
         
-        // Asignar roles
-        if ($adminUser && $adminRole) {
-            $adminUser->assignRole($adminRole);
-            $this->command->info('✅ Rol admin asignado a admin@casabonita.com');
+        // Asignar rol de administradora a Giulliana
+        $giullianaUser = User::where('email', 'giuva2548@hotmail.com')->first();
+        if ($giullianaUser && $adminRole) {
+            $giullianaUser->assignRole($adminRole);
+            $this->command->info('✅ Rol admin asignado a Giulliana Borrero (giuva2548@hotmail.com)');
         }
         
-        if ($gerenteUser && $managerRole) {
-            $gerenteUser->assignRole($managerRole);
-            $this->command->info('✅ Rol manager asignado a gerente@casabonita.com');
+        // Asignar rol de gerente a Marnie (Jefa de Ventas)
+        $marnieUser = User::where('email', 'marnie.perales@casabonita.com')->first();
+        if ($marnieUser && $managerRole) {
+            $marnieUser->assignRole($managerRole);
+            $this->command->info('✅ Rol manager asignado a Marnie Perales (Jefa de Ventas)');
         }
         
-        if ($asesor1User && $salesRole) {
-            $asesor1User->assignRole($salesRole);
-            $this->command->info('✅ Rol sales_advisor asignado a asesor1@casabonita.com');
+        // Asignar rol de director a Eloy
+        $eloyUser = User::where('email', 'ecarrions190563@gmail.com')->first();
+        if ($eloyUser && $adminRole) {
+            $eloyUser->assignRole($adminRole);
+            $this->command->info('✅ Rol admin asignado a Eloy Carrion (Director)');
         }
         
-        if ($asesor2User && $salesRole) {
-            $asesor2User->assignRole($salesRole);
-            $this->command->info('✅ Rol sales_advisor asignado a asesor2@casabonita.com');
-        }
-        
-        if ($contadorUser && $accountantRole) {
-            $contadorUser->assignRole($accountantRole);
-            $this->command->info('✅ Rol accountant asignado a contador@casabonita.com');
-        }
-        
-        // Asignar rol manager a todos los empleados tipo 'gerente'
-        $managers = Employee::where('employee_type', 'gerente')->get();
-        foreach ($managers as $manager) {
-            if ($manager->user && $managerRole) {
-                $manager->user->assignRole($managerRole);
+        // Asignar roles a sistemas
+        $sistemasUsers = [
+            'rogitaco@gmail.com',
+            'juandiegomg2003@gmail.com',
+            'j0taront0021@gmail.com'
+        ];
+        foreach ($sistemasUsers as $email) {
+            $user = User::where('email', $email)->first();
+            if ($user && $supportRole) {
+                $user->assignRole($supportRole);
+                $this->command->info('✅ Rol support asignado a ' . $email);
             }
         }
         
-        // Asignar rol sales_advisor a todos los empleados tipo 'asesor_inmobiliario'
-        $advisors = Employee::where('employee_type', 'asesor_inmobiliario')->get();
-        foreach ($advisors as $advisor) {
-            if ($advisor->user && $salesRole) {
-                $advisor->user->assignRole($salesRole);
+        // Asignar rol sales_advisor a todos los asesores inmobiliarios
+        $advisorEmails = [
+            'luistavara03080401@gmail.com',
+            'lewisfarfan.m21@gmail.com',
+            'adriserasto@gmail.com',
+            'eduardo.rodriguez.guillen2018@gmail.com',
+            'fernandogarcia13@hotmail.com',
+            'alexia26.97@gmail.com',
+            'candelaneirapaola@gmail.com',
+            'airam.valiente@gmail.com',
+            'alexanderabramonte24@gmail.com',
+            'jimy_joch.92@hotmail.com',
+            'christian.romeroalama@gmail.com'
+        ];
+        
+        foreach ($advisorEmails as $email) {
+            $user = User::where('email', $email)->first();
+            if ($user && $salesRole) {
+                $user->assignRole($salesRole);
+                $this->command->info('✅ Rol sales_advisor asignado a ' . $email);
             }
         }
         
-        $this->command->info('✅ Roles asignados a usuarios y empleados');
+        // Asignar roles específicos a otros empleados
+        $otherRoles = [
+            'rubydelgadonanquen@gmail.com' => $accountantRole, // Analista de administración
+            'maria12belen@gmail.com' => $supportRole, // Tracker
+            'jsamuelcastro23@gmail.com' => $supportRole, // Arquitecto
+            'lilian.neira@casabonita.com' => $supportRole, // Arquitecta
+            'marko.salvador.17@gmail.com' => $supportRole, // Community Manager
+            'manuelgarnique123@gmail.com' => $supportRole // Diseñador audiovisual
+        ];
+        
+        foreach ($otherRoles as $email => $role) {
+            $user = User::where('email', $email)->first();
+            if ($user && $role) {
+                $user->assignRole($role);
+                $this->command->info('✅ Rol asignado a ' . $email);
+            }
+        }
+        
+        $this->command->info('✅ Roles asignados a todos los usuarios reales');
     }
 }

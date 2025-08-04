@@ -13,7 +13,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 
 
 Route::prefix('v1')->group(function () {
-    Route::prefix('inventory')->middleware('auth:sanctum')->group(function () {
+    Route::prefix('inventory')->middleware(['auth:sanctum', 'check.password.change'])->group(function () {
         Route::apiResource('manzanas',      ManzanaController::class);
         Route::apiResource('street-types', StreetTypeController::class);
         Route::apiResource('lots',        LotController::class);

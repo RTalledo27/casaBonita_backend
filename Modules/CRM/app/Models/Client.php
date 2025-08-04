@@ -38,7 +38,8 @@ class Client extends Model
         'date',
         'occupation',
         'salary',
-        'family_group'
+        'family_group',
+        'observations'
     ];
 
     // protected static function newFactory(): ClientFactory
