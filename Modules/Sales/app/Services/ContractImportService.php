@@ -9,6 +9,7 @@ use Modules\CRM\Models\Client;
 use Modules\CRM\Models\Address;
 use Modules\HumanResources\Models\Employee;
 use Modules\Inventory\Models\Lot;
+use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Inventory\Models\Manzana;
 use Modules\Inventory\Models\StreetType;
 use Modules\Sales\Models\Contract;
@@ -22,6 +23,45 @@ class ContractImportService
     private array $processed = [];
     private int $successCount = 0;
     private int $errorCount = 0;
+
+    /**
+     * Normalizar texto removiendo acentos y caracteres especiales
+     * para hacer búsquedas insensibles a tildes
+     */
+    private function normalizeText(string $text): string
+    {
+        // Convertir a minúsculas
+        $text = strtolower(trim($text));
+        
+        // Mapeo de caracteres con acentos a sin acentos (incluye mayúsculas y minúsculas)
+        $accents = [
+            // Minúsculas
+            'á' => 'a', 'à' => 'a', 'ä' => 'a', 'â' => 'a', 'ā' => 'a', 'ã' => 'a',
+            'é' => 'e', 'è' => 'e', 'ë' => 'e', 'ê' => 'e', 'ē' => 'e',
+            'í' => 'i', 'ì' => 'i', 'ï' => 'i', 'î' => 'i', 'ī' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ö' => 'o', 'ô' => 'o', 'ō' => 'o', 'õ' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'ü' => 'u', 'û' => 'u', 'ū' => 'u',
+            'ñ' => 'n', 'ç' => 'c',
+            // Mayúsculas
+            'Á' => 'a', 'À' => 'a', 'Ä' => 'a', 'Â' => 'a', 'Ā' => 'a', 'Ã' => 'a',
+            'É' => 'e', 'È' => 'e', 'Ë' => 'e', 'Ê' => 'e', 'Ē' => 'e',
+            'Í' => 'i', 'Ì' => 'i', 'Ï' => 'i', 'Î' => 'i', 'Ī' => 'i',
+            'Ó' => 'o', 'Ò' => 'o', 'Ö' => 'o', 'Ô' => 'o', 'Ō' => 'o', 'Õ' => 'o',
+            'Ú' => 'u', 'Ù' => 'u', 'Ü' => 'u', 'Û' => 'u', 'Ū' => 'u',
+            'Ñ' => 'n', 'Ç' => 'c'
+        ];
+        
+        // Reemplazar caracteres con acentos
+        $text = strtr($text, $accents);
+        
+        // Remover caracteres especiales adicionales
+        $text = preg_replace('/[^a-z0-9\s]/', '', $text);
+        
+        // Normalizar espacios múltiples
+        $text = preg_replace('/\s+/', ' ', $text);
+        
+        return trim($text);
+    }
 
     /**
      * Procesar archivo Excel de contratos/reservaciones
@@ -394,15 +434,21 @@ class ContractImportService
         $reservation = $this->createReservationIntegral($client, $lot, $data);
         
         // Crear contrato si corresponde
+        $operationType = 'reservacion';
         if ($this->shouldCreateContractIntegral($data)) {
             $this->createContractIntegral($reservation, $advisor, $data);
+            $operationType = 'contrato';
         }
+        
+        // Actualizar status del lote
+        $this->updateLotStatus($lot, $operationType);
         
         $this->processed[] = [
             'row' => $rowNumber,
             'client' => $client->first_name . ' ' . $client->last_name,
             'lot' => $lot->num_lot,
-            'advisor' => $advisor ? $advisor->user->first_name . ' ' . $advisor->user->last_name : 'No asignado'
+            'advisor' => $advisor ? $advisor->user->first_name . ' ' . $advisor->user->last_name : 'No asignado',
+            'operation_type' => $operationType
         ];
     }
 
@@ -526,7 +572,7 @@ class ContractImportService
         $manzanaName = $data['lot_manzana'] ?? null;
         
         // Buscar lote existente
-        $query = Lot::where('num_lot', $lotNumber);
+        $query = Lot::with('financialTemplate')->where('num_lot', $lotNumber);
         
         if ($manzanaName) {
             $query->whereHas('manzana', function($q) use ($manzanaName) {
@@ -536,128 +582,303 @@ class ContractImportService
         
         $lot = $query->first();
         
-        if ($lot) {
-            // Actualizar información del lote si es necesario
-            $this->updateLotInfo($lot, $data);
-            return $lot;
+        if (!$lot) {
+            throw new Exception("Lote {$lotNumber}" . ($manzanaName ? " en manzana {$manzanaName}" : '') . " no encontrado. El lote debe existir antes de importar contratos.");
         }
         
-        // Buscar o crear manzana
-        $manzana = null;
-        if ($manzanaName) {
-            $manzana = Manzana::where('name', 'LIKE', "%{$manzanaName}%")->first();
-            if (!$manzana) {
-                $manzana = Manzana::create([
-                    'name' => $manzanaName,
-                    'project_id' => 1 // Asumir proyecto por defecto
-                ]);
-            }
+        // Verificar que el lote tenga template financiero
+        if (!$lot->financialTemplate) {
+            throw new Exception("El lote {$lotNumber}" . ($manzanaName ? " en manzana {$manzanaName}" : '') . " no tiene template financiero configurado.");
         }
         
-        // Buscar o crear tipo de calle por defecto
-        $streetType = StreetType::firstOrCreate(
-            ['name' => 'Calle'],
-            ['name' => 'Calle']
-        );
-        
-        // Crear nuevo lote SIN campos financieros
-        return Lot::create([
-            'num_lot' => $lotNumber,
-            'manzana_id' => $manzana ? $manzana->manzana_id : null,
-            'street_type_id' => $streetType->street_type_id,
-            'area_m2' => $this->parseDecimal($data['area_m2'] ?? 0),
-            'area_construction_m2' => $this->parseDecimal($data['area_construction_m2'] ?? 0),
-            'total_price' => $this->parseDecimal($data['total_price'] ?? 0),  // Precio base
-            'currency' => 'S/',
-            'status' => 'disponible'
-            // Campos financieros removidos: funding, BPP, BFH, initial_quota
-        ]);
+        return $lot;
     }
 
     /**
-     * Actualizar información del lote
+     * Actualizar status del lote según el tipo de operación
      */
-    private function updateLotInfo(Lot $lot, array $data): void
+    private function updateLotStatus(Lot $lot, string $operationType): void
     {
-        $updates = [];
+        $newStatus = $operationType === 'contrato' ? 'vendido' : 'reservado';
         
-        if (!empty($data['total_price']) && empty($lot->total_price)) {
-            $updates['total_price'] = $this->parseDecimal($data['total_price']);
-        }
-        
-        if (!empty($updates)) {
-            $lot->update($updates);
+        if ($lot->status !== $newStatus) {
+            $lot->update(['status' => $newStatus]);
+            Log::info("Status del lote {$lot->num_lot} actualizado a: {$newStatus}");
         }
     }
 
     /**
-     * Buscar asesor con información del template actual
+     * Buscar asesor con información del template actual - VERSIÓN MEJORADA
+     * Incluye logging detallado y mejor lógica de coincidencia
      * NUNCA retorna null - siempre encuentra un asesor válido
      */
     private function findAdvisorIntegral(array $data): Employee
     {
-        $advisorName = $data['advisor_name'] ?? '';
-        $advisorCode = $data['advisor_code'] ?? '';
+        $advisorName = $data["advisor_name"] ?? "";
+        $advisorCode = $data["advisor_code"] ?? "";
         
-        Log::info("Buscando asesor - Nombre: '{$advisorName}', Código: '{$advisorCode}'");
+        Log::info("[IMPORT] Buscando asesor", [
+            "advisor_name" => $advisorName,
+            "advisor_code" => $advisorCode,
+            "row_data" => $data
+        ]);
         
-        // Buscar por código primero si existe
+        // 1. Buscar por código primero si existe
         if (!empty($advisorCode)) {
-            $advisor = Employee::where('employee_code', $advisorCode)
-                              ->where('employee_type', 'asesor_inmobiliario')
+            $advisor = Employee::where("employee_code", $advisorCode)
+                              ->where("employee_type", "asesor_inmobiliario")
                               ->first();
             if ($advisor) {
-                Log::info("Asesor encontrado por código: {$advisor->employee_code} - {$advisor->user->first_name} {$advisor->user->last_name}");
-                return $advisor;
+                Log::info("[IMPORT] Asesor encontrado por código", [
+                    "advisor_id" => $advisor->employee_id,
+                    "advisor_code" => $advisor->employee_code,
+                    "advisor_name" => $advisor->user->first_name . " " . $advisor->user->last_name
+                ]);
+                return $this->preventAdvisorConcentration($advisor);
             }
-            Log::warning("No se encontró asesor con código: {$advisorCode}");
+            Log::warning("[IMPORT] No se encontró asesor con código: {$advisorCode}");
         }
         
-        // Si no se encuentra por código o no hay código, buscar por nombre
+        // 2. Si no se encuentra por código, buscar por nombre con lógica mejorada
         if (!empty($advisorName)) {
-            // Búsqueda flexible por nombre (case insensitive)
-            $advisor = Employee::whereHas('user', function($query) use ($advisorName) {
-                    $advisorNameLower = strtolower($advisorName);
-                    $query->whereRaw('LOWER(first_name) LIKE ?', ["%{$advisorNameLower}%"])
-                          ->orWhereRaw('LOWER(last_name) LIKE ?', ["%{$advisorNameLower}%"])
-                          ->orWhereRaw("LOWER(CONCAT(first_name, ' ', last_name)) LIKE ?", ["%{$advisorNameLower}%"])
-                          ->orWhereRaw("LOWER(CONCAT(last_name, ' ', first_name)) LIKE ?", ["%{$advisorNameLower}%"]);
-                })
-                ->where('employee_type', 'asesor_inmobiliario')
-                ->first();
+            $normalizedSearchName = $this->normalizeText($advisorName);
+            
+            Log::info("[IMPORT] Búsqueda por nombre", [
+                "original_name" => $advisorName,
+                "normalized_name" => $normalizedSearchName
+            ]);
+            
+            // Obtener todos los asesores activos
+            $advisors = Employee::with("user")
+                              ->where("employee_type", "asesor_inmobiliario")
+                              ->where("employment_status", "activo")
+                              ->get();
+            
+            $matches = [];
+            
+            foreach ($advisors as $advisor) {
+                if (!$advisor->user) continue;
                 
-            if ($advisor) {
-                Log::info("Asesor encontrado por nombre: {$advisor->user->first_name} {$advisor->user->last_name}");
-                return $advisor;
+                $score = $this->calculateNameMatchScore($normalizedSearchName, $advisor);
+                
+                if ($score > 0) {
+                    $matches[] = [
+                        "advisor" => $advisor,
+                        "score" => $score,
+                        "reason" => $this->getMatchReason($normalizedSearchName, $advisor)
+                    ];
+                }
             }
-            Log::warning("No se encontró asesor con nombre: {$advisorName}");
+            
+            // Ordenar por score descendente
+            usort($matches, function($a, $b) {
+                return $b["score"] - $a["score"];
+            });
+            
+            if (!empty($matches)) {
+                $bestMatch = $matches[0];
+                
+                Log::info("[IMPORT] Asesor encontrado por nombre", [
+                    "advisor_id" => $bestMatch["advisor"]->employee_id,
+                    "advisor_name" => $bestMatch["advisor"]->user->first_name . " " . $bestMatch["advisor"]->user->last_name,
+                    "match_score" => $bestMatch["score"],
+                    "match_reason" => $bestMatch["reason"],
+                    "total_candidates" => count($matches)
+                ]);
+                
+                return $this->preventAdvisorConcentration($bestMatch["advisor"]);
+            }
+            
+            Log::warning("[IMPORT] No se encontró coincidencia para nombre: {$normalizedSearchName}");
         }
         
-        // Fallback 1: Buscar asesores por defecto
-        Log::info("Buscando asesor por defecto...");
-        $defaultAdvisor = Employee::where('employee_type', 'asesor_inmobiliario')
-                                 ->whereIn('employee_code', ['DEFAULT', 'ADMIN', 'SISTEMA'])
-                                 ->first();
+        // 3. Fallback: usar sistema de rotación equitativa
+        Log::warning("[IMPORT] Usando sistema de rotación", [
+            "reason" => "No se encontró coincidencia por código ni nombre",
+            "advisor_name" => $advisorName,
+            "advisor_code" => $advisorCode
+        ]);
         
-        if ($defaultAdvisor) {
-            Log::info("Asesor por defecto encontrado: {$defaultAdvisor->employee_code} - {$defaultAdvisor->user->first_name} {$defaultAdvisor->user->last_name}");
-            return $defaultAdvisor;
+        return $this->getNextAdvisorInRotation();
+    }
+
+    /**
+     * Verificar y prevenir concentración excesiva de contratos en un asesor
+     */
+    private function preventAdvisorConcentration(Employee $advisor): Employee
+    {
+        // Obtener total de contratos del último mes
+        $oneMonthAgo = Carbon::now()->subMonth();
+        $totalContracts = Contract::where('sign_date', '>=', $oneMonthAgo)->count();
+        
+        if ($totalContracts < 10) {
+            // Si hay pocos contratos, no aplicar restricción
+            return $advisor;
         }
         
-        // Fallback 2: Obtener el primer asesor disponible
-        Log::info("Buscando primer asesor disponible...");
-        $firstAdvisor = Employee::where('employee_type', 'asesor_inmobiliario')
-                               ->with('user')
-                               ->first();
+        // Obtener contratos del asesor en el último mes
+        $advisorContracts = Contract::where('advisor_id', $advisor->employee_id)
+                                  ->where('sign_date', '>=', $oneMonthAgo)
+                                  ->count();
         
-        if ($firstAdvisor) {
-            Log::info("Primer asesor disponible: {$firstAdvisor->user->first_name} {$firstAdvisor->user->last_name}");
-            return $firstAdvisor;
+        // Calcular porcentaje de concentración
+        $concentrationPercentage = ($advisorContracts / $totalContracts) * 100;
+        
+        // Si el asesor tiene más del 40% de los contratos, usar rotación
+        if ($concentrationPercentage > 40) {
+            Log::warning('[IMPORT] Concentración excesiva detectada', [
+                'advisor_id' => $advisor->employee_id,
+                'advisor_name' => $advisor->user->first_name . ' ' . $advisor->user->last_name,
+                'concentration_percentage' => $concentrationPercentage,
+                'advisor_contracts' => $advisorContracts,
+                'total_contracts' => $totalContracts
+            ]);
+            
+            return $this->getNextAdvisorInRotation();
         }
         
-        // Si no hay ningún asesor en el sistema, lanzar excepción
-        Log::error("No se encontró ningún asesor inmobiliario en el sistema");
-        throw new \Exception('No se encontró ningún asesor inmobiliario en el sistema. Por favor, cree al menos un asesor antes de importar contratos.');
+        return $advisor;
+    }
+
+    /**
+     * Obtener el siguiente asesor en rotación para distribución equitativa
+     */
+    private function getNextAdvisorInRotation(): Employee
+    {
+        // Obtener todos los asesores activos
+        $advisors = Employee::where('employee_type', 'asesor_inmobiliario')
+                           ->where('employment_status', 'activo')
+                           ->with('user')
+                           ->get();
+        
+        if ($advisors->isEmpty()) {
+            Log::error('[IMPORT] No hay asesores inmobiliarios activos disponibles');
+            throw new \Exception('No hay asesores inmobiliarios activos disponibles para asignar contratos.');
+        }
+        
+        // Obtener estadísticas de contratos por asesor en el último mes
+        $oneMonthAgo = Carbon::now()->subMonth();
+        $advisorStats = [];
+        
+        foreach ($advisors as $advisor) {
+            $contractCount = Contract::where('advisor_id', $advisor->employee_id)
+                                   ->where('sign_date', '>=', $oneMonthAgo)
+                                   ->count();
+            
+            $advisorStats[] = [
+                'advisor' => $advisor,
+                'contract_count' => $contractCount,
+                'last_assigned' => Contract::where('advisor_id', $advisor->employee_id)
+                                          ->latest('sign_date')
+                                          ->value('sign_date') ?? '1970-01-01'
+            ];
+        }
+        
+        // Ordenar por: 1) menor número de contratos, 2) asignación más antigua
+        usort($advisorStats, function($a, $b) {
+            if ($a['contract_count'] === $b['contract_count']) {
+                return strcmp($a['last_assigned'], $b['last_assigned']);
+            }
+            return $a['contract_count'] - $b['contract_count'];
+        });
+        
+        $selectedAdvisor = $advisorStats[0]['advisor'];
+        
+        Log::info('[IMPORT] Asesor seleccionado por rotación', [
+            'advisor_id' => $selectedAdvisor->employee_id,
+            'advisor_name' => $selectedAdvisor->user->first_name . ' ' . $selectedAdvisor->user->last_name,
+            'current_contracts' => $advisorStats[0]['contract_count'],
+            'last_assigned' => $advisorStats[0]['last_assigned'],
+            'total_advisors' => count($advisorStats)
+        ]);
+        
+        return $selectedAdvisor;
+    }
+
+    /**
+     * Calcular score de coincidencia entre nombre buscado y asesor
+     */
+    private function calculateNameMatchScore(string $searchName, Employee $advisor): int
+    {
+        if (!$advisor->user) return 0;
+        
+        $firstName = $this->normalizeText($advisor->user->first_name ?? "");
+        $lastName = $this->normalizeText($advisor->user->last_name ?? "");
+        $fullName = $this->normalizeText(($advisor->user->first_name ?? "") . " " . ($advisor->user->last_name ?? ""));
+        $fullNameReverse = $this->normalizeText(($advisor->user->last_name ?? "") . " " . ($advisor->user->first_name ?? ""));
+        
+        $score = 0;
+        
+        // Coincidencia exacta del nombre completo (score más alto)
+        if ($searchName === $fullName || $searchName === $fullNameReverse) {
+            $score += 100;
+        }
+        
+        // Coincidencia exacta de nombre o apellido
+        if ($searchName === $firstName || $searchName === $lastName) {
+            $score += 80;
+        }
+        
+        // Contiene el nombre completo
+        if (strpos($fullName, $searchName) !== false || strpos($fullNameReverse, $searchName) !== false) {
+            $score += 60;
+        }
+        
+        // Contiene nombre o apellido
+        if (strpos($firstName, $searchName) !== false || strpos($lastName, $searchName) !== false) {
+            $score += 40;
+        }
+        
+        // El nombre buscado contiene nombre o apellido del asesor
+        if (strpos($searchName, $firstName) !== false || strpos($searchName, $lastName) !== false) {
+            $score += 30;
+        }
+        
+        // Coincidencia de palabras individuales
+        $searchWords = explode(" ", $searchName);
+        $advisorWords = array_merge(explode(" ", $firstName), explode(" ", $lastName));
+        
+        $wordMatches = 0;
+        foreach ($searchWords as $searchWord) {
+            if (strlen($searchWord) > 2) {
+                foreach ($advisorWords as $advisorWord) {
+                    if (strlen($advisorWord) > 2 && $searchWord === $advisorWord) {
+                        $wordMatches++;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        $score += $wordMatches * 20;
+        
+        return $score;
+    }
+
+    /**
+     * Obtener razón de la coincidencia para logging
+     */
+    private function getMatchReason(string $searchName, Employee $advisor): string
+    {
+        if (!$advisor->user) return "Sin usuario";
+        
+        $firstName = $this->normalizeText($advisor->user->first_name ?? "");
+        $lastName = $this->normalizeText($advisor->user->last_name ?? "");
+        $fullName = $this->normalizeText(($advisor->user->first_name ?? "") . " " . ($advisor->user->last_name ?? ""));
+        $fullNameReverse = $this->normalizeText(($advisor->user->last_name ?? "") . " " . ($advisor->user->first_name ?? ""));
+        
+        if ($searchName === $fullName) return "Coincidencia exacta nombre completo";
+        if ($searchName === $fullNameReverse) return "Coincidencia exacta nombre completo invertido";
+        if ($searchName === $firstName) return "Coincidencia exacta nombre";
+        if ($searchName === $lastName) return "Coincidencia exacta apellido";
+        if (strpos($fullName, $searchName) !== false) return "Contiene en nombre completo";
+        if (strpos($fullNameReverse, $searchName) !== false) return "Contiene en nombre completo invertido";
+        if (strpos($firstName, $searchName) !== false) return "Contiene en nombre";
+        if (strpos($lastName, $searchName) !== false) return "Contiene en apellido";
+        if (strpos($searchName, $firstName) !== false) return "Nombre contenido en búsqueda";
+        if (strpos($searchName, $lastName) !== false) return "Apellido contenido en búsqueda";
+        
+        return "Coincidencia de palabras";
     }
 
     /**
@@ -701,19 +922,55 @@ class ContractImportService
     }
 
     /**
-     * Crear contrato con información del template actual
+     * Crear contrato con información del template financiero del lote
      */
     private function createContractIntegral(Reservation $reservation, Employee $advisor, array $data): Contract
     {
-        $totalPrice = $this->parseDecimal($data['total_price'] ?? 0);
-        $downPayment = $this->parseDecimal($data['down_payment'] ?? 0);
-        $financingAmount = $this->parseDecimal($data['financing_amount'] ?? 0);
-        $balloonPayment = $this->parseDecimal($data['balloon_payment'] ?? 0);
+        // Obtener el lote y su template financiero
+        $lot = $reservation->lot;
+        $template = $lot->financialTemplate;
+        
+        if (!$template) {
+            throw new Exception("El lote {$lot->num_lot} no tiene template financiero configurado.");
+        }
+        
+        // Determinar tipo de financiamiento basado en los datos del Excel
         $installments = (int)($data['installments'] ?? $data['installments_alt'] ?? 0);
-        $monthlyPayment = $this->parseDecimal($data['monthly_payment'] ?? 0);
-
-        $initialPayment = $this->parseDecimal($data['initial_payment'] ?? 0);
-        $directPayment = $this->parseDecimal($data['direct_payment'] ?? 0);
+        $isFinanced = $installments > 0;
+        
+        // Obtener precios del template financiero
+        if ($isFinanced) {
+            // Financiamiento: usar precio_venta
+            $totalPrice = $template->precio_venta;
+            $downPayment = $template->cuota_inicial;
+            $balloonPayment = $template->cuota_balon;
+            $financingAmount = $template->getFinancingAmount();
+            
+            // Obtener cuota mensual del template según el número de cuotas
+            $monthlyPayment = $template->getInstallmentAmount($installments);
+            
+            if ($monthlyPayment <= 0) {
+                throw new Exception("El lote {$lot->num_lot} no tiene configurado financiamiento para {$installments} cuotas.");
+            }
+        } else {
+            // Pago de contado: usar precio_contado si está disponible
+            if ($template->hasCashPrice()) {
+                $totalPrice = $template->precio_contado;
+                $downPayment = $template->precio_contado; // Todo el monto como cuota inicial
+                $financingAmount = 0;
+                $monthlyPayment = 0;
+                $balloonPayment = 0;
+                $installments = 0;
+            } else {
+                // Si no hay precio de contado, usar precio de venta
+                $totalPrice = $template->precio_venta;
+                $downPayment = $template->precio_venta;
+                $financingAmount = 0;
+                $monthlyPayment = 0;
+                $balloonPayment = 0;
+                $installments = 0;
+            }
+        }
         
         $signDate = $this->parseDate($data['sale_date'] ?? now());
         $status = $data['contract_status'] ?? 'vigente';
@@ -721,12 +978,15 @@ class ContractImportService
         // Generar número de contrato
         $contractNumber = $this->generateContractNumber();
         
-        // Calcular cuota mensual si no se proporciona
-        if ($monthlyPayment == 0 && $installments > 0 && $financingAmount > 0) {
-            $monthlyPayment = $financingAmount / $installments;
-        }
-        
-
+        Log::info("Creando contrato con precios del template financiero", [
+            'lot_number' => $lot->num_lot,
+            'total_price' => $totalPrice,
+            'down_payment' => $downPayment,
+            'financing_amount' => $financingAmount,
+            'monthly_payment' => $monthlyPayment,
+            'installments' => $installments,
+            'is_financed' => $isFinanced
+        ]);
         
         return Contract::create([
             'reservation_id' => $reservation->reservation_id,
@@ -743,11 +1003,11 @@ class ContractImportService
             'currency' => 'S/',
             'status' => $status,
             
-            // Nuevos campos financieros (migrados desde lote):
-            'funding' => $this->parseDecimal($data['funding'] ?? 0),
-            'bpp' => $this->parseDecimal($data['BPP'] ?? 0),
-            'bfh' => $this->parseDecimal($data['BFH'] ?? 0),
-            'initial_quota' => $this->parseDecimal($data['initial_quota'] ?? 0)
+            // Campos financieros del template:
+            'funding' => 0, // No usado en el template actual
+            'bpp' => $template->bono_bpp ?? 0,
+            'bfh' => 0, // No usado en el template actual
+            'initial_quota' => $template->cuota_inicial
         ]);
     }
 

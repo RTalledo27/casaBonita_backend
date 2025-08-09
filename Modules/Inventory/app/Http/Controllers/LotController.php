@@ -9,10 +9,13 @@ use Illuminate\Support\Facades\DB;
 use Modules\Inventory\Http\Requests\StoreLotRequest;
 use Modules\Inventory\Http\Requests\UpdateLotRequest;
 use Modules\Inventory\Models\Lot;
+use Modules\Inventory\Models\LotFinancialTemplate;
+use Modules\Inventory\Models\ManzanaFinancingRule;
 use Modules\Inventory\Repositories\LotRepository;
 use Modules\Inventory\Transformers\lotResource;
 use Modules\services\PusherNotifier;
 use Pusher\Pusher;
+use Illuminate\Http\JsonResponse;
 
 class LotController extends Controller
 {
@@ -129,6 +132,209 @@ class LotController extends Controller
                 'message' => 'Error al eliminar lote',
                 'error'   => $e->getMessage(),
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Obtener catálogo público de lotes con información financiera
+     */
+    public function catalog(Request $request): JsonResponse
+    {
+        try {
+            $lots = Lot::with([
+                'manzana', 
+                'streetType', 
+                'lotFinancialTemplate'
+            ])
+            ->where('status', 'available')
+            ->get()
+            ->map(function ($lot) {
+                $financingOptions = [];
+                
+                if ($lot->lotFinancialTemplate) {
+                    $template = $lot->lotFinancialTemplate;
+                    
+                    if ($template->hasCashPrice()) {
+                        $financingOptions['cash_price'] = $template->precio_contado;
+                    }
+                    
+                    $installmentOptions = $template->getAvailableInstallmentOptions();
+                    if (!empty($installmentOptions)) {
+                        $financingOptions['installment_options'] = collect($installmentOptions)
+                            ->map(function ($payment, $months) {
+                                return [
+                                    'months' => $months,
+                                    'monthly_payment' => $payment
+                                ];
+                            })
+                            ->values()
+                            ->toArray();
+                    }
+                }
+                
+                return [
+                    'lot_id' => $lot->lot_id,
+                    'manzana' => $lot->manzana->name ?? '',
+                    'num_lot' => $lot->num_lot,
+                    'area_m2' => $lot->area_m2,
+                    'street_type' => $lot->streetType->name ?? '',
+                    'total_price' => $lot->total_price,
+                    'status' => $lot->status,
+                    'financing_options' => $financingOptions
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $lots
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener catálogo de lotes',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Simular financiamiento para un lote
+     */
+    public function financingSimulator(Request $request): JsonResponse
+    {
+        $request->validate([
+            'lot_id' => 'required|exists:lots,lot_id',
+            'financing_type' => 'required|in:cash,installments',
+            'installment_months' => 'required_if:financing_type,installments|integer|in:24,40,44,55',
+            'down_payment' => 'nullable|numeric|min:0'
+        ]);
+        
+        try {
+            $lot = Lot::with('lotFinancialTemplate')->findOrFail($request->lot_id);
+            
+            if (!$lot->lotFinancialTemplate) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Este lote no tiene información financiera disponible'
+                ], 404);
+            }
+            
+            $template = $lot->lotFinancialTemplate;
+            $financingType = $request->financing_type;
+            
+            if ($financingType === 'cash') {
+                if (!$template->hasCashPrice()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Este lote no está disponible para pago de contado'
+                    ], 400);
+                }
+                
+                $simulation = [
+                    'lot_id' => $lot->lot_id,
+                    'financing_type' => 'cash',
+                    'total_price' => $template->precio_contado,
+                    'down_payment' => $template->precio_contado,
+                    'financing_amount' => 0,
+                    'monthly_payment' => 0,
+                    'total_payments' => 1
+                ];
+            } else {
+                $months = $request->installment_months;
+                $monthlyPaymentField = "installments_{$months}";
+                
+                if (!$template->$monthlyPaymentField || $template->$monthlyPaymentField <= 0) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Este lote no está disponible para financiamiento a {$months} meses"
+                    ], 400);
+                }
+                
+                $monthlyPayment = $template->$monthlyPaymentField;
+                $downPayment = $request->down_payment ?? 0;
+                $financingAmount = $template->precio_venta - $downPayment;
+                
+                $simulation = [
+                    'lot_id' => $lot->lot_id,
+                    'financing_type' => 'installments',
+                    'total_price' => $template->precio_venta,
+                    'down_payment' => $downPayment,
+                    'financing_amount' => $financingAmount,
+                    'monthly_payment' => $monthlyPayment,
+                    'total_payments' => $months,
+                    'balloon_payment' => $template->cuota_balon ?? 0
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => $simulation
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al simular financiamiento',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener template financiero de un lote específico
+     */
+    public function getFinancialTemplate(Lot $lot): JsonResponse
+    {
+        try {
+            $template = $lot->lotFinancialTemplate;
+            
+            if (!$template) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Este lote no tiene información financiera disponible'
+                ], 404);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => $template
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener template financiero',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener reglas de financiamiento por manzana
+     */
+    public function getManzanaFinancingRules(): JsonResponse
+    {
+        try {
+            $rules = ManzanaFinancingRule::with('manzana')
+                ->get()
+                ->map(function ($rule) {
+                    return [
+                        'manzana' => $rule->manzana->name,
+                        'financing_type' => $rule->financing_type,
+                        'max_installments' => $rule->max_installments,
+                        'cash_only' => $rule->cash_only,
+                        'installment_options' => $rule->installment_options
+                    ];
+                });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $rules
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener reglas de financiamiento',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 }

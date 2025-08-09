@@ -114,7 +114,94 @@ class PermissionSeeder extends Seeder
             'service-desk.actions.update',     // Editar acción
             'service-desk.actions.delete',     // Eliminar acción
 
-
+            // MODULE HUMAN RESOURCES
+            'hr.access',                       // Acceso general al módulo HR
+            
+            // MODULE HR - EMPLOYEES
+            'hr.employees.view',               // Ver empleados
+            'hr.employees.store',              // Crear empleados
+            'hr.employees.update',             // Actualizar empleados
+            'hr.employees.destroy',            // Eliminar empleados
+            'hr.employees.generate-user',      // Generar usuario para empleado
+            'hr.employees.dashboard',          // Ver dashboard de empleado
+            
+            // MODULE HR - COMMISSIONS
+            'hr.commissions.view',             // Ver comisiones
+            'hr.commissions.store',            // Crear comisiones
+            'hr.commissions.update',           // Actualizar comisiones
+            'hr.commissions.destroy',          // Eliminar comisiones
+            'hr.commissions.pay',              // Pagar comisiones
+            'hr.commissions.process',          // Procesar comisiones
+            'hr.commissions.split-payment',   // Crear pagos divididos
+            
+            // MODULE HR - COMMISSION VERIFICATIONS
+            'hr.commission-verifications.view',     // Ver verificaciones de comisiones
+            'hr.commission-verifications.verify',   // Verificar pagos de comisiones
+            'hr.commission-verifications.reverse',  // Revertir verificaciones
+            'hr.commission-verifications.process',  // Procesar verificaciones automáticas
+            'hr.commission-verifications.stats',    // Ver estadísticas de verificaciones
+            
+            // MODULE HR - PAYROLL
+            'hr.payroll.view',                 // Ver nóminas
+            'hr.payroll.generate',             // Generar nóminas
+            'hr.payroll.process',              // Procesar nóminas
+            'hr.payroll.approve',              // Aprobar nóminas
+            
+            // MODULE HR - BONUSES
+            'hr.bonuses.view',                 // Ver bonos
+            'hr.bonuses.store',                // Crear bonos
+            'hr.bonuses.update',               // Actualizar bonos
+            'hr.bonuses.destroy',              // Eliminar bonos
+            'hr.bonuses.process',              // Procesar bonos automáticos
+            
+            // MODULE HR - BONUS TYPES
+            'hr.bonus-types.view',             // Ver tipos de bonos
+            'hr.bonus-types.store',            // Crear tipos de bonos
+            'hr.bonus-types.update',           // Actualizar tipos de bonos
+            'hr.bonus-types.destroy',          // Eliminar tipos de bonos
+            
+            // MODULE HR - BONUS GOALS
+            'hr.bonus-goals.view',             // Ver metas de bonos
+            'hr.bonus-goals.store',            // Crear metas de bonos
+            'hr.bonus-goals.update',           // Actualizar metas de bonos
+            'hr.bonus-goals.destroy',          // Eliminar metas de bonos
+            
+            // MODULE HR - TEAMS
+            'hr.teams.view',                   // Ver equipos
+            'hr.teams.store',                  // Crear equipos
+            'hr.teams.update',                 // Actualizar equipos
+            'hr.teams.destroy',                // Eliminar equipos
+            'hr.teams.assign-leader',          // Asignar líder de equipo
+            'hr.teams.toggle-status',          // Cambiar estado de equipo
+            
+            // MODULE HR - EMPLOYEE IMPORT
+            'hr.employee-import.validate',     // Validar importación de empleados
+            'hr.employee-import.import',       // Importar empleados
+            'hr.employee-import.template',     // Descargar template de importación
+            
+            // MODULE COLLECTIONS
+            'collections.access',                        // Acceso general al módulo Collections
+            
+            // MODULE COLLECTIONS - CUSTOMER PAYMENTS
+            'collections.customer-payments.view',        // Ver pagos de clientes
+            'collections.customer-payments.create',      // Crear pagos de clientes
+            'collections.customer-payments.update',      // Actualizar pagos de clientes
+            'collections.customer-payments.delete',      // Eliminar pagos de clientes
+            'collections.customer-payments.redetect',    // Redetectar tipo de cuota
+            'collections.customer-payments.stats',       // Ver estadísticas de detección
+            
+            // MODULE COLLECTIONS - ACCOUNTS RECEIVABLE
+            'collections.accounts-receivable.view',      // Ver cuentas por cobrar
+            'collections.accounts-receivable.overdue',   // Ver cuentas por cobrar vencidas
+            
+            // MODULE COLLECTIONS - HR INTEGRATION
+            'collections.hr-integration.view',           // Ver estadísticas de integración HR
+            'collections.hr-integration.sync',           // Sincronizar datos HR con Collections
+            'collections.hr-integration.process',        // Procesar empleados elegibles
+            'collections.hr-integration.mark',           // Marcar empleados como elegibles
+            
+            // MODULE HR - EMPLOYEE COMMISSIONS
+            'hr.employees.commissions.view',             // Ver empleados con comisiones
 
         ];
 

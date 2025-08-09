@@ -265,6 +265,59 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Obtener empleados con sus comisiones para integración HR-Collections
+     */
+    public function withCommissions(Request $request): JsonResponse
+    {
+        try {
+            $filters = $request->only(['status', 'verification_status', 'payment_status', 'period_start', 'period_end']);
+            
+            // Obtener empleados que tienen comisiones
+            $employees = $this->employeeRepo->getEmployeesWithCommissions($filters);
+            
+            $employeesData = $employees->map(function($employee) {
+                return [
+                    'employee_id' => $employee->employee_id,
+                    'employee_code' => $employee->employee_code,
+                    'full_name' => $employee->full_name,
+                    'email' => $employee->user?->email,
+                    'team' => $employee->team?->name,
+                    'commissions' => $employee->commissions->map(function($commission) {
+                        return [
+                            'commission_id' => $commission->commission_id,
+                            'amount' => $commission->amount,
+                            'verification_status' => $commission->verification_status,
+                            'payment_status' => $commission->payment_status,
+                            'period_start' => $commission->period_start,
+                            'period_end' => $commission->period_end,
+                            'customer_id' => $commission->customer_id,
+                            'customer_name' => $commission->customer?->name,
+                            'verified_at' => $commission->verified_at,
+                            'eligible_date' => $commission->eligible_date
+                        ];
+                    }),
+                    'total_commission_amount' => $employee->commissions->sum('amount'),
+                    'verified_commission_amount' => $employee->commissions->where('verification_status', 'verified')->sum('amount'),
+                    'pending_commission_amount' => $employee->commissions->where('verification_status', 'pending')->sum('amount')
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $employeesData,
+                'total_employees' => $employeesData->count(),
+                'total_commission_amount' => $employeesData->sum('total_commission_amount'),
+                'message' => 'Empleados con comisiones obtenidos exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener empleados con comisiones: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Generar usuario para un empleado existente
      */
     public function generateUser(Request $request, int $employeeId): JsonResponse

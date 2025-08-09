@@ -4,7 +4,7 @@ namespace Modules\HumanResources\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class storeBonusRequest extends FormRequest
+class StoreBonusRequest extends FormRequest
 {
     public function authorize(): bool
     {

@@ -24,9 +24,19 @@ return new class extends Migration
             WHERE advisor_id IS NULL
         ");
         
-        // Luego, modificar la columna para que no sea nullable
+        // Eliminar la foreign key existente que tiene onDelete('set null')
+        Schema::table('reservations', function (Blueprint $table) {
+            $table->dropForeign(['advisor_id']);
+        });
+        
+        // Modificar la columna para que no sea nullable
         Schema::table('reservations', function (Blueprint $table) {
             $table->unsignedBigInteger('advisor_id')->nullable(false)->change();
+        });
+        
+        // Recrear la foreign key con onDelete('cascade') para compatibilidad con NOT NULL
+        Schema::table('reservations', function (Blueprint $table) {
+            $table->foreign('advisor_id')->references('employee_id')->on('employees')->onDelete('cascade');
         });
     }
 
@@ -35,8 +45,19 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // Eliminar la foreign key con cascade
+        Schema::table('reservations', function (Blueprint $table) {
+            $table->dropForeign(['advisor_id']);
+        });
+        
+        // Hacer la columna nullable nuevamente
         Schema::table('reservations', function (Blueprint $table) {
             $table->unsignedBigInteger('advisor_id')->nullable()->change();
+        });
+        
+        // Recrear la foreign key original con onDelete('set null')
+        Schema::table('reservations', function (Blueprint $table) {
+            $table->foreign('advisor_id')->references('employee_id')->on('employees')->onDelete('set null');
         });
     }
 };

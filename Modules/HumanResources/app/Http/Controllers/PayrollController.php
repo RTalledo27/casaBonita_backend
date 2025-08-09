@@ -18,10 +18,12 @@ class PayrollController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $filters = $request->only(['period', 'status', 'employee_id']);
+        $filters = $request->only(['period', 'status', 'employee_id', 'search', 'page', 'per_page']);
 
         if ($request->has('paginate') && $request->paginate === 'true') {
             $payrolls = $this->payrollRepo->getPaginated($filters, $request->get('per_page', 15));
+            $globalTotals = $this->payrollRepo->getGlobalTotals($filters);
+            
             return response()->json([
                 'success' => true,
                 'data' => PayrollResource::collection($payrolls->items()),
@@ -31,6 +33,7 @@ class PayrollController extends Controller
                     'per_page' => $payrolls->perPage(),
                     'total' => $payrolls->total()
                 ],
+                'totals' => $globalTotals,
                 'message' => 'Nóminas obtenidas exitosamente'
             ]);
         } else {

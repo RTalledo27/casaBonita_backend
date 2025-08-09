@@ -1,6 +1,5 @@
 <?php
 
-use Modules\Security\Models\User;
 
 return [
 

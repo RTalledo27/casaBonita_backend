@@ -5,6 +5,7 @@ namespace Modules\HumanResources\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Sales\Models\Contract;
+use App\Models\CommissionPaymentVerification;
 
 // use Modules\HumanResources\Database\Factories\CommissionFactory;
 
@@ -35,7 +36,13 @@ class Commission extends Model
         'notes',
         'payment_type',
         'total_commission_amount',
-        'sales_count'
+        'sales_count',
+        'requires_client_payment_verification',
+        'payment_verification_status',
+        'first_payment_verified_at',
+        'second_payment_verified_at',
+        'is_eligible_for_payment',
+        'verification_notes'
     ];
 
     protected $casts = [
@@ -46,7 +53,11 @@ class Commission extends Model
         'payment_percentage' => 'decimal:2',
         'payment_date' => 'date',
         'sales_count' => 'integer',
-        'payment_part' => 'integer'
+        'payment_part' => 'integer',
+        'requires_client_payment_verification' => 'boolean',
+        'first_payment_verified_at' => 'datetime',
+        'second_payment_verified_at' => 'datetime',
+        'is_eligible_for_payment' => 'boolean'
     ];
 
     public function employee()
@@ -169,5 +180,162 @@ class Commission extends Model
     public static function generatePaymentPeriod(int $month, int $year, int $part = 1): string
     {
         return sprintf('%04d-%02d-P%d', $year, $month, $part);
+    }
+
+    // === MÉTODOS PARA VERIFICACIÓN DE PAGOS ===
+
+    /**
+     * Relación con las verificaciones de pago
+     */
+    public function paymentVerifications()
+    {
+        return $this->hasMany(CommissionPaymentVerification::class, 'commission_id', 'commission_id');
+    }
+
+    /**
+     * Verificación de la primera cuota
+     */
+    public function firstPaymentVerification()
+    {
+        return $this->hasOne(CommissionPaymentVerification::class, 'commission_id', 'commission_id')
+                    ->where('payment_installment', 'first');
+    }
+
+    /**
+     * Verificación de la segunda cuota
+     */
+    public function secondPaymentVerification()
+    {
+        return $this->hasOne(CommissionPaymentVerification::class, 'commission_id', 'commission_id')
+                    ->where('payment_installment', 'second');
+    }
+
+    /**
+     * Scope para comisiones que requieren verificación
+     */
+    public function scopeRequiresVerification($query)
+    {
+        return $query->where('requires_client_payment_verification', true);
+    }
+
+    /**
+     * Scope para comisiones elegibles para pago
+     */
+    public function scopeEligibleForPayment($query)
+    {
+        return $query->where('is_eligible_for_payment', true);
+    }
+
+    /**
+     * Scope por estado de verificación
+     */
+    public function scopeByVerificationStatus($query, $status)
+    {
+        return $query->where('payment_verification_status', $status);
+    }
+
+    /**
+     * Verifica si la comisión requiere verificación de pagos
+     */
+    public function requiresPaymentVerification(): bool
+    {
+        return $this->requires_client_payment_verification;
+    }
+
+    /**
+     * Verifica si la primera cuota está verificada
+     */
+    public function isFirstPaymentVerified(): bool
+    {
+        return !is_null($this->first_payment_verified_at) && 
+               in_array($this->payment_verification_status, ['first_payment_verified', 'fully_verified']);
+    }
+
+    /**
+     * Verifica si la segunda cuota está verificada
+     */
+    public function isSecondPaymentVerified(): bool
+    {
+        return !is_null($this->second_payment_verified_at) && 
+               in_array($this->payment_verification_status, ['second_payment_verified', 'fully_verified']);
+    }
+
+    /**
+     * Verifica si ambas cuotas están verificadas
+     */
+    public function isFullyVerified(): bool
+    {
+        return $this->payment_verification_status === 'fully_verified';
+    }
+
+    /**
+     * Verifica si la comisión es elegible para pago
+     */
+    public function isEligibleForPayment(): bool
+    {
+        // Si no requiere verificación, siempre es elegible
+        if (!$this->requiresPaymentVerification()) {
+            return true;
+        }
+
+        // Si requiere verificación, debe cumplir las condiciones
+        return $this->is_eligible_for_payment;
+    }
+
+    /**
+     * Obtiene el nombre legible del estado de verificación
+     */
+    public function getVerificationStatusNameAttribute(): string
+    {
+        if (!$this->requiresPaymentVerification()) {
+            return 'No requiere verificación';
+        }
+
+        return match($this->payment_verification_status) {
+            'pending_verification' => 'Pendiente de verificación',
+            'first_payment_verified' => 'Primera cuota verificada',
+            'second_payment_verified' => 'Segunda cuota verificada',
+            'fully_verified' => 'Completamente verificado',
+            'verification_failed' => 'Verificación fallida',
+            default => 'Estado desconocido'
+        };
+    }
+
+    /**
+     * Obtiene la clase CSS para el estado de verificación
+     */
+    public function getVerificationStatusClassAttribute(): string
+    {
+        if (!$this->requiresPaymentVerification()) {
+            return 'text-blue-600 bg-blue-100';
+        }
+
+        return match($this->payment_verification_status) {
+            'pending_verification' => 'text-yellow-600 bg-yellow-100',
+            'first_payment_verified' => 'text-orange-600 bg-orange-100',
+            'second_payment_verified' => 'text-orange-600 bg-orange-100',
+            'fully_verified' => 'text-green-600 bg-green-100',
+            'verification_failed' => 'text-red-600 bg-red-100',
+            default => 'text-gray-600 bg-gray-100'
+        };
+    }
+
+    /**
+     * Obtiene el progreso de verificación como porcentaje
+     */
+    public function getVerificationProgressAttribute(): int
+    {
+        if (!$this->requiresPaymentVerification()) {
+            return 100;
+        }
+
+        return match($this->payment_verification_status) {
+            'pending_verification' => 0,
+            'first_payment_verified' => 50,
+            'second_payment_verified' => 50,
+            'fully_verified' => 100,
+            'verification_failed' => 0,
+            default => 0
+        };
     }
 }

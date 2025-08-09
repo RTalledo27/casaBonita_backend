@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\HumanResources\app\Services;
+namespace Modules\HumanResources\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -151,19 +151,19 @@ class EmployeeImportService
                 'email' => $row['CORREO'],
                 'status' => 'active',
                 'must_change_password' => true,
-                'first_name' => $nameParts['first_name'],
-                'last_name' => $nameParts['last_name'],
+                'first_name' => $this->removeAccents($nameParts['first_name']), // Normalizar nombres
+                'last_name' => $this->removeAccents($nameParts['last_name']), // Normalizar nombres
                 'dni' => $row['DNI'] ?? null,
                 'phone' => $row['TELEFONO'] ?? null,
                 'birth_date' => $birthDate,
-                'position' => $row['TIPO EMPLEADO'] ?? null,
+                'position' => $row['CARGO'] ?? null,
                 'department' => $row['DEPARTAMENTO'] ?? null,
                 'address' => $row['DIRECCION'] ?? null,
                 'hire_date' => $hireDate,
             ],
             'employee_data' => [
                 'employee_code' => $employeeCode,
-                'employee_type' => $this->mapEmployeeType($row['TIPO EMPLEADO'] ?? ''),
+                'employee_type' => $this->mapEmployeeType($row['CARGO'] ?? ''),
                 'base_salary' => $baseSalary,
                 'hire_date' => $hireDate,
                 'employment_status' => 'activo',
@@ -264,22 +264,53 @@ class EmployeeImportService
      */
     private function mapEmployeeType(string $cargo): string
     {
-        $cargo = strtolower($cargo);
+        $cargo = mb_strtolower(trim($cargo), 'UTF-8');
+        // Normalizar caracteres especiales
+        $cargo = $this->removeAccents($cargo);
         
-        if (str_contains($cargo, 'asesor') || str_contains($cargo, 'inmobiliario')) {
+        // Mapeo específico de cargos a tipos de empleado
+        if (str_contains($cargo, 'asesor') && str_contains($cargo, 'inmobiliario')) {
             return 'asesor_inmobiliario';
         }
-        if (str_contains($cargo, 'vendedor')) {
-            return 'vendedor';
+        if (str_contains($cargo, 'jefa') && str_contains($cargo, 'ventas')) {
+            return 'jefa_de_ventas';
         }
-        if (str_contains($cargo, 'gerente')) {
-            return 'gerente';
+        if (str_contains($cargo, 'arquitecto') && !str_contains($cargo, 'arquitecta')) {
+            return 'arquitecto';
         }
-        if (str_contains($cargo, 'jefe')) {
-            return 'jefe_ventas';
+        if (str_contains($cargo, 'arquitecta')) {
+            return 'arquitecta';
+        }
+        if ((str_contains($cargo, 'community') || str_contains($cargo, 'comunity')) && str_contains($cargo, 'manager')) {
+            return 'community_manager_corporativo';
+        }
+        if (str_contains($cargo, 'ingeniero') && str_contains($cargo, 'sistemas')) {
+            return 'ingeniero_de_sistemas';
+        }
+        if (str_contains($cargo, 'disenador') && str_contains($cargo, 'audiovisual')) {
+            return 'diseñador_audiovisual_area_de_marketing';
+        }
+        if (str_contains($cargo, 'disenador') && str_contains($cargo, 'marketing')) {
+            return 'diseñador_audiovisual_area_de_marketing';
+        }
+        if (str_contains($cargo, 'encargado') && str_contains($cargo, 'ti')) {
+            return 'encargado_de_ti';
+        }
+        if (str_contains($cargo, 'director')) {
+            return 'director';
+        }
+        if (str_contains($cargo, 'analista') && str_contains($cargo, 'administracion')) {
+            return 'analista_de_administracion';
+        }
+        if (str_contains($cargo, 'tracker')) {
+            return 'tracker';
+        }
+        if (str_contains($cargo, 'contadora') && str_contains($cargo, 'junior')) {
+            return 'contadora_junior';
         }
         
-        return 'administrativo';
+        // Por defecto, si no coincide con ningún patrón específico, asignar asesor inmobiliario
+        return 'asesor_inmobiliario';
     }
 
     /**
@@ -400,7 +431,8 @@ class EmployeeImportService
     }
 
     /**
-     * Remover acentos
+     * Remover acentos - Mejorado para normalizar nombres completos
+     * Ahora se usa tanto para usernames como para nombres y apellidos
      */
     private function removeAccents(string $string): string
     {
@@ -410,7 +442,7 @@ class EmployeeImportService
             'ñ' => 'n', 'Ñ' => 'N'
         ];
         
-        return strtr($string, $accents);
+        return strtr(trim($string), $accents);
     }
 
     /**

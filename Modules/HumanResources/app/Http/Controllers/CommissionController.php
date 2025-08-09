@@ -5,15 +5,21 @@ namespace Modules\HumanResources\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Modules\HumanResources\Repositories\CommissionRepository;
 use Modules\HumanResources\Services\CommissionService;
+use Modules\HumanResources\Services\CommissionVerificationService;
+use Modules\HumanResources\Services\CommissionPaymentVerificationService;
 use Modules\HumanResources\Transformers\CommissionResource;
+use Exception;
 
 class CommissionController extends Controller
 {
     public function __construct(
         protected CommissionRepository $commissionRepo,
-        protected CommissionService $commissionService
+        protected CommissionService $commissionService,
+        protected CommissionVerificationService $verificationService,
+        protected CommissionPaymentVerificationService $paymentVerificationService
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -325,6 +331,301 @@ class CommissionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al marcar comisiones como pagadas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // === MÉTODOS PARA COMISIONES CONDICIONADAS ===
+
+    /**
+     * Obtiene comisiones que requieren verificación de pagos
+     */
+    public function getCommissionsRequiringVerification(Request $request): JsonResponse
+    {
+        try {
+            $filters = $request->only([
+                'employee_id', 'payment_dependency_type', 'date_from', 'date_to'
+            ]);
+
+            $query = $this->commissionRepo->getCommissionsRequiringVerification($filters);
+
+            if ($request->has('paginate') && $request->paginate === 'true') {
+                $commissions = $query->paginate($request->get('per_page', 15));
+                return response()->json([
+                    'success' => true,
+                    'data' => CommissionResource::collection($commissions->items()),
+                    'meta' => [
+                        'current_page' => $commissions->currentPage(),
+                        'last_page' => $commissions->lastPage(),
+                        'per_page' => $commissions->perPage(),
+                        'total' => $commissions->total()
+                    ],
+                    'message' => 'Comisiones que requieren verificación obtenidas exitosamente'
+                ]);
+            } else {
+                $commissions = $query->get();
+                return response()->json([
+                    'success' => true,
+                    'data' => CommissionResource::collection($commissions),
+                    'message' => 'Comisiones que requieren verificación obtenidas exitosamente'
+                ]);
+            }
+
+        } catch (Exception $e) {
+            Log::error('Error obteniendo comisiones que requieren verificación', [
+                'filters' => $request->all(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener las comisiones',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verifica manualmente los pagos de una comisión
+     */
+    public function verifyCommissionPayments(int $commissionId): JsonResponse
+    {
+        try {
+            $commission = $this->commissionRepo->findById($commissionId);
+            
+            if (!$commission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ], 404);
+            }
+
+            $results = $this->paymentVerificationService->verifyClientPayments($commission);
+
+            Log::info('Verificación manual de comisión completada', [
+                'commission_id' => $commissionId,
+                'user_id' => auth()->id(),
+                'results' => $results
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $results,
+                'message' => 'Verificación de pagos completada exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error en verificación manual de comisión', [
+                'commission_id' => $commissionId,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al verificar los pagos de la comisión',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtiene el estado de verificación de una comisión
+     */
+    public function getVerificationStatus(int $commissionId): JsonResponse
+    {
+        try {
+            $commission = $this->commissionRepo->findById($commissionId);
+            
+            if (!$commission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ], 404);
+            }
+
+            $verificationData = [
+                'commission_id' => $commission->commission_id,
+                'payment_dependency_type' => $commission->payment_dependency_type,
+                'payment_verification_status' => $commission->payment_verification_status,
+                'client_payments_verified' => $commission->client_payments_verified,
+                'required_client_payments' => $commission->required_client_payments,
+                'auto_verification_enabled' => $commission->auto_verification_enabled,
+                'next_verification_date' => $commission->next_verification_date,
+                'verification_notes' => $commission->verification_notes,
+                'payment_verifications' => $commission->paymentVerifications()->with('customerPayment')->get()
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $verificationData,
+                'message' => 'Estado de verificación obtenido exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error obteniendo estado de verificación', [
+                'commission_id' => $commissionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener el estado de verificación',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Actualiza la configuración de verificación de una comisión
+     */
+    public function updateVerificationSettings(Request $request, int $commissionId): JsonResponse
+    {
+        $request->validate([
+            'payment_dependency_type' => 'sometimes|in:none,first_payment_only,second_payment_only,both_payments,any_payment',
+            'required_client_payments' => 'sometimes|integer|min:0',
+            'auto_verification_enabled' => 'sometimes|boolean'
+        ]);
+
+        try {
+            $commission = $this->commissionRepo->findById($commissionId);
+            
+            if (!$commission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ], 404);
+            }
+
+            $updateData = $request->only([
+                'payment_dependency_type',
+                'required_client_payments', 
+                'auto_verification_enabled'
+            ]);
+
+            $commission->update($updateData);
+
+            Log::info('Configuración de verificación actualizada', [
+                'commission_id' => $commissionId,
+                'user_id' => auth()->id(),
+                'changes' => $updateData
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => new CommissionResource($commission->fresh()),
+                'message' => 'Configuración de verificación actualizada exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error actualizando configuración de verificación', [
+                'commission_id' => $commissionId,
+                'request_data' => $request->all(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al actualizar la configuración',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtiene estadísticas de verificación
+     */
+    public function getVerificationStats(Request $request): JsonResponse
+    {
+        try {
+            $filters = $request->only([
+                'date_from', 'date_to', 'payment_dependency_type'
+            ]);
+
+            $stats = $this->verificationService->getVerificationStats($filters);
+
+            return response()->json([
+                'success' => true,
+                'data' => $stats,
+                'message' => 'Estadísticas de verificación obtenidas exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error obteniendo estadísticas de verificación', [
+                'filters' => $request->all(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener las estadísticas',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Procesa verificaciones automáticas pendientes
+     */
+    public function processAutomaticVerifications(Request $request): JsonResponse
+    {
+        try {
+            $limit = $request->get('limit', 50);
+            
+            // Obtener comisiones que necesitan verificación automática
+            $commissions = $this->commissionRepo->getCommissionsForAutomaticVerification($limit);
+            
+            $results = [
+                'processed' => 0,
+                'verified' => 0,
+                'errors' => 0,
+                'details' => []
+            ];
+
+            foreach ($commissions as $commission) {
+                try {
+                    $verificationResult = $this->paymentVerificationService->verifyClientPayments($commission);
+                    
+                    $results['processed']++;
+                    if ($verificationResult['first_payment'] || $verificationResult['second_payment']) {
+                        $results['verified']++;
+                    }
+                    
+                    $results['details'][] = [
+                        'commission_id' => $commission->commission_id,
+                        'result' => $verificationResult
+                    ];
+                    
+                } catch (Exception $e) {
+                    $results['errors']++;
+                    $results['details'][] = [
+                        'commission_id' => $commission->commission_id,
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+
+            Log::info('Procesamiento automático de verificaciones completado', [
+                'user_id' => auth()->id(),
+                'results' => $results
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $results,
+                'message' => 'Verificaciones automáticas procesadas exitosamente'
+            ]);
+
+        } catch (Exception $e) {
+            Log::error('Error en procesamiento automático de verificaciones', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar las verificaciones automáticas',
+                'error' => $e->getMessage()
             ], 500);
         }
     }

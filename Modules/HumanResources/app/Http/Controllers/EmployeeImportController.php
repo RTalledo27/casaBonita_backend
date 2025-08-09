@@ -1,16 +1,16 @@
 <?php
 
-namespace Modules\HumanResources\app\Http\Controllers;
+namespace Modules\HumanResources\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
-use Modules\HumanResources\app\Services\EmployeeImportService;
+use Modules\HumanResources\Services\EmployeeImportService;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use Exception;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class EmployeeImportController
 {

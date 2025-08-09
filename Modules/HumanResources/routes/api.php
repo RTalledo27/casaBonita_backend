@@ -5,8 +5,9 @@ use Modules\HumanResources\Http\Controllers\BonusController;
 use Modules\HumanResources\Http\Controllers\BonusGoalController;
 use Modules\HumanResources\Http\Controllers\BonusTypeController;
 use Modules\HumanResources\Http\Controllers\CommissionController;
+use Modules\HumanResources\Http\Controllers\CommissionPaymentVerificationController;
 use Modules\HumanResources\Http\Controllers\EmployeeController;
-use Modules\HumanResources\app\Http\Controllers\EmployeeImportController;
+use Modules\HumanResources\Http\Controllers\EmployeeImportController;
 use Modules\HumanResources\Http\Controllers\HumanResourcesController;
 use Modules\HumanResources\Http\Controllers\PayrollController;
 use Modules\HumanResources\Http\Controllers\TeamController;
@@ -27,6 +28,9 @@ Route::prefix('v1')->group(function () {
                 Route::get('admin-dashboard', [EmployeeController::class, 'adminDashboard']);
                 Route::get('advisors', [EmployeeController::class, 'advisors'])->name('hr.employees.advisors');
                 Route::get('/without-user', [EmployeeController::class, 'getEmployeesWithoutUser'])->name('hr.employees.without-user');
+                Route::get('/with-commissions', [EmployeeController::class, 'withCommissions'])
+                    ->middleware('permission:hr.employees.commissions.view')
+                    ->name('hr.employees.with-commissions');
                 Route::get('/{employee}', [EmployeeController::class,'show'])->name('hr.employees.show');
                 Route::post('/', [EmployeeController::class, 'store'])->name('hr.employees.store');
                 Route::post('/{employee}/generate-user', [EmployeeController::class, 'generateUser'])->name('hr.employees.generate-user');
@@ -55,6 +59,17 @@ Route::prefix('v1')->group(function () {
                 Route::post('/pay', [CommissionController::class, 'pay'])->name('hr.commissions.pay');
                 Route::post('/mark-multiple-paid', [CommissionController::class, 'markMultipleAsPaid'])->name('hr.commissions.mark-multiple-paid');
                 Route::post('/{commission}/split-payment', [CommissionController::class, 'createSplitPayment'])->name('hr.commissions.split-payment');
+            });
+
+            // Rutas de Verificaciones de Pago de Comisiones
+            Route::prefix('commission-payment-verifications')->group(function () {
+                Route::get('/requiring-verification', [CommissionPaymentVerificationController::class, 'getCommissionsRequiringVerification'])->name('hr.commission-verifications.requiring-verification');
+                Route::get('/stats', [CommissionPaymentVerificationController::class, 'getVerificationStats'])->name('hr.commission-verifications.stats');
+                Route::post('/verify-payment', [CommissionPaymentVerificationController::class, 'verifyPayment'])->name('hr.commission-verifications.verify-payment');
+                Route::post('/process-automatic', [CommissionPaymentVerificationController::class, 'processAutomaticVerifications'])->name('hr.commission-verifications.process-automatic');
+                Route::get('/{commission}/verifications', [CommissionPaymentVerificationController::class, 'index'])->name('hr.commission-verifications.index');
+                Route::get('/{commission}/status', [CommissionPaymentVerificationController::class, 'getVerificationStatus'])->name('hr.commission-verifications.status');
+                Route::post('/{verification}/reverse', [CommissionPaymentVerificationController::class, 'reverseVerification'])->name('hr.commission-verifications.reverse');
             });
 
             // Bonus routes
