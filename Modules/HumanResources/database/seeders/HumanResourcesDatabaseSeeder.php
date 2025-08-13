@@ -12,6 +12,9 @@ class HumanResourcesDatabaseSeeder extends Seeder
     public function run(): void
     {
         // $this->call([]);
-        $this->call([TestRHSeeder::class]);
+        $this->call([
+            TestRHSeeder::class,
+            HrIntegrationTestSeeder::class
+        ]);
     }
 }

@@ -157,6 +157,7 @@ class CommissionVerificationService
 
     /**
      * Determina si un pago afecta una comisión específica
+     * Considera el payment_part para comisiones divididas
      */
     protected function doesPaymentAffectCommission(Commission $commission, InstallmentPaidEvent $event): bool
     {
@@ -165,7 +166,18 @@ class CommissionVerificationService
             return false;
         }
 
-        // Verificar según el tipo de dependencia
+        // Para comisiones divididas, solo considerar el pago correspondiente al payment_part
+        if ($commission->payment_part) {
+            if ($commission->payment_part == 1) {
+                // payment_part = 1 solo se afecta por el primer pago del cliente
+                return $event->installmentType === 'first';
+            } elseif ($commission->payment_part == 2) {
+                // payment_part = 2 solo se afecta por el segundo pago del cliente
+                return $event->installmentType === 'second';
+            }
+        }
+
+        // Para comisiones no divididas, verificar según el tipo de dependencia
         switch ($commission->payment_dependency_type) {
             case 'first_payment_only':
                 return $event->installmentType === 'first';
@@ -298,12 +310,25 @@ class CommissionVerificationService
 
     /**
      * Determina el estado de verificación de una comisión
+     * Considera el payment_part para comisiones divididas
      */
     protected function determineCommissionStatus(
         Commission $commission,
         bool $hasFirstPayment,
         bool $hasSecondPayment
     ): string {
+        // Para comisiones divididas, solo considerar el pago correspondiente
+        if ($commission->payment_part) {
+            if ($commission->payment_part == 1) {
+                // payment_part = 1 solo necesita el primer pago
+                return $hasFirstPayment ? 'verified' : 'pending';
+            } elseif ($commission->payment_part == 2) {
+                // payment_part = 2 solo necesita el segundo pago
+                return $hasSecondPayment ? 'verified' : 'pending';
+            }
+        }
+
+        // Para comisiones no divididas, verificar según el tipo de dependencia
         switch ($commission->payment_dependency_type) {
             case 'first_payment_only':
                 return $hasFirstPayment ? 'verified' : 'pending';

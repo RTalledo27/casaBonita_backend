@@ -416,4 +416,46 @@ class CommissionRepository
         return $this->model->byPeriod($month, $year)
             ->sum('commission_amount');
     }
+
+    /**
+     * Obtiene comisiones que requieren verificación de pagos
+     */
+    public function getCommissionsRequiringVerification(array $filters = [])
+    {
+        $query = $this->model->with(['employee.user', 'contract', 'paymentVerifications'])
+            ->requiresVerification();
+
+        // Aplicar filtros
+        if (isset($filters['employee_id'])) {
+            $query->where('employee_id', $filters['employee_id']);
+        }
+
+        if (isset($filters['payment_verification_status'])) {
+            $query->byVerificationStatus($filters['payment_verification_status']);
+        }
+
+        if (isset($filters['period_month'])) {
+            $query->where('period_month', $filters['period_month']);
+        }
+
+        if (isset($filters['period_year'])) {
+            $query->where('period_year', $filters['period_year']);
+        }
+
+        if (isset($filters['commission_period'])) {
+            $query->where('commission_period', $filters['commission_period']);
+        }
+
+        if (isset($filters['search'])) {
+            $search = $filters['search'];
+            $query->whereHas('employee.user', function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            })->orWhereHas('contract', function($q) use ($search) {
+                $q->where('contract_number', 'like', "%{$search}%");
+            });
+        }
+
+        return $query->orderBy('created_at', 'desc');
+    }
 }

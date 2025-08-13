@@ -190,4 +190,49 @@ class EmployeeRepository
             ->orderBy('created_at', 'desc')
             ->get();
     }
+
+    /**
+     * Obtener empleados que tienen comisiones para integración HR-Collections
+     */
+    public function getEmployeesWithCommissions(array $filters = []): Collection
+    {
+        $query = $this->model->with([
+            'user', 
+            'team',
+            'commissions' => function ($commissionQuery) use ($filters) {
+                if (isset($filters['verification_status'])) {
+                    $commissionQuery->where('verification_status', $filters['verification_status']);
+                }
+                if (isset($filters['payment_status'])) {
+                    $commissionQuery->where('payment_status', $filters['payment_status']);
+                }
+                if (isset($filters['period_start'])) {
+                    $commissionQuery->where('period_start', '>=', $filters['period_start']);
+                }
+                if (isset($filters['period_end'])) {
+                    $commissionQuery->where('period_end', '<=', $filters['period_end']);
+                }
+                $commissionQuery->with('customer');
+            }
+        ])->whereHas('commissions', function ($commissionQuery) use ($filters) {
+            if (isset($filters['verification_status'])) {
+                $commissionQuery->where('verification_status', $filters['verification_status']);
+            }
+            if (isset($filters['payment_status'])) {
+                $commissionQuery->where('payment_status', $filters['payment_status']);
+            }
+            if (isset($filters['period_start'])) {
+                $commissionQuery->where('period_start', '>=', $filters['period_start']);
+            }
+            if (isset($filters['period_end'])) {
+                $commissionQuery->where('period_end', '<=', $filters['period_end']);
+            }
+        });
+
+        if (isset($filters['status']) && $filters['status'] === 'active') {
+            $query->where('employment_status', 'activo');
+        }
+
+        return $query->orderBy('created_at', 'desc')->get();
+    }
 }

@@ -5,9 +5,9 @@ namespace Modules\Collections\Http\Controllers;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
-use Modules\Collections\app\Models\CustomerPayment;
-use Modules\HR\app\Models\Employee;
-use Modules\HR\app\Models\Commission;
+use Modules\Collections\Models\CustomerPayment;
+use Modules\HumanResources\Models\Employee;
+use Modules\HumanResources\Models\Commission;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -24,7 +24,7 @@ class HrIntegrationController extends Controller
                 'pending_verifications' => Commission::where('verification_status', 'pending')->count(),
                 'verified_commissions' => Commission::where('verification_status', 'verified')->count(),
                 'failed_verifications' => Commission::where('verification_status', 'failed')->count(),
-                'total_commission_amount' => Commission::where('verification_status', 'verified')->sum('amount'),
+                'total_commission_amount' => Commission::where('verification_status', 'verified')->sum('commission_amount'),
                 'last_sync_date' => Commission::latest('updated_at')->first()?->updated_at,
                 'employees_eligible_for_payment' => Employee::whereHas('commissions', function($query) {
                     $query->where('verification_status', 'verified')
@@ -55,24 +55,38 @@ class HrIntegrationController extends Controller
 
             // Sincronizar comisiones con pagos de clientes
             $syncedCount = 0;
+            
+            // Obtener comisiones pendientes con logging
             $commissions = Commission::where('verification_status', 'pending')
-                                   ->with(['employee', 'customer'])
+                                   ->with(['employee'])
                                    ->get();
 
             foreach ($commissions as $commission) {
-                // Buscar pagos relacionados del cliente
-                $customerPayments = CustomerPayment::where('customer_id', $commission->customer_id)
-                                                  ->where('payment_date', '>=', $commission->period_start)
-                                                  ->where('payment_date', '<=', $commission->period_end)
-                                                  ->get();
+                try {
+                    // Verificar que los campos necesarios no sean null
+                    if (is_null($commission->customer_id) || is_null($commission->period_start) || is_null($commission->period_end)) {
+                        continue; // Saltar esta comisión si faltan datos
+                    }
+                    
+                    // Buscar pagos relacionados del cliente con validación
+                    $customerPayments = CustomerPayment::where('client_id', $commission->customer_id)
+                                                      ->whereNotNull('payment_date')
+                                                      ->where('payment_date', '>=', $commission->period_start)
+                                                      ->where('payment_date', '<=', $commission->period_end)
+                                                      ->get();
 
-                if ($customerPayments->isNotEmpty()) {
-                    $commission->update([
-                        'verification_status' => 'verified',
-                        'verified_at' => now(),
-                        'verified_amount' => $customerPayments->sum('amount')
-                    ]);
-                    $syncedCount++;
+                    if ($customerPayments->isNotEmpty()) {
+                        $commission->update([
+                            'verification_status' => 'verified',
+                            'verified_at' => now(),
+                            'verified_amount' => $customerPayments->sum('amount')
+                        ]);
+                        $syncedCount++;
+                    }
+                } catch (\Exception $innerE) {
+                    // Log el error específico pero continúa con la siguiente comisión
+                    \Log::error('Error procesando comisión ID: ' . $commission->commission_id . ' - ' . $innerE->getMessage());
+                    continue;
                 }
             }
 
@@ -111,7 +125,7 @@ class HrIntegrationController extends Controller
             }])->get();
 
             $processedData = $eligibleEmployees->map(function($employee) {
-                $totalCommission = $employee->commissions->sum('amount');
+                $totalCommission = $employee->commissions->sum('commission_amount');
                 return [
                     'employee_id' => $employee->id,
                     'employee_name' => $employee->full_name,
@@ -158,7 +172,7 @@ class HrIntegrationController extends Controller
                                    ->where('payment_status', 'pending')
                                    ->update([
                                        'payment_status' => 'eligible',
-                                       'eligible_date' => now()
+                                       'eligible_date' => now()->toDateTimeString()
                                    ]);
                 $markedCount += $updated;
             }

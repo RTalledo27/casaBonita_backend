@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::group([], function () {
-    Route::resource('collections', 'CollectionsController')->names('collections');
-});
+// Web routes disabled for API-only Collections module
+// Route::group([], function () {
+//     Route::resource('collections', 'CollectionsController')->names('collections');
+// });

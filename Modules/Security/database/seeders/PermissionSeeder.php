@@ -193,15 +193,6 @@ class PermissionSeeder extends Seeder
             // MODULE COLLECTIONS - ACCOUNTS RECEIVABLE
             'collections.accounts-receivable.view',      // Ver cuentas por cobrar
             'collections.accounts-receivable.overdue',   // Ver cuentas por cobrar vencidas
-            
-            // MODULE COLLECTIONS - HR INTEGRATION
-            'collections.hr-integration.view',           // Ver estadísticas de integración HR
-            'collections.hr-integration.sync',           // Sincronizar datos HR con Collections
-            'collections.hr-integration.process',        // Procesar empleados elegibles
-            'collections.hr-integration.mark',           // Marcar empleados como elegibles
-            
-            // MODULE HR - EMPLOYEE COMMISSIONS
-            'hr.employees.commissions.view',             // Ver empleados con comisiones
 
         ];
 

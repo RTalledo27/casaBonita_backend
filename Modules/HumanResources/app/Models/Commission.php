@@ -42,7 +42,15 @@ class Commission extends Model
         'first_payment_verified_at',
         'second_payment_verified_at',
         'is_eligible_for_payment',
-        'verification_notes'
+        'verification_notes',
+        // Campos para integración HR-Collections
+        'verification_status',
+        'customer_id',
+        'period_start',
+        'period_end',
+        'verified_at',
+        'verified_amount',
+        'eligible_date'
     ];
 
     protected $casts = [
@@ -57,7 +65,12 @@ class Commission extends Model
         'requires_client_payment_verification' => 'boolean',
         'first_payment_verified_at' => 'datetime',
         'second_payment_verified_at' => 'datetime',
-        'is_eligible_for_payment' => 'boolean'
+        'is_eligible_for_payment' => 'boolean',
+        // Campos para integración HR-Collections
+        'period_start' => 'date',
+        'period_end' => 'date',
+        'verified_at' => 'datetime',
+        'verified_amount' => 'decimal:2'
     ];
 
     public function employee()
@@ -68,6 +81,11 @@ class Commission extends Model
     public function contract()
     {
         return $this->belongsTo(Contract::class, 'contract_id', 'contract_id');
+    }
+
+    public function customer()
+    {
+        return $this->belongsTo(\Modules\CRM\Models\Client::class, 'customer_id', 'client_id');
     }
 
     public static function calculateCommissionPercentage($salesCount, $installmentPlan)

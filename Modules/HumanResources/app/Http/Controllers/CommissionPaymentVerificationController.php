@@ -310,15 +310,15 @@ class CommissionPaymentVerificationController extends Controller
         try {
             $commissionPeriod = $request->get('commission_period');
             
-            // Crear consulta base
-            $baseQuery = Commission::query();
+            // Crear consulta base - SOLO para comisiones que requieren verificación
+            $baseQuery = Commission::requiresVerification();
             if ($commissionPeriod) {
                 $baseQuery->where('commission_period', $commissionPeriod);
             }
 
             // Calcular contadores usando consultas separadas
             $totalCommissions = (clone $baseQuery)->count();
-            $requiresVerification = (clone $baseQuery)->where('requires_client_payment_verification', true)->count();
+            $requiresVerification = $totalCommissions; // Todas las comisiones en baseQuery requieren verificación
             $totalPending = (clone $baseQuery)->byVerificationStatus('pending_verification')->count();
             $firstPaymentVerified = (clone $baseQuery)->byVerificationStatus('first_payment_verified')->count();
             $secondPaymentVerified = (clone $baseQuery)->byVerificationStatus('second_payment_verified')->count();

@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Security\Http\Controllers\Auth\AuthController;
+use Modules\Security\Http\Controllers\NotificationController;
 use Modules\Security\Http\Controllers\PermissionController;
 use Modules\Security\Http\Controllers\RoleController;
 use Modules\Security\Http\Controllers\SecurityController;
@@ -36,6 +37,12 @@ Route::prefix('v1')->group(function () {
 
                 // Permisos
                 Route::apiResource('permissions', PermissionController::class);
+                
+                // Rutas de notificaciones
+                Route::get('notifications', [NotificationController::class, 'index']);
+                Route::get('notifications/unread-count', [NotificationController::class, 'getUnreadCount']);
+                Route::patch('notifications/{id}/mark-as-read', [NotificationController::class, 'markAsRead']);
+                Route::patch('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
             });
         });
 

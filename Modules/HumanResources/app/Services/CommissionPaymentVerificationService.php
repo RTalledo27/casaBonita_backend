@@ -15,6 +15,7 @@ class CommissionPaymentVerificationService
 {
     /**
      * Verifica automáticamente los pagos del cliente para una comisión específica
+     * Considera el payment_part para comisiones divididas
      */
     public function verifyClientPayments(Commission $commission): array
     {
@@ -24,7 +25,8 @@ class CommissionPaymentVerificationService
             $results = [
                 'first_payment' => false,
                 'second_payment' => false,
-                'verification_details' => []
+                'verification_details' => [],
+                'payment_part' => $commission->payment_part
             ];
             
             // Solo procesar si la comisión requiere verificación
@@ -45,21 +47,44 @@ class CommissionPaymentVerificationService
                 return $results;
             }
             
-            // Verificar primera cuota
-            $firstInstallment = $accountsReceivable->first();
-            $results['first_payment'] = $this->verifyInstallmentPayment(
-                $commission, 
-                $firstInstallment, 
-                'first'
-            );
-            
-            // Verificar segunda cuota
-            $secondInstallment = $accountsReceivable->skip(1)->first();
-            $results['second_payment'] = $this->verifyInstallmentPayment(
-                $commission, 
-                $secondInstallment, 
-                'second'
-            );
+            // Para comisiones divididas, solo verificar la cuota correspondiente al payment_part
+            if ($commission->payment_part) {
+                if ($commission->payment_part == 1) {
+                    // Solo verificar primera cuota para payment_part = 1
+                    $firstInstallment = $accountsReceivable->first();
+                    $results['first_payment'] = $this->verifyInstallmentPayment(
+                        $commission, 
+                        $firstInstallment, 
+                        'first'
+                    );
+                    $results['message'] = 'Comisión dividida parte 1/2 - Solo verifica primera cuota del cliente';
+                } elseif ($commission->payment_part == 2) {
+                    // Solo verificar segunda cuota para payment_part = 2
+                    $secondInstallment = $accountsReceivable->skip(1)->first();
+                    $results['second_payment'] = $this->verifyInstallmentPayment(
+                        $commission, 
+                        $secondInstallment, 
+                        'second'
+                    );
+                    $results['message'] = 'Comisión dividida parte 2/2 - Solo verifica segunda cuota del cliente';
+                }
+            } else {
+                // Para comisiones no divididas, verificar ambas cuotas
+                $firstInstallment = $accountsReceivable->first();
+                $results['first_payment'] = $this->verifyInstallmentPayment(
+                    $commission, 
+                    $firstInstallment, 
+                    'first'
+                );
+                
+                $secondInstallment = $accountsReceivable->skip(1)->first();
+                $results['second_payment'] = $this->verifyInstallmentPayment(
+                    $commission, 
+                    $secondInstallment, 
+                    'second'
+                );
+                $results['message'] = 'Comisión completa - Verifica ambas cuotas del cliente';
+            }
             
             // Actualizar estado de verificación de la comisión
             $this->updateCommissionVerificationStatus($commission, $results);
@@ -69,6 +94,7 @@ class CommissionPaymentVerificationService
             Log::info('Verificación de pagos completada', [
                 'commission_id' => $commission->id,
                 'contract_id' => $commission->contract_id,
+                'payment_part' => $commission->payment_part,
                 'results' => $results
             ]);
             
@@ -143,6 +169,7 @@ class CommissionPaymentVerificationService
     
     /**
      * Actualiza el estado de verificación de la comisión
+     * Considera el payment_part para comisiones divididas
      */
     private function updateCommissionVerificationStatus(Commission $commission, array $results): void
     {
@@ -151,13 +178,31 @@ class CommissionPaymentVerificationService
         $firstVerifiedAt = null;
         $secondVerifiedAt = null;
         
-        if ($results['first_payment'] && $results['second_payment']) {
-            $status = 'fully_verified';
-            $isEligible = true;
-        } elseif ($results['first_payment']) {
-            $status = 'first_payment_verified';
-            // Solo elegible para pago si es first_payment o si ambos están verificados
-            $isEligible = ($commission->payment_type === 'first_payment');
+        // Para comisiones divididas, solo considerar la verificación correspondiente
+        if ($commission->payment_part) {
+            if ($commission->payment_part == 1) {
+                // Para payment_part = 1, solo importa la primera cuota
+                if ($results['first_payment']) {
+                    $status = 'fully_verified';
+                    $isEligible = true;
+                }
+            } elseif ($commission->payment_part == 2) {
+                // Para payment_part = 2, solo importa la segunda cuota
+                if ($results['second_payment']) {
+                    $status = 'fully_verified';
+                    $isEligible = true;
+                }
+            }
+        } else {
+            // Para comisiones no divididas, verificar ambas cuotas como antes
+            if ($results['first_payment'] && $results['second_payment']) {
+                $status = 'fully_verified';
+                $isEligible = true;
+            } elseif ($results['first_payment']) {
+                $status = 'first_payment_verified';
+                // Solo elegible para pago si es first_payment o si ambos están verificados
+                $isEligible = ($commission->payment_type === 'first_payment');
+            }
         }
         
         // Obtener fechas de verificación
@@ -187,21 +232,43 @@ class CommissionPaymentVerificationService
     
     /**
      * Genera notas de verificación basadas en los resultados
+     * Considera el payment_part para comisiones divididas
      */
     private function generateVerificationNotes(array $results): string
     {
         $notes = [];
         
-        if ($results['first_payment']) {
-            $notes[] = 'Primera cuota verificada';
+        // Agregar información sobre el tipo de comisión
+        if (isset($results['payment_part']) && $results['payment_part']) {
+            $notes[] = "Comisión dividida - Parte {$results['payment_part']}/2";
+            
+            if ($results['payment_part'] == 1) {
+                if ($results['first_payment']) {
+                    $notes[] = 'Primera cuota del cliente verificada (requerida para parte 1/2)';
+                } else {
+                    $notes[] = 'Primera cuota del cliente pendiente de pago (requerida para parte 1/2)';
+                }
+            } elseif ($results['payment_part'] == 2) {
+                if ($results['second_payment']) {
+                    $notes[] = 'Segunda cuota del cliente verificada (requerida para parte 2/2)';
+                } else {
+                    $notes[] = 'Segunda cuota del cliente pendiente de pago (requerida para parte 2/2)';
+                }
+            }
         } else {
-            $notes[] = 'Primera cuota pendiente de pago';
-        }
-        
-        if ($results['second_payment']) {
-            $notes[] = 'Segunda cuota verificada';
-        } else {
-            $notes[] = 'Segunda cuota pendiente de pago';
+            $notes[] = 'Comisión completa (no dividida)';
+            
+            if ($results['first_payment']) {
+                $notes[] = 'Primera cuota verificada';
+            } else {
+                $notes[] = 'Primera cuota pendiente de pago';
+            }
+            
+            if ($results['second_payment']) {
+                $notes[] = 'Segunda cuota verificada';
+            } else {
+                $notes[] = 'Segunda cuota pendiente de pago';
+            }
         }
         
         $notes[] = 'Verificación automática realizada el ' . now()->format('d/m/Y H:i:s');
@@ -276,6 +343,7 @@ class CommissionPaymentVerificationService
     
     /**
      * Recalcula el estado de verificación de una comisión
+     * Considera el payment_part para comisiones divididas
      */
     private function recalculateCommissionStatus(Commission $commission): void
     {
@@ -288,7 +356,8 @@ class CommissionPaymentVerificationService
         
         $results = [
             'first_payment' => $firstVerified,
-            'second_payment' => $secondVerified
+            'second_payment' => $secondVerified,
+            'payment_part' => $commission->payment_part
         ];
         
         $this->updateCommissionVerificationStatus($commission, $results);
