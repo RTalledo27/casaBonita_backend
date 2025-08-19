@@ -43,7 +43,6 @@ class ContractRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->can('sales.contracts.store
-        ') ?? false;
+        return $this->user()?->can('sales.contracts.store') ?? false;
     }
 }

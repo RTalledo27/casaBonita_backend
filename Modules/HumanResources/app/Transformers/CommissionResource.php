@@ -23,6 +23,8 @@ class CommissionResource extends JsonResource
             'payment_date' => $this->payment_date?->format('Y-m-d'),
             'period_month' => $this->period_month,
             'period_year' => $this->period_year,
+            'is_payable' => $this->is_payable,
+            'parent_commission_id' => $this->parent_commission_id,
             'notes' => $this->notes,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
 

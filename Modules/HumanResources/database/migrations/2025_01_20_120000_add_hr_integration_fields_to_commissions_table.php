@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('commissions')) {
+            return;
+        }
+        
         Schema::table('commissions', function (Blueprint $table) {
             // Campos para integración HR-Collections
             $table->string('verification_status')->default('pending')->after('is_eligible_for_payment');
@@ -33,6 +37,10 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (!Schema::hasTable('commissions')) {
+            return;
+        }
+        
         Schema::table('commissions', function (Blueprint $table) {
             $table->dropIndex(['verification_status']);
             $table->dropIndex(['customer_id']);

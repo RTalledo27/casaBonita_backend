@@ -337,4 +337,121 @@ class LotController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Diagnóstico de templates financieros de lotes
+     */
+    public function diagnoseLotFinancialTemplates()
+    {
+        try {
+            $lotImportService = new LotImportService();
+            $diagnosis = $lotImportService->diagnoseLotFinancialTemplates();
+            
+            return response()->json([
+                'success' => true,
+                'diagnosis' => $diagnosis
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error en diagnóstico: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Diagnóstico específico de la columna J desde Excel
+     */
+    public function diagnoseColumnJ(Request $request)
+    {
+        try {
+            $request->validate([
+                'file' => 'required|file|mimes:xlsx,xls'
+            ]);
+            
+            $file = $request->file('file');
+            $lotImportService = new LotImportService();
+            
+            // Leer solo las primeras 2 filas del Excel para diagnóstico
+            $reader = IOFactory::createReader('Xlsx');
+            $reader->setReadDataOnly(true);
+            $reader->setReadEmptyCells(false);
+            
+            $spreadsheet = $reader->load($file->getPathname());
+            $worksheet = $spreadsheet->getActiveSheet();
+            $rows = $worksheet->toArray();
+            
+            if (count($rows) < 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El archivo debe tener al menos 2 filas (headers y valores de financiamiento)'
+                ], 400);
+            }
+            
+            $headerRow = $rows[0];
+            $financingValuesRow = $rows[1];
+            
+            $diagnosis = $lotImportService->diagnoseColumnJ($headerRow, $financingValuesRow);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Diagnóstico de columna J completado',
+                'data' => $diagnosis
+            ]);
+            
+        } catch (Exception $e) {
+            \Log::error('[LotController] Error en diagnóstico de columna J', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar el diagnóstico: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Diagnóstico de reglas de financiamiento desde Excel
+     */
+    public function diagnoseFinancingRules(Request $request)
+    {
+        try {
+            $request->validate([
+                'file' => 'required|file|mimes:xlsx,xls'
+            ]);
+            
+            $file = $request->file('file');
+            $lotImportService = new LotImportService();
+            
+            // Leer solo las primeras 2 filas del Excel para diagnóstico
+            $reader = IOFactory::createReader('Xlsx');
+            $reader->setReadDataOnly(true);
+            $reader->setReadEmptyCells(false);
+            
+            $spreadsheet = $reader->load($file->getPathname());
+            $worksheet = $spreadsheet->getActiveSheet();
+            
+            // Obtener headers (fila 1) y valores de financiamiento (fila 2)
+            $headerRow = $worksheet->rangeToArray('A1:' . $worksheet->getHighestColumn() . '1')[0];
+            $financingValuesRow = $worksheet->rangeToArray('A2:' . $worksheet->getHighestColumn() . '2')[0];
+            
+            // Ejecutar diagnóstico
+            $diagnosis = $lotImportService->diagnoseFinancingRules($headerRow, $financingValuesRow);
+            
+            return response()->json([
+                'success' => true,
+                'diagnosis' => $diagnosis,
+                'message' => 'Diagnóstico de reglas de financiamiento completado'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error en diagnóstico: ' . $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
+        }
+    }
 }

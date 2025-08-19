@@ -12,13 +12,28 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('lots', function (Blueprint $table) {
-            // Remove financial fields that have been migrated to contracts table
-            $table->dropColumn([
-                'funding',
-                'BPP', 
-                'BFH',
-                'initial_quota'
-            ]);
+            // Check if columns exist before dropping them
+            $columns = Schema::getColumnListing('lots');
+            
+            $columnsToRemove = [];
+            
+            if (in_array('funding', $columns)) {
+                $columnsToRemove[] = 'funding';
+            }
+            if (in_array('BPP', $columns)) {
+                $columnsToRemove[] = 'BPP';
+            }
+            if (in_array('BFH', $columns)) {
+                $columnsToRemove[] = 'BFH';
+            }
+            if (in_array('initial_quota', $columns)) {
+                $columnsToRemove[] = 'initial_quota';
+            }
+            
+            // Only drop columns if they exist
+            if (!empty($columnsToRemove)) {
+                $table->dropColumn($columnsToRemove);
+            }
         });
     }
 

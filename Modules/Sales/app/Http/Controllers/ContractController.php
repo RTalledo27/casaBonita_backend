@@ -29,10 +29,17 @@ class ContractController extends Controller
     /**
      * List registered contracts in a paginated collection.
      */
-    public function index()
+    public function index(Request $request)
     {
+        $perPage = $request->get('per_page', 15);
+        $filters = [
+            'search' => $request->get('search'),
+            'status' => $request->get('status'),
+            'with_financing' => $request->get('with_financing', true), // Default to contracts with financing
+        ];
+
         return ContractResource::collection(
-            $this->repository->paginate()
+            $this->repository->paginate($perPage, $filters)
         );
     }
 
@@ -167,5 +174,133 @@ class ContractController extends Controller
             'total_interest' => round(($monthlyPayment * $termMonths) - $financingAmount, 2),
             'total_to_pay' => round($monthlyPayment * $termMonths, 2),
         ]);
+    }
+
+    /**
+     * Generate payment schedule for a contract
+     */
+    public function generateSchedule(Request $request, Contract $contract)
+    {
+        $this->authorize('view', $contract);
+        
+        $request->validate([
+            'start_date' => 'required|date|after_or_equal:today',
+            'frequency' => 'required|in:monthly,biweekly,weekly',
+            'notes' => 'nullable|string|max:500'
+        ]);
+
+        try {
+            DB::beginTransaction();
+
+            // Delete existing schedules for this contract
+            $contract->schedules()->delete();
+
+            $startDate = new \DateTime($request->input('start_date'));
+            $frequency = $request->input('frequency');
+            $notes = $request->input('notes');
+            
+            // Calculate payment details
+            $financingAmount = $contract->financing_amount;
+            $interestRate = $contract->interest_rate;
+            $termMonths = $contract->term_months;
+            
+            // Calculate monthly payment
+            if ($interestRate == 0) {
+                $monthlyPayment = $financingAmount / $termMonths;
+            } else {
+                $monthlyRate = $interestRate / 12;
+                $monthlyPayment = $financingAmount * ($monthlyRate * pow(1 + $monthlyRate, $termMonths)) / (pow(1 + $monthlyRate, $termMonths) - 1);
+            }
+            
+            // Adjust payment frequency
+            $paymentAmount = $monthlyPayment;
+            $intervalDays = 30; // monthly by default
+            $totalPayments = $termMonths;
+            
+            switch ($frequency) {
+                case 'biweekly':
+                    $paymentAmount = $monthlyPayment / 2;
+                    $intervalDays = 14;
+                    $totalPayments = $termMonths * 2;
+                    break;
+                case 'weekly':
+                    $paymentAmount = $monthlyPayment / 4;
+                    $intervalDays = 7;
+                    $totalPayments = $termMonths * 4;
+                    break;
+            }
+            
+            // Generate payment schedules
+            $schedules = [];
+            $currentDate = clone $startDate;
+            $installmentNumber = 1;
+            
+            // Add initial payment (cuota inicial) if exists
+            $downPayment = $contract->down_payment ?? $contract->initial_quota ?? 0;
+            if ($downPayment > 0) {
+                $schedules[] = [
+                    'contract_id' => $contract->contract_id,
+                    'installment_number' => $installmentNumber,
+                    'due_date' => $currentDate->format('Y-m-d'),
+                    'amount' => round($downPayment, 2),
+                    'status' => 'pendiente',
+                    'notes' => $notes ? $notes . ' (Cuota inicial)' : 'Cuota inicial'
+                ];
+                $installmentNumber++;
+                // Move to next payment date for regular installments
+                $currentDate->add(new \DateInterval('P' . $intervalDays . 'D'));
+            }
+            
+            // Generate regular payment installments
+            for ($i = $installmentNumber; $i <= $totalPayments + ($downPayment > 0 ? 1 : 0); $i++) {
+                $schedules[] = [
+                    'contract_id' => $contract->contract_id,
+                    'installment_number' => $i,
+                    'due_date' => $currentDate->format('Y-m-d'),
+                    'amount' => round($paymentAmount, 2),
+                    'status' => 'pendiente',
+                    'notes' => $notes
+                ];
+                
+                // Add interval for next payment
+                $currentDate->add(new \DateInterval('P' . $intervalDays . 'D'));
+            }
+            
+            // Insert schedules in batches
+            \Modules\Sales\Models\PaymentSchedule::insert($schedules);
+            
+            DB::commit();
+            
+            // Load the created schedules
+            $createdSchedules = $contract->schedules()->orderBy('due_date')->get();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Cronograma generado exitosamente',
+                'data' => [
+                    'contract_id' => $contract->contract_id,
+                    'total_schedules' => $createdSchedules->count(),
+                    'total_amount' => $createdSchedules->sum('amount'),
+                    'frequency' => $frequency,
+                    'start_date' => $request->input('start_date'),
+                    'schedules' => $createdSchedules->map(function($schedule) {
+                        return [
+                            'schedule_id' => $schedule->schedule_id,
+                            'due_date' => $schedule->due_date,
+                            'amount' => $schedule->amount,
+                            'status' => $schedule->status
+                        ];
+                    })
+                ]
+            ], Response::HTTP_CREATED);
+            
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al generar cronograma',
+                'error' => $e->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }

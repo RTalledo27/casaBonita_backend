@@ -16,6 +16,7 @@ use Modules\Sales\Models\Contract;
 use Modules\Sales\Models\Reservation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Carbon\Carbon;
+use Modules\Security\Models\User;
 
 class ContractImportService
 {
@@ -23,6 +24,7 @@ class ContractImportService
     private array $processed = [];
     private int $successCount = 0;
     private int $errorCount = 0;
+    private int $skippedCount = 0;
 
     /**
      * Normalizar texto removiendo acentos y caracteres especiales
@@ -64,7 +66,97 @@ class ContractImportService
     }
 
     /**
-     * Procesar archivo Excel de contratos/reservaciones
+     * Procesar archivo Excel de contratos/reservaciones - VERSIÓN SIMPLIFICADA
+     */
+    public function processExcelSimplified(string $filePath): array
+    {
+        try {
+            $spreadsheet = IOFactory::load($filePath);
+            $worksheet = $spreadsheet->getActiveSheet();
+            $rows = $worksheet->toArray();
+
+            if (empty($rows)) {
+                throw new Exception('El archivo está vacío');
+            }
+
+            $headers = array_shift($rows);
+            Log::info('Headers encontrados:', $headers);
+            
+            $validation = $this->validateExcelStructureSimplified($headers);
+            
+            if (!$validation['valid']) {
+                throw new Exception($validation['error']);
+            }
+
+            DB::beginTransaction();
+
+            foreach ($rows as $index => $row) {
+                $rowNumber = $index + 2; // +2 porque empezamos desde la fila 2 (después del header)
+                
+                try {
+                    Log::info("Procesando fila {$rowNumber}", ['row_data' => $row, 'headers' => $headers]);
+                    $result = $this->processRowSimplified($row, $headers);
+                    
+                    if ($result['status'] === 'success') {
+                        $this->successCount++;
+                        $this->processed[] = [
+                            'row' => $rowNumber,
+                            'client_id' => $result['client_id'],
+                            'lot_id' => $result['lot_id'],
+                            'reservation_id' => $result['reservation_id'],
+                            'contract_id' => $result['contract_id'] ?? null,
+                            'message' => $result['message']
+                        ];
+                    } elseif ($result['status'] === 'skipped') {
+                        $this->skippedCount++;
+                    } else {
+                        $this->errorCount++;
+                        $this->errors[] = [
+                            'row' => $rowNumber,
+                            'error' => $result['message'],
+                            'data' => $row
+                        ];
+                    }
+                    
+                } catch (Exception $e) {
+                    $this->errorCount++;
+                    $this->errors[] = [
+                        'row' => $rowNumber,
+                        'error' => $e->getMessage(),
+                        'data' => $row
+                    ];
+                    Log::error("Error procesando fila {$rowNumber}: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+                }
+            }
+
+            DB::commit();
+
+            return [
+                'success' => true,
+                'processed' => $this->successCount,
+                'errors' => $this->errorCount,
+                'skipped' => $this->skippedCount,
+                'error_details' => $this->errors,
+                'message' => "Procesadas {$this->successCount} filas exitosamente, {$this->errorCount} errores, {$this->skippedCount} filas omitidas por datos incompletos"
+            ];
+
+        } catch (Exception $e) {
+            DB::rollBack();
+            Log::error('Error en importación de contratos (simplificada): ' . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'processed' => $this->successCount,
+                'errors' => $this->errorCount,
+                'skipped' => $this->skippedCount,
+                'error_details' => $this->errors
+            ];
+        }
+    }
+
+    /**
+     * Procesar archivo Excel de contratos/reservaciones - VERSIÓN ANTIGUA
      */
     public function processExcel(string $filePath): array
     {
@@ -97,6 +189,13 @@ class ContractImportService
                     }
 
                     $data = $this->mapRowData($row, $headerMap);
+                    
+                    // Validar campos requeridos de lote antes de procesar
+                    if (!$this->validateRequiredLotFields($data, $rowNumber)) {
+                        $this->skippedCount++;
+                        continue;
+                    }
+                    
                     $this->processRow($data, $rowNumber);
                     $this->successCount++;
                     
@@ -117,8 +216,9 @@ class ContractImportService
                 'success' => true,
                 'processed' => $this->successCount,
                 'errors' => $this->errorCount,
+                'skipped' => $this->skippedCount,
                 'error_details' => $this->errors,
-                'message' => "Procesadas {$this->successCount} filas exitosamente, {$this->errorCount} errores"
+                'message' => "Procesadas {$this->successCount} filas exitosamente, {$this->errorCount} errores, {$this->skippedCount} filas omitidas por datos incompletos"
             ];
 
         } catch (Exception $e) {
@@ -130,9 +230,56 @@ class ContractImportService
                 'message' => $e->getMessage(),
                 'processed' => $this->successCount,
                 'errors' => $this->errorCount,
+                'skipped' => $this->skippedCount,
                 'error_details' => $this->errors
             ];
         }
+    }
+
+    /**
+     * Validar estructura del archivo Excel - VERSIÓN SIMPLIFICADA (14 campos)
+     */
+    public function validateExcelStructureSimplified(array $headers): array
+    {
+        $requiredHeaders = [
+            'ASESOR_NOMBRE',
+            'ASESOR_CODIGO', 
+            'ASESOR_EMAIL',
+            'CLIENTE_NOMBRE_COMPLETO',
+            'CLIENTE_TIPO_DOC',
+            'CLIENTE_NUM_DOC',
+            'CLIENTE_TELEFONO_1',
+            'CLIENTE_EMAIL',
+            'LOTE_NUMERO',
+            'LOTE_MANZANA',
+            'FECHA_VENTA',
+            'TIPO_OPERACION',
+            'OBSERVACIONES',
+            'ESTADO_CONTRATO'
+        ];
+
+        $missingHeaders = [];
+        foreach ($requiredHeaders as $required) {
+            $found = false;
+            foreach ($headers as $header) {
+                if (trim(strtoupper($header)) === $required) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (!$found) {
+                $missingHeaders[] = $required;
+            }
+        }
+
+        if (!empty($missingHeaders)) {
+            return [
+                'valid' => false,
+                'error' => 'Faltan las siguientes columnas requeridas: ' . implode(', ', $missingHeaders)
+            ];
+        }
+
+        return ['valid' => true];
     }
 
     /**
@@ -212,9 +359,7 @@ class ContractImportService
                 case 'CLIENTE_NOMBRES':
                     $map['client_first_name'] = $index;
                     break;
-                case 'CLIENTE_APELLIDOS':
-                    $map['client_last_name'] = $index;
-                    break;
+
                 case 'CLIENTE_NOMBRE_COMPLETO':
                     $map['client_full_name'] = $index;
                     break;
@@ -381,6 +526,86 @@ class ContractImportService
             }
         }
         
+        // COMPATIBILIDAD: Si no existe 'client_full_name' pero sí 'client_first_name' (CLIENTE_NOMBRES),
+        // usar CLIENTE_NOMBRES como nombre completo para mantener compatibilidad
+        if (!isset($map['client_full_name']) && isset($map['client_first_name'])) {
+            $map['client_full_name'] = $map['client_first_name'];
+            Log::info("Usando CLIENTE_NOMBRES como nombre completo para compatibilidad", [
+                'column_index' => $map['client_first_name']
+            ]);
+        }
+        
+        return $map;
+    }
+
+    /**
+     * Mapear headers del Excel simplificado a índices - Solo 15 campos esenciales
+     */
+    private function mapSimplifiedHeaders(array $headers): array
+    {
+        $map = [];
+        
+        foreach ($headers as $index => $header) {
+            $header = trim(strtoupper($header));
+            
+            // Mapeo de headers del template simplificado (15 campos)
+            switch ($header) {
+                // Sección Asesor (3 campos)
+                case 'ASESOR_NOMBRE':
+                    $map['asesor_nombre'] = $index;
+                    break;
+                case 'ASESOR_CODIGO':
+                    $map['asesor_codigo'] = $index;
+                    break;
+                case 'ASESOR_EMAIL':
+                    $map['asesor_email'] = $index;
+                    break;
+                
+                // Sección Cliente (5 campos)
+                case 'CLIENTE_NOMBRE_COMPLETO':
+                case 'CLIENTE_NOMBRES': // Compatibilidad con variación de nombre
+                    $map['client_full_name'] = $index;
+                    break;
+                case 'CLIENTE_DOCUMENTO': // Variación estándar
+                case 'CLIENTE_TIPO_DOC': // Variación del template
+                    $map['cliente_tipo_doc'] = $index;
+                    break;
+                case 'CLIENTE_NUM_DOC':
+                    $map['cliente_num_doc'] = $index;
+                    break;
+                case 'CLIENTE_TELEFONO': // Variación estándar
+                case 'CLIENTE_TELEFONO_1': // Variación del template
+                    $map['cliente_telefono_1'] = $index;
+                    break;
+                case 'CLIENTE_EMAIL':
+                    $map['cliente_email'] = $index;
+                    break;
+                
+                // Sección Lote (2 campos)
+                case 'LOTE_NUMERO':
+                    $map['lot_number'] = $index;
+                    break;
+                case 'LOTE_MANZANA':
+                    $map['lot_manzana'] = $index;
+                    break;
+                
+                // Sección Venta (4 campos)
+                case 'FECHA_VENTA':
+                    $map['fecha_venta'] = $index;
+                    break;
+                case 'TIPO_OPERACION':
+                    $map['operation_type'] = $index;
+                    break;
+                case 'OBSERVACIONES':
+                    $map['observaciones'] = $index;
+                    break;
+                case 'ESTADO_CONTRATO': // Variación del template
+                case 'CONTRATO_ESTADO': // Variación estándar
+                    $map['contract_status'] = $index;
+                    break;
+            }
+        }
+        
         return $map;
     }
 
@@ -409,6 +634,40 @@ class ContractImportService
     }
 
     /**
+     * Validar que los campos requeridos de lote estén completos
+     * Omite filas que no tengan datos completos de lote y manzana
+     */
+    private function validateRequiredLotFields(array $data, int $rowNumber): bool
+    {
+        $lotNumber = $data['lot_number'] ?? '';
+        $lotManzana = $data['lot_manzana'] ?? '';
+        
+        // Verificar que lot_number no esté vacío, nulo o contenga solo espacios
+        $isLotNumberEmpty = empty(trim($lotNumber));
+        
+        // Verificar que lot_manzana no esté vacío, nulo o contenga solo espacios
+        $isLotManzanaEmpty = empty(trim($lotManzana));
+        
+        // Si cualquiera de los campos está vacío, omitir la fila
+        if ($isLotNumberEmpty || $isLotManzanaEmpty) {
+            $missingFields = [];
+            if ($isLotNumberEmpty) $missingFields[] = 'LOTE_NUMERO';
+            if ($isLotManzanaEmpty) $missingFields[] = 'LOTE_MANZANA';
+            
+            Log::info("Fila {$rowNumber} omitida por datos incompletos de lote", [
+                'missing_fields' => $missingFields,
+                'lot_number' => $lotNumber,
+                'lot_manzana' => $lotManzana,
+                'reason' => 'Contrato no representa una venta concreta - faltan datos de lote'
+            ]);
+            
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
      * Procesar una fila de datos - Actualizado para template integral
      */
     private function processRow(array $data, int $rowNumber): void
@@ -424,8 +683,45 @@ class ContractImportService
             $this->createClientAddress($client, $data);
         }
         
-        // Buscar o crear lote con información completa
+        // Buscar lote con información completa
         $lot = $this->findOrCreateLotIntegral($data);
+        
+        // NUEVA LÓGICA: Verificar disponibilidad del lote antes de procesarlo
+        $availability = $this->checkLotAvailability($lot);
+        
+        Log::info("Procesando fila {$rowNumber} - Verificación de lote", [
+            'lot_number' => $lot->num_lot,
+            'client_name' => $data['client_full_name'],
+            'can_reassign' => $availability['can_reassign'],
+            'reason' => $availability['reason'],
+            'current_status' => $availability['current_status']
+        ]);
+        
+        // Si el lote NO puede ser reasignado, saltar el procesamiento
+        if (!$availability['can_reassign']) {
+            Log::warning("Saltando procesamiento de fila {$rowNumber}", [
+                'lot_number' => $lot->num_lot,
+                'client_name' => $data['client_full_name'],
+                'reason' => $availability['reason']
+            ]);
+            
+            $this->processed[] = [
+                'row' => $rowNumber,
+                'client' => $data['client_full_name'],
+                'lot' => $lot->num_lot,
+                'advisor' => 'N/A',
+                'operation_type' => 'saltado',
+                'reason' => $availability['reason']
+            ];
+            return;
+        }
+        
+        // Si el lote puede ser reasignado, continuar con el procesamiento normal
+        Log::info("Lote disponible para reasignación - Continuando procesamiento", [
+            'lot_number' => $lot->num_lot,
+            'client_name' => $data['client_full_name'],
+            'previous_status' => $availability['current_status']
+        ]);
         
         // Buscar asesor
         $advisor = $this->findAdvisorIntegral($data);
@@ -440,15 +736,16 @@ class ContractImportService
             $operationType = 'contrato';
         }
         
-        // Actualizar status del lote
-        $this->updateLotStatus($lot, $operationType);
+        // Actualizar status del lote con la nueva lógica
+        $this->updateLotStatus($lot, $operationType, $availability['current_status']);
         
         $this->processed[] = [
             'row' => $rowNumber,
             'client' => $client->first_name . ' ' . $client->last_name,
             'lot' => $lot->num_lot,
             'advisor' => $advisor ? $advisor->user->first_name . ' ' . $advisor->user->last_name : 'No asignado',
-            'operation_type' => $operationType
+            'operation_type' => $operationType,
+            'reassigned' => $availability['current_status'] !== 'disponible'
         ];
     }
 
@@ -478,7 +775,12 @@ class ContractImportService
         $fullName = $data['client_full_name'] ?? '';
         $phone1 = $data['client_phone1'] ?? null;
         $phone2 = $data['client_phone2'] ?? null;
-        $docNumber = $data['client_doc_number'] ?? '';
+        $docNumber = trim($data['client_doc_number'] ?? '');
+        
+        // Convert empty strings and '-' to NULL to avoid unique constraint violations
+        if ($docNumber === '' || $docNumber === '-') {
+            $docNumber = null;
+        }
         
         // Separar nombre completo
         $nameParts = $this->splitFullName($fullName);
@@ -596,14 +898,27 @@ class ContractImportService
 
     /**
      * Actualizar status del lote según el tipo de operación
+     * Ahora considera el estado anterior para mejor logging
      */
-    private function updateLotStatus(Lot $lot, string $operationType): void
+    private function updateLotStatus(Lot $lot, string $operationType, string $previousStatus = null): void
     {
         $newStatus = $operationType === 'contrato' ? 'vendido' : 'reservado';
+        $previousStatus = $previousStatus ?? $lot->status;
         
         if ($lot->status !== $newStatus) {
             $lot->update(['status' => $newStatus]);
-            Log::info("Status del lote {$lot->num_lot} actualizado a: {$newStatus}");
+            Log::info("Status del lote {$lot->num_lot} actualizado", [
+                'previous_status' => $previousStatus,
+                'new_status' => $newStatus,
+                'operation_type' => $operationType,
+                'lot_id' => $lot->lot_id
+            ]);
+        } else {
+            Log::info("Status del lote {$lot->num_lot} ya está en {$newStatus}", [
+                'current_status' => $lot->status,
+                'operation_type' => $operationType,
+                'lot_id' => $lot->lot_id
+            ]);
         }
     }
 
@@ -1100,6 +1415,63 @@ class ContractImportService
     }
 
     /**
+     * Parsear fecha y retornar objeto Carbon
+     */
+    private function parseDateAsCarbon($date): Carbon
+    {
+        if (empty($date)) {
+            return now();
+        }
+        
+        Log::info("Parseando fecha como Carbon: {$date} (tipo: " . gettype($date) . ")");
+        
+        try {
+            // Si es un número (Excel date serial)
+            if (is_numeric($date) && $date > 0) {
+                // Excel cuenta desde 1900-01-01, pero tiene un bug con 1900 como año bisiesto
+                if ($date > 59) {
+                    $parsed = Carbon::createFromDate(1900, 1, 1)->addDays($date - 2);
+                } else {
+                    $parsed = Carbon::createFromDate(1900, 1, 1)->addDays($date - 1);
+                }
+                Log::info("Fecha parseada desde serial como Carbon: " . $parsed->format('Y-m-d'));
+                return $parsed;
+            }
+            
+            // Convertir a string si no lo es
+            $dateString = (string) $date;
+            
+            // Intentar varios formatos de fecha
+            $formats = ['Y-m-d', 'd/m/Y', 'd-m-Y', 'm/d/Y', 'Y/m/d', 'd.m.Y', 'Y.m.d'];
+            
+            foreach ($formats as $format) {
+                try {
+                    $parsed = Carbon::createFromFormat($format, $dateString);
+                    if ($parsed && $parsed->year >= 1900 && $parsed->year <= 2100) {
+                        Log::info("Fecha parseada con formato {$format} como Carbon: " . $parsed->format('Y-m-d'));
+                        return $parsed;
+                    }
+                } catch (Exception $e) {
+                    continue;
+                }
+            }
+            
+            // Intentar parsear con Carbon directamente
+            $parsed = Carbon::parse($dateString);
+            if ($parsed && $parsed->year >= 1900 && $parsed->year <= 2100) {
+                Log::info("Fecha parseada con Carbon::parse como Carbon: " . $parsed->format('Y-m-d'));
+                return $parsed;
+            }
+            
+        } catch (Exception $e) {
+            Log::warning("No se pudo parsear la fecha como Carbon: {$date} - Error: " . $e->getMessage());
+        }
+        
+        Log::warning("Usando fecha actual como fallback para Carbon: {$date}");
+        return now();
+    }
+
+    /**
      * Parsear decimal
      */
     private function parseDecimal($value): float
@@ -1137,5 +1509,937 @@ class ContractImportService
         } while (Contract::where('contract_number', $number)->exists());
         
         return $number;
+    }
+
+    /**
+     * Verificar si un lote puede ser reasignado durante la importación
+     * 
+     * @param Lot $lot
+     * @return array ['can_reassign' => bool, 'reason' => string, 'current_status' => string]
+     */
+    private function checkLotAvailability(Lot $lot): array
+    {
+        $currentStatus = $lot->status;
+        
+        Log::info("Verificando disponibilidad del lote", [
+            'lot_number' => $lot->num_lot,
+            'current_status' => $currentStatus
+        ]);
+        
+        // Si el lote está disponible, puede ser asignado
+        if ($currentStatus === 'disponible') {
+            return [
+                'can_reassign' => true,
+                'reason' => 'Lote disponible para asignación',
+                'current_status' => $currentStatus
+            ];
+        }
+        
+        // Si está vendido o reservado, verificar si tiene contratos/reservaciones activas
+        if (in_array($currentStatus, ['vendido', 'reservado'])) {
+            // Verificar reservaciones activas
+            $activeReservations = $lot->reservations()
+                ->whereIn('status', ['activa', 'confirmada'])
+                ->count();
+            
+            // Verificar contratos activos
+            $activeContracts = Contract::whereHas('reservation', function($query) use ($lot) {
+                $query->where('lot_id', $lot->lot_id);
+            })
+            ->whereIn('status', ['vigente', 'activo'])
+            ->count();
+            
+            Log::info("Verificando contratos y reservaciones activas", [
+                'lot_number' => $lot->num_lot,
+                'active_reservations' => $activeReservations,
+                'active_contracts' => $activeContracts
+            ]);
+            
+            // Si no tiene reservaciones ni contratos activos, puede ser reasignado
+            if ($activeReservations === 0 && $activeContracts === 0) {
+                return [
+                    'can_reassign' => true,
+                    'reason' => 'Lote marcado como ' . $currentStatus . ' pero sin contratos/reservaciones activas (venta cancelada)',
+                    'current_status' => $currentStatus
+                ];
+            }
+            
+            // Si tiene contratos o reservaciones activas, no puede ser reasignado
+            return [
+                'can_reassign' => false,
+                'reason' => 'Lote tiene ' . ($activeContracts > 0 ? 'contratos' : 'reservaciones') . ' activas',
+                'current_status' => $currentStatus
+            ];
+        }
+        
+        // Para otros estados, no permitir reasignación por defecto
+        return [
+            'can_reassign' => false,
+            'reason' => 'Estado del lote no permite reasignación: ' . $currentStatus,
+            'current_status' => $currentStatus
+        ];
+    }
+
+    /**
+     * Procesar fila simplificada usando Lot Financial Templates
+     */
+    public function processRowSimplified(array $row, array $headers): array
+    {
+        try {
+            $data = $this->mapRowDataSimplified($row, $headers);
+            
+            if ($this->isEmptyRowSimplified($data)) {
+                return ['status' => 'skipped', 'message' => 'Fila vacía'];
+            }
+            
+            $validation = $this->validateRowDataSimplified($data);
+            if (!$validation['valid']) {
+                return ['status' => 'error', 'message' => $validation['message']];
+            }
+            
+            // Buscar o crear cliente
+            $client = $this->findOrCreateClientSimplified($data);
+            if (!$client) {
+                return ['status' => 'error', 'message' => 'No se pudo crear o encontrar el cliente'];
+            }
+            
+            // Buscar lote con template financiero
+            $lot = $this->findLotWithFinancialTemplate($data);
+            if (!$lot) {
+                return ['status' => 'error', 'message' => 'Lote no encontrado o sin template financiero'];
+            }
+            
+            // Verificar disponibilidad del lote
+            $availability = $this->checkLotAvailability($lot);
+            if (!$availability['can_reassign']) {
+                return ['status' => 'error', 'message' => $availability['reason']];
+            }
+            
+            // Logging de valores mapeados antes de decidir qué crear
+            Log::info('processRowSimplified - Valores mapeados:', [
+                'operation_type' => $data['operation_type'] ?? 'NO_DEFINIDO',
+                'contract_status' => $data['contract_status'] ?? 'NO_DEFINIDO',
+                'client_name' => $data['client_full_name'] ?? 'NO_DEFINIDO',
+                'lot_number' => $data['lot_number'] ?? 'NO_DEFINIDO',
+                'should_create_contract' => $this->shouldCreateContractSimplified($data)
+            ]);
+            
+            $reservation = null;
+            $contract = null;
+            
+            // Decidir si crear contrato o reservación (NO AMBOS)
+            if ($this->shouldCreateContractSimplified($data)) {
+                Log::info('processRowSimplified - Creando SOLO contrato directo (sin reservación)');
+                
+                // Buscar advisor
+                $advisor = $this->findAdvisorSimplified($data);
+                
+                // Crear contrato directamente sin reservación temporal
+                $contract = $this->createDirectContract($client, $lot, $data, $advisor);
+                if (!$contract) {
+                    Log::error('processRowSimplified - Error al crear contrato directo');
+                    return ['status' => 'error', 'message' => 'No se pudo crear el contrato directo'];
+                }
+                
+                Log::info('processRowSimplified - Contrato directo creado exitosamente', [
+                    'contract_id' => $contract->contract_id,
+                    'advisor_id' => $advisor ? $advisor->employee_id : null
+                ]);
+            } else {
+                Log::info('processRowSimplified - Creando SOLO reservación (sin contrato)');
+                $reservation = $this->createReservationSimplified($client, $lot, $data);
+                if (!$reservation) {
+                    return ['status' => 'error', 'message' => 'No se pudo crear la reservación'];
+                }
+                Log::info('processRowSimplified - Reservación creada exitosamente', ['reservation_id' => $reservation->reservation_id]);
+            }
+            
+            // Actualizar estado del lote
+            $this->updateLotStatus($lot, $data['operation_type'] ?? 'reserva');
+            
+            return [
+                'status' => 'success',
+                'message' => 'Procesado correctamente',
+                'client_id' => $client->client_id,
+                'lot_id' => $lot->lot_id,
+                'reservation_id' => $reservation ? $reservation->reservation_id : null,
+                'contract_id' => $contract ? $contract->contract_id : null
+            ];
+            
+        } catch (Exception $e) {
+            Log::error('Error procesando fila simplificada: ' . $e->getMessage(), [
+                'row' => $row,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return ['status' => 'error', 'message' => 'Error interno: ' . $e->getMessage()];
+        }
+    }
+    
+    /**
+     * Mapear datos de fila simplificada
+     */
+    private function mapRowDataSimplified(array $row, array $headers): array
+    {
+        // Primero mapear los headers a los nombres de campo correctos
+        $headerMap = $this->mapSimplifiedHeaders($headers);
+        
+        $data = [];
+        
+        // Usar el mapeo de headers para crear el array de datos con las claves correctas
+        foreach ($headerMap as $fieldName => $index) {
+            $value = $row[$index] ?? '';
+            $data[$fieldName] = is_string($value) ? trim($value) : $value;
+        }
+        
+        // También mantener los headers originales para compatibilidad con campos no mapeados
+        foreach ($headers as $index => $header) {
+            $headerUpper = trim(strtoupper($header));
+            if (!isset($data[$headerUpper])) {
+                $value = $row[$index] ?? '';
+                $data[$headerUpper] = is_string($value) ? trim($value) : $value;
+            }
+        }
+        
+        return $data;
+    }
+    
+    /**
+     * Verificar si la fila simplificada está vacía
+     */
+    private function isEmptyRowSimplified(array $data): bool
+    {
+        $essentialFields = ['client_full_name', 'lot_number', 'lot_manzana'];
+        
+        foreach ($essentialFields as $field) {
+            if (!empty($data[$field])) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Validar datos de fila simplificada
+     */
+    private function validateRowDataSimplified(array $data): array
+    {
+        $errors = [];
+        
+        // Validar campos obligatorios
+        $requiredFields = [
+            'client_full_name' => 'Nombres completos del cliente',
+            'lot_number' => 'Número de lote',
+            'lot_manzana' => 'Manzana del lote'
+        ];
+        
+        foreach ($requiredFields as $field => $label) {
+            if (empty($data[$field])) {
+                $errors[] = "Campo obligatorio faltante: {$label}";
+            }
+        }
+        
+        // Validar tipo de documento si se proporciona
+        if (!empty($data['cliente_tipo_doc']) && !in_array($data['cliente_tipo_doc'], ['DNI', 'CE', 'RUC', 'PASAPORTE'])) {
+            $errors[] = 'Tipo de documento inválido';
+        }
+        
+        // Validar tipo de operación
+        if (!empty($data['operation_type']) && !in_array(strtolower($data['operation_type']), ['reserva', 'venta', 'contrato'])) {
+            $errors[] = 'Tipo de operación inválido';
+        }
+        
+        return [
+            'valid' => empty($errors),
+            'message' => implode(', ', $errors)
+        ];
+    }
+    
+    /**
+     * Crear contrato directo sin reservación
+     * TODOS los datos financieros vienen directamente del LotFinancialTemplate
+     */
+    private function createDirectContract($client, $lot, array $data, $advisor = null)
+    {
+        try {
+            // Obtener template financiero del lote - ES OBLIGATORIO
+            $financialTemplate = $lot->financialTemplate;
+            if (!$financialTemplate) {
+                throw new Exception("Lote {$lot->lot_id} no tiene template financiero. Todos los datos financieros deben venir del LotFinancialTemplate.");
+            }
+
+            // Usar ÚNICAMENTE los valores directos del template financiero - SIN cálculos ni fallbacks
+            $totalPrice = $financialTemplate->precio_venta;
+            $downPayment = $financialTemplate->cuota_inicial;
+            $financingAmount = $financialTemplate->precio_venta - $financialTemplate->cuota_inicial;
+            
+            // Buscar el primer installment válido (mayor a 0) - LÓGICA LOT-ESPECÍFICA
+            $monthlyPayment = 0;
+            $termMonths = 0;
+            $interestRate = 0; // Interest rate siempre es 0 como especificó el usuario
+            $hasInstallments = false;
+            
+            // Priorizar installments_40, luego installments_44, luego installments_24
+            if ($financialTemplate->installments_40 > 0) {
+                $monthlyPayment = $financialTemplate->installments_40;
+                $termMonths = 40;
+                $hasInstallments = true;
+            } elseif ($financialTemplate->installments_44 > 0) {
+                $monthlyPayment = $financialTemplate->installments_44;
+                $termMonths = 44;
+                $hasInstallments = true;
+            } elseif ($financialTemplate->installments_24 > 0) {
+                $monthlyPayment = $financialTemplate->installments_24;
+                $termMonths = 24;
+                $hasInstallments = true;
+            } elseif ($financialTemplate->installments_55 > 0) {
+                $monthlyPayment = $financialTemplate->installments_55;
+                $termMonths = 55;
+                $hasInstallments = true;
+            }
+            
+            // Si no hay installments válidos, es un contrato sin financiamiento (pago de contado)
+            if (!$hasInstallments) {
+                Log::info('createDirectContract - Contrato sin financiamiento detectado', [
+                    'lot_id' => $lot->lot_id,
+                    'reason' => 'Todos los installments_XX están en 0 - Pago de contado',
+                    'installments_check' => [
+                        'installments_24' => $financialTemplate->installments_24,
+                        'installments_40' => $financialTemplate->installments_40,
+                        'installments_44' => $financialTemplate->installments_44,
+                        'installments_55' => $financialTemplate->installments_55
+                    ]
+                ]);
+                
+                // Ajustar valores para contrato sin financiamiento
+                $financingAmount = 0;
+                $monthlyPayment = 0;
+                $termMonths = 0;
+                $interestRate = 0;
+            }
+            
+            Log::info('createDirectContract - Usando valores DIRECTOS del template financiero', [
+                'template_id' => $financialTemplate->id,
+                'lot_id' => $lot->lot_id,
+                'precio_venta' => $totalPrice,
+                'cuota_inicial' => $downPayment,
+                'financing_amount' => $financingAmount,
+                'monthly_payment_found' => $monthlyPayment,
+                'term_months_selected' => $termMonths,
+                'interest_rate' => $interestRate,
+                'has_installments' => $hasInstallments,
+                'financing_type' => $hasInstallments ? 'WITH_FINANCING' : 'WITHOUT_FINANCING',
+                'installments_available' => [
+                    'installments_24' => $financialTemplate->installments_24,
+                    'installments_40' => $financialTemplate->installments_40,
+                    'installments_44' => $financialTemplate->installments_44,
+                    'installments_55' => $financialTemplate->installments_55
+                ]
+            ]);
+
+
+
+            // Generar número de contrato único
+            $contractNumber = $this->generateContractNumber();
+            
+            // Preparar datos del contrato
+            $contractData = [
+                'client_id' => $client->client_id,
+                'lot_id' => $lot->lot_id,
+                'advisor_id' => $advisor ? $advisor->employee_id : null,
+                'contract_number' => $contractNumber,
+                'reservation_id' => null, // Sin reservación para contratos directos
+                'sign_date' => $this->parseDate($data['fecha_venta'] ?? $data['sign_date'] ?? null), // Usar fecha del Excel
+                'total_price' => $totalPrice,
+                'down_payment' => $downPayment,
+                'financing_amount' => $financingAmount,
+                'monthly_payment' => $monthlyPayment,
+                'term_months' => $termMonths,
+                'interest_rate' => $interestRate,
+                'status' => 'vigente', // Usar valor válido del enum
+                'currency' => 'PEN', // Agregar moneda requerida
+                'financing_type' => $hasInstallments ? 'WITH_FINANCING' : 'WITHOUT_FINANCING' // CORREGIR: Agregar financing_type
+            ];
+
+            Log::info('createDirectContract - Template financiero encontrado', [
+                'lot_id' => $lot->lot_id,
+                'template_id' => $financialTemplate->id ?? 'N/A',
+                'down_payment' => $downPayment,
+                'total_price' => $totalPrice,
+                'installments_count' => $termMonths,
+                'financing_type' => $hasInstallments ? 'WITH_FINANCING' : 'WITHOUT_FINANCING',
+                'financing_amount_final' => $financingAmount
+            ]);
+            
+            Log::info('createDirectContract - Creando contrato con datos:', $contractData);
+
+            // Crear el contrato
+            $contract = Contract::create($contractData);
+
+            if ($contract) {
+                Log::info('createDirectContract - Contrato creado exitosamente', [
+                    'contract_id' => $contract->contract_id,
+                    'client_id' => $contract->client_id,
+                    'lot_id' => $contract->lot_id,
+                    'advisor_id' => $contract->advisor_id,
+                    'financing_amount' => $contract->financing_amount,
+                    'financing_type' => $contract->financing_amount > 0 ? 'WITH_FINANCING' : 'WITHOUT_FINANCING'
+                ]);
+            }
+
+            return $contract;
+
+        } catch (Exception $e) {
+            Log::error('createDirectContract - Error: ' . $e->getMessage(), [
+                'client_id' => $client->client_id ?? null,
+                'lot_id' => $lot->lot_id ?? null,
+                'advisor_id' => $advisor ? $advisor->employee_id : null,
+                'error_message' => $e->getMessage(),
+                'error_line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Separar nombres completos en nombres y apellidos
+     * Asume que las últimas dos palabras son siempre los apellidos
+     */
+    public function parseClientName(string $fullName): array
+    {
+        $fullName = trim($fullName);
+        $words = explode(' ', $fullName);
+        $words = array_filter($words); // Remover espacios vacíos
+        $words = array_values($words); // Reindexar
+        
+        $wordCount = count($words);
+        
+        if ($wordCount <= 2) {
+            // Si hay 2 palabras o menos, la primera es nombre y la última apellido
+            return [
+                'first_name' => $words[0] ?? '',
+                'last_name' => $words[1] ?? $words[0] ?? ''
+            ];
+        }
+        
+        // Si hay más de 2 palabras, las últimas 2 son apellidos
+        $lastNames = array_slice($words, -2);
+        $firstNames = array_slice($words, 0, -2);
+        
+        return [
+            'first_name' => implode(' ', $firstNames),
+            'last_name' => implode(' ', $lastNames)
+        ];
+    }
+
+    /**
+     * Buscar o crear cliente simplificado
+     */
+    private function findOrCreateClientSimplified(array $data): ?Client
+    {
+        try {
+            // Separar nombres y apellidos del campo único
+            $parsedName = $this->parseClientName($data['client_full_name'] ?? '');
+            
+            // Validar que el documento no esté vacío si se proporciona
+            $docNumber = trim($data['cliente_num_doc'] ?? '');
+            if ($docNumber === '' || $docNumber === '-') {
+                $docNumber = null;
+            }
+            
+            $query = Client::query();
+            
+            // Buscar por documento si se proporciona y no está vacío
+            if (!empty($docNumber)) {
+                $query->where('doc_number', $docNumber);
+            } else {
+                // Buscar por nombre completo usando los nombres separados
+                $query->where('first_name', 'LIKE', '%' . $parsedName['first_name'] . '%')
+                      ->where('last_name', 'LIKE', '%' . $parsedName['last_name'] . '%');
+            }
+            
+            $client = $query->first();
+            
+            if ($client) {
+                // Actualizar información si es necesario
+                $this->updateClientInfoSimplified($client, $data);
+                return $client;
+            }
+            
+            // Validar datos mínimos requeridos para crear cliente
+            if (empty($parsedName['first_name']) || empty($parsedName['last_name'])) {
+                Log::warning('Datos insuficientes para crear cliente', [
+                    'client_full_name' => $data['client_full_name'] ?? '',
+                    'parsed_name' => $parsedName
+                ]);
+                return null;
+            }
+            
+            // Crear nuevo cliente con nombres separados
+            return Client::create([
+                'first_name' => $parsedName['first_name'],
+                'last_name' => $parsedName['last_name'],
+                'doc_type' => $data['cliente_tipo_doc'] ?? 'DNI',
+                'doc_number' => $docNumber, // Usar el valor validado (puede ser null)
+                'primary_phone' => !empty($data['cliente_telefono_1']) ? $data['cliente_telefono_1'] : null,
+                'secondary_phone' => !empty($data['cliente_telefono_2']) ? $data['cliente_telefono_2'] : null,
+                'type' => 'client',
+                'observations' => $data['observaciones'] ?? null
+            ]);
+            
+        } catch (Exception $e) {
+            Log::error('Error creando cliente simplificado: ' . $e->getMessage(), [
+                'data' => $data,
+                'exception' => $e->getTraceAsString()
+            ]);
+            return null;
+        }
+    }
+    
+    /**
+     * Actualizar información del cliente simplificado
+     */
+    private function updateClientInfoSimplified(Client $client, array $data): void
+    {
+        $updates = [];
+        
+        // Validar y actualizar teléfono primario
+        $primaryPhone = !empty($data['cliente_telefono_1']) ? $data['cliente_telefono_1'] : null;
+        if ($primaryPhone !== null && $client->primary_phone !== $primaryPhone) {
+            $updates['primary_phone'] = $primaryPhone;
+        }
+        
+        // Validar y actualizar teléfono secundario
+        $secondaryPhone = !empty($data['cliente_telefono_2']) ? $data['cliente_telefono_2'] : null;
+        if ($secondaryPhone !== null && $client->secondary_phone !== $secondaryPhone) {
+            $updates['secondary_phone'] = $secondaryPhone;
+        }
+        
+        // Validar y actualizar email
+        if (!empty($data['cliente_email']) && $client->email !== $data['cliente_email']) {
+            $updates['email'] = $data['cliente_email'];
+        }
+        
+        if (!empty($updates)) {
+            $client->update($updates);
+        }
+    }
+    
+    /**
+     * Buscar lote con template financiero
+     */
+    private function findLotWithFinancialTemplate(array $data): ?Lot
+    {
+        try {
+            // Convertir nombre de manzana a ID con mapeo
+            $manzanaName = $data['lot_manzana'];
+            $mappedManzanaName = $this->mapManzanaName($manzanaName);
+            
+            $manzana = \Modules\Inventory\Models\Manzana::where('name', $mappedManzanaName)->first();
+            
+            if (!$manzana) {
+                Log::warning('Manzana no encontrada', [
+                    'manzana_name_original' => $manzanaName,
+                    'manzana_name_mapped' => $mappedManzanaName,
+                    'available_manzanas' => \Modules\Inventory\Models\Manzana::pluck('name')->toArray()
+                ]);
+                return null;
+            }
+            
+            $lot = Lot::where('num_lot', $data['lot_number'])
+                     ->where('manzana_id', $manzana->manzana_id)
+                     ->first();
+            
+            if (!$lot) {
+                Log::warning('Lote no encontrado', [
+                    'numero' => $data['lot_number'],
+                    'manzana_name' => $manzanaName,
+                    'manzana_id' => $manzana->manzana_id
+                ]);
+                return null;
+            }
+            
+            // Verificar que tenga template financiero
+            if (!$lot->financialTemplate) {
+                Log::warning('Lote sin template financiero', [
+                    'lot_id' => $lot->lot_id,
+                    'numero' => $lot->num_lot,
+                    'manzana' => $lot->manzana
+                ]);
+                return null;
+            }
+            
+            return $lot;
+            
+        } catch (Exception $e) {
+            Log::error('Error buscando lote con template: ' . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Mapear nombres de manzana del Excel a nombres de la base de datos
+     */
+    private function mapManzanaName(string $excelManzanaName): string
+    {
+        // Mapeo de nombres del Excel a nombres de la base de datos
+        // Basado en manzanas disponibles: A, D, E, F, G, H, I, J
+        $mapping = [
+            // Mapeo por nombres completos
+            'manzana 1' => 'A',
+            'manzana 2' => 'E',
+            'manzana 3' => 'F',
+            'manzana 4' => 'G',
+            'manzana 5' => 'H',
+            'manzana 6' => 'I',
+            'manzana 7' => 'J',
+            'manzana 8' => 'D',
+            // Mapeo por números directos
+            '1' => 'A',
+            '2' => 'E',
+            '3' => 'F',
+            '4' => 'G',
+            '5' => 'H',
+            '6' => 'I',
+            '7' => 'J',
+            '8' => 'D',
+            // Mapeo por letras (caso directo)
+            'a' => 'A',
+            'd' => 'D',
+            'e' => 'E',
+            'f' => 'F',
+            'g' => 'G',
+            'h' => 'H',
+            'i' => 'I',
+            'j' => 'J',
+            // Mapeo adicional para casos especiales
+            'x' => 'A', // Mapear 'X' a 'A' como fallback
+            'mz1' => 'A',
+            'mz2' => 'E',
+            'mz3' => 'F',
+            'mz4' => 'G',
+            'mz5' => 'H',
+            'mz6' => 'I',
+            'mz7' => 'J',
+            'mz8' => 'D'
+        ];
+        
+        $normalizedName = strtolower(trim($excelManzanaName));
+        
+        if (isset($mapping[$normalizedName])) {
+            Log::info('mapManzanaName - Mapeo aplicado', [
+                'original' => $excelManzanaName,
+                'normalized' => $normalizedName,
+                'mapped' => $mapping[$normalizedName]
+            ]);
+            return $mapping[$normalizedName];
+        }
+        
+        // Si el valor ya es una letra válida (A-J), devolverlo en mayúscula
+        $upperName = strtoupper($normalizedName);
+        if (in_array($upperName, ['A', 'D', 'E', 'F', 'G', 'H', 'I', 'J'])) {
+            Log::info('mapManzanaName - Nombre válido encontrado', [
+                'original' => $excelManzanaName,
+                'valid_name' => $upperName
+            ]);
+            return $upperName;
+        }
+        
+        // Si no hay mapeo, usar 'A' como fallback y registrar warning
+        Log::warning('mapManzanaName - Nombre no reconocido, usando fallback A', [
+            'original' => $excelManzanaName,
+            'normalized' => $normalizedName,
+            'available_manzanas' => ['A', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+        ]);
+        return 'A';
+    }
+    
+    /**
+     * Crear reservación simplificada
+     */
+    private function createReservationSimplified(Client $client, Lot $lot, array $data): ?Reservation
+    {
+        try {
+            // Buscar asesor
+            $advisor = $this->findAdvisorSimplified($data);
+            
+            // Si no se encuentra asesor, usar el primer asesor disponible
+            if (!$advisor) {
+                $advisor = Employee::where('employee_type', 'asesor_inmobiliario')->first();
+                if (!$advisor) {
+                    Log::error('No hay asesores disponibles en el sistema');
+                    return null;
+                }
+            }
+            
+            $reservationDate = $this->parseDateAsCarbon($data['fecha_venta'] ?? now());
+            $expirationDate = $reservationDate->copy()->addDays(30); // 30 días de vigencia por defecto
+            
+            // Logging detallado para debugging
+            Log::info('createReservationSimplified - Valores antes de crear reservación:', [
+                'lot_id' => $lot->lot_id ?? 'NULL',
+                'lot_num_lot' => $lot->num_lot ?? 'NULL',
+                'advisor_id' => $advisor->employee_id ?? 'NULL',
+                'advisor_name' => ($advisor && $advisor->user) ? $advisor->user->first_name . ' ' . $advisor->user->last_name : 'NULL',
+                'client_id' => $client->client_id ?? 'NULL',
+                'deposit_amount' => $lot->financialTemplate->initial_payment ?? 0
+            ]);
+            
+            return Reservation::create([
+                'client_id' => $client->client_id,
+                'lot_id' => $lot->lot_id,
+                'advisor_id' => $advisor->employee_id,
+                'reservation_date' => $reservationDate->format('Y-m-d'),
+                'expiration_date' => $expirationDate->format('Y-m-d'),
+                'sale_date' => $reservationDate->format('Y-m-d'),
+                'deposit_amount' => $lot->financialTemplate->initial_payment ?? 0,
+                'reference' => 'IMP-' . date('YmdHis') . '-' . $lot->num_lot,
+                'status' => 'pendiente_pago',
+                'observations' => $data['observaciones'] ?? null
+            ]);
+            
+        } catch (Exception $e) {
+            Log::error('Error creando reservación simplificada: ' . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Buscar asesor simplificado con fallback
+     */
+    private function findAdvisorSimplified(array $data): ?Employee
+    {
+        if (empty($data['asesor_nombre']) && empty($data['asesor_codigo']) && empty($data['asesor_email'])) {
+            Log::warning('findAdvisorSimplified - No se proporcionaron datos de asesor, usando fallback');
+            return $this->getDefaultAdvisor();
+        }
+        
+        // Buscar por código primero
+        if (!empty($data['asesor_codigo'])) {
+            $advisor = Employee::with('user')->where('employee_code', $data['asesor_codigo'])->first();
+            if ($advisor) {
+                Log::info('findAdvisorSimplified - Asesor encontrado por código', [
+                    'employee_code' => $data['asesor_codigo'],
+                    'advisor_id' => $advisor->employee_id
+                ]);
+                return $advisor;
+            }
+        }
+        
+        // Buscar por email del usuario asociado
+        if (!empty($data['asesor_email'])) {
+            $advisor = Employee::with('user')->whereHas('user', function($q) use ($data) {
+                $q->where('email', $data['asesor_email']);
+            })->first();
+            if ($advisor) {
+                Log::info('findAdvisorSimplified - Asesor encontrado por email', [
+                    'asesor_email' => $data['asesor_email'],
+                    'advisor_id' => $advisor->employee_id
+                ]);
+                return $advisor;
+            }
+        }
+        
+        // Buscar por nombre del usuario asociado usando CONCAT
+        if (!empty($data['asesor_nombre'])) {
+            $advisor = Employee::with('user')->whereHas('user', function($q) use ($data) {
+                $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ['%' . $data['asesor_nombre'] . '%'])
+                  ->orWhere('first_name', 'LIKE', '%' . $data['asesor_nombre'] . '%')
+                  ->orWhere('last_name', 'LIKE', '%' . $data['asesor_nombre'] . '%');
+            })->first();
+            if ($advisor) {
+                Log::info('findAdvisorSimplified - Asesor encontrado por nombre', [
+                    'asesor_nombre' => $data['asesor_nombre'],
+                    'advisor_id' => $advisor->employee_id
+                ]);
+                return $advisor;
+            }
+        }
+        
+        // Si no se encuentra, usar asesor por defecto
+        Log::warning('findAdvisorSimplified - Asesor no encontrado, usando fallback', [
+            'asesor_nombre' => $data['asesor_nombre'] ?? 'N/A',
+            'asesor_codigo' => $data['asesor_codigo'] ?? 'N/A',
+            'asesor_email' => $data['asesor_email'] ?? 'N/A'
+        ]);
+        
+        return $this->getDefaultAdvisor();
+    }
+    
+    /**
+     * Obtener asesor por defecto para casos de fallback
+     */
+    private function getDefaultAdvisor(): ?Employee
+    {
+        // Buscar el primer asesor inmobiliario disponible
+        $defaultAdvisor = Employee::with('user')
+            ->where('employee_type', 'asesor_inmobiliario')
+            ->first();
+            
+        if ($defaultAdvisor) {
+            Log::info('getDefaultAdvisor - Usando asesor por defecto', [
+                'default_advisor_id' => $defaultAdvisor->employee_id,
+                'default_advisor_code' => $defaultAdvisor->employee_code,
+                'default_advisor_name' => $defaultAdvisor->user ? 
+                    $defaultAdvisor->user->first_name . ' ' . $defaultAdvisor->user->last_name : 'N/A'
+            ]);
+        } else {
+            Log::error('getDefaultAdvisor - No se encontró ningún asesor inmobiliario en el sistema');
+        }
+        
+        return $defaultAdvisor;
+    }
+    
+    /**
+     * Determinar si se debe crear contrato
+     */
+    private function shouldCreateContractSimplified(array $data): bool
+    {
+        $tipoOperacion = strtolower($data['operation_type'] ?? '');
+        $estadoContrato = strtolower($data['contract_status'] ?? '');
+        
+        // Logging detallado para debugging
+        Log::info('shouldCreateContractSimplified - Valores recibidos:', [
+            'operation_type_original' => $data['operation_type'] ?? 'NO_DEFINIDO',
+            'operation_type_lowercase' => $tipoOperacion,
+            'contract_status_original' => $data['contract_status'] ?? 'NO_DEFINIDO',
+            'contract_status_lowercase' => $estadoContrato,
+            'all_data_keys' => array_keys($data),
+            'operation_type_in_venta_contrato' => in_array($tipoOperacion, ['venta', 'contrato']),
+            'contract_status_in_valid_states' => in_array($estadoContrato, ['vigente', 'activo', 'firmado'])
+        ]);
+        
+        // Lógica más permisiva: permitir contratos con estado null/vacío
+        // y también procesar 'reserva' como contrato válido
+        $shouldCreate = in_array($tipoOperacion, ['venta', 'contrato', 'reserva']) || 
+                       in_array($estadoContrato, ['vigente', 'activo', 'firmado']) ||
+                       empty($estadoContrato) || is_null($data['contract_status'] ?? null);
+        
+        Log::info('shouldCreateContractSimplified - Resultado:', [
+            'should_create_contract' => $shouldCreate,
+            'reason' => $shouldCreate ? 'Cumple condiciones para crear contrato (lógica permisiva)' : 'No cumple condiciones'
+        ]);
+        
+        return $shouldCreate;
+    }
+    
+    /**
+     * Crear contrato desde template financiero
+     */
+    private function createContractFromTemplate(Reservation $reservation, Lot $lot, array $data): ?Contract
+    {
+        try {
+            $template = $lot->financialTemplate;
+            if (!$template) {
+                Log::error('Template financiero no encontrado para el lote', ['lot_id' => $lot->lot_id]);
+                return null;
+            }
+            
+            // Usar métodos del template para obtener valores correctos
+            $totalPrice = $template->getEffectivePrice(); // precio_venta o precio_lista
+            $downPayment = $template->cuota_inicial ?? 0;
+            $financingAmount = $template->getFinancingAmount();
+            $balloonPayment = $template->cuota_balon ?? 0;
+            
+            // Determinar cuotas mensuales basado en installments disponibles
+            $monthlyPayment = 0;
+            $termMonths = 0;
+            $interestRate = 0;
+            
+            // Priorizar installments_40, luego installments_44, luego installments_24
+            if ($template->installments_40 > 0) {
+                $monthlyPayment = $template->installments_40;
+                $termMonths = 40;
+                $interestRate = 0; // Sin interés aplicado por el momento
+            } elseif ($template->installments_44 > 0) {
+                $monthlyPayment = $template->installments_44;
+                $termMonths = 44;
+                $interestRate = 0; // Sin interés aplicado por el momento
+            } elseif ($template->installments_24 > 0) {
+                $monthlyPayment = $template->installments_24;
+                $termMonths = 24;
+                $interestRate = 0; // Sin interés aplicado por el momento
+            }
+            
+            // Determinar si es financiado
+            $isFinanced = $monthlyPayment > 0 && $termMonths > 0;
+            
+            $contractData = [
+                'reservation_id' => $reservation->reservation_id,
+                'contract_number' => $this->generateContractNumber(),
+                'sign_date' => $this->parseDate($data['fecha_venta'] ?? now()),
+                'total_price' => $totalPrice,
+                'down_payment' => $downPayment,
+                'financing_amount' => $isFinanced ? $financingAmount : 0,
+                'monthly_payment' => $isFinanced ? $monthlyPayment : 0,
+                'term_months' => $isFinanced ? $termMonths : 0,
+                'interest_rate' => $isFinanced ? $interestRate : 0,
+                'balloon_payment' => $balloonPayment,
+                'funding' => $template->bono_bpp ?? 0,
+                'bpp' => $template->bono_bpp ?? 0,
+                'bfh' => 0, // Campo BFH - valor por defecto
+                'initial_quota' => $downPayment,
+                'currency' => 'USD'
+                // Omitir status completamente ya que causa truncamiento incluso con valor vacío
+            ];
+            
+            Log::info('createContractFromTemplate - Debugging monthly_payment y valores del contrato:', [
+                'lot_id' => $lot->lot_id,
+                'template_data' => [
+                    'precio_lista' => $template->precio_lista,
+                    'precio_venta' => $template->precio_venta,
+                    'cuota_inicial' => $template->cuota_inicial,
+                    'installments_24' => $template->installments_24,
+                    'installments_40' => $template->installments_40,
+                    'installments_44' => $template->installments_44,
+                    'cuota_balon' => $template->cuota_balon
+                ],
+                'calculated_values' => [
+                    'monthly_payment_calculated' => $monthlyPayment,
+                    'term_months_selected' => $termMonths,
+                    'interest_rate_set' => $interestRate,
+                    'total_price' => $totalPrice,
+                    'financing_amount' => $financingAmount,
+                    'is_financed' => $isFinanced
+                ],
+                'contract_data' => $contractData
+            ]);
+            
+            Log::info('Intentando crear contrato con Contract::create()');
+            
+            try {
+                $contract = Contract::create($contractData);
+                
+                if (!$contract) {
+                    Log::error('Contract::create() retornó null o false');
+                    return null;
+                }
+                
+                Log::info('Contrato creado exitosamente:', ['contract_id' => $contract->contract_id]);
+            } catch (\Exception $createException) {
+                Log::error('Excepción al crear contrato:', [
+                    'message' => $createException->getMessage(),
+                    'file' => $createException->getFile(),
+                    'line' => $createException->getLine(),
+                    'contract_data' => $contractData
+                ]);
+                return null;
+            }
+            
+            // Generar cronograma de pagos si es financiado
+            if ($isFinanced && $contract) {
+                $paymentScheduleService = app(PaymentScheduleService::class);
+                $paymentScheduleService->generateIntelligentSchedule($contract);
+            }
+            
+            return $contract;
+            
+        } catch (Exception $e) {
+            Log::error('Error creando contrato desde template: ' . $e->getMessage(), [
+                'exception' => $e->getTraceAsString()
+            ]);
+            return null;
+        }
     }
 }

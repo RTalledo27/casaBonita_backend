@@ -42,6 +42,7 @@ class Commission extends Model
         'first_payment_verified_at',
         'second_payment_verified_at',
         'is_eligible_for_payment',
+        'is_payable',
         'verification_notes',
         // Campos para integración HR-Collections
         'verification_status',
@@ -66,6 +67,7 @@ class Commission extends Model
         'first_payment_verified_at' => 'datetime',
         'second_payment_verified_at' => 'datetime',
         'is_eligible_for_payment' => 'boolean',
+        'is_payable' => 'boolean',
         // Campos para integración HR-Collections
         'period_start' => 'date',
         'period_end' => 'date',
@@ -355,5 +357,42 @@ class Commission extends Model
             'verification_failed' => 0,
             default => 0
         };
+    }
+
+    // === SCOPES PARA SISTEMA DE PAGABILIDAD ===
+
+    /**
+     * Scope para comisiones pagables (divisiones)
+     */
+    public function scopePayable($query)
+    {
+        return $query->where('is_payable', true);
+    }
+
+    /**
+     * Scope para comisiones no pagables (registros de control/padre)
+     */
+    public function scopeNonPayable($query)
+    {
+        return $query->where('is_payable', false);
+    }
+
+    /**
+     * Scope para obtener solo las divisiones pagables de comisiones divididas
+     */
+    public function scopePayableDivisions($query)
+    {
+        return $query->where('is_payable', true)
+                    ->whereNotNull('parent_commission_id');
+    }
+
+    /**
+     * Scope para obtener comisiones padre (registros de control)
+     */
+    public function scopeParentCommissions($query)
+    {
+        return $query->where('is_payable', false)
+                    ->whereNull('parent_commission_id')
+                    ->has('childCommissions');
     }
 }

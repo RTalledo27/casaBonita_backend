@@ -47,4 +47,14 @@ class Lot extends Model
     {
         return $this->hasMany(LotMedia::class, 'lot_id','lot_id');
     }
+    
+    public function financialTemplate()
+    {
+        return $this->hasOne(LotFinancialTemplate::class, 'lot_id', 'lot_id');
+    }
+    
+    public function reservations()
+    {
+        return $this->hasMany(\Modules\Sales\Models\Reservation::class, 'lot_id', 'lot_id');
+    }
 }

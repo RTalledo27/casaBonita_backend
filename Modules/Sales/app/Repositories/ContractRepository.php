@@ -9,10 +9,61 @@ use Modules\Sales\Models\PaymentSchedule;
 
 class ContractRepository
 {
-    public function paginate(int $perPage = 15)
+    public function paginate(int $perPage = 15, array $filters = [])
     {
-        return Contract::with(['reservation', 'schedules', 'invoices', 'approvals'])
-            ->paginate($perPage);
+        $query = Contract::with([
+            'reservation.client', 
+            'reservation.lot', 
+            'client', // Relación directa para contratos sin reserva
+            'lot',    // Relación directa para contratos sin reserva
+            'advisor', // Relación con asesor
+            'schedules', 
+            'invoices', 
+            'approvals'
+        ]);
+
+        // Apply search filter
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('contract_number', 'LIKE', "%{$search}%")
+                  // Búsqueda en campos directos del contrato
+                  ->orWhere('client_name', 'LIKE', "%{$search}%")
+                  ->orWhere('client_email', 'LIKE', "%{$search}%")
+                  ->orWhere('client_phone', 'LIKE', "%{$search}%")
+                  // Búsqueda en cliente directo (contratos sin reserva)
+                  ->orWhereHas('client', function ($clientQuery) use ($search) {
+                      $clientQuery->where('first_name', 'LIKE', "%{$search}%")
+                                  ->orWhere('last_name', 'LIKE', "%{$search}%")
+                                  ->orWhere('email', 'LIKE', "%{$search}%")
+                                  ->orWhere('phone', 'LIKE', "%{$search}%")
+                                  ->orWhere('document_number', 'LIKE', "%{$search}%");
+                  })
+                  // Búsqueda en lote directo (contratos sin reserva)
+                  ->orWhereHas('lot', function ($lotQuery) use ($search) {
+                      $lotQuery->where('lot_number', 'LIKE', "%{$search}%")
+                               ->orWhere('block', 'LIKE', "%{$search}%");
+                  })
+                  // Búsqueda en reserva (contratos con reserva)
+                  ->orWhereHas('reservation', function ($reservationQuery) use ($search) {
+                      $reservationQuery->where('client_name', 'LIKE', "%{$search}%")
+                                      ->orWhere('client_email', 'LIKE', "%{$search}%")
+                                      ->orWhere('client_phone', 'LIKE', "%{$search}%");
+                  });
+            });
+        }
+
+        // Apply status filter
+        if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        // Apply financing filter (contracts with financing_amount > 0)
+        if (!empty($filters['with_financing'])) {
+            $query->where('financing_amount', '>', 0);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function create(array $data, array $approvers = []): Contract
@@ -41,7 +92,15 @@ class ContractRepository
     public function update(Contract $contract, array $data): Contract
     {
         $contract->update($data);
-        return $contract->load(['reservation', 'schedules', 'invoices']);
+        return $contract->load([
+            'reservation.client', 
+            'reservation.lot', 
+            'client', 
+            'lot', 
+            'advisor',
+            'schedules', 
+            'invoices'
+        ]);
     }
 
     public function delete(Contract $contract): void
@@ -140,7 +199,16 @@ class ContractRepository
         //     ]);
         // }
 
-        return $contract->load(['reservation', 'schedules', 'invoices', 'approvals']);
+        return $contract->load([
+            'reservation.client', 
+            'reservation.lot', 
+            'client', 
+            'lot', 
+            'advisor',
+            'schedules', 
+            'invoices', 
+            'approvals'
+        ]);
     }
 
      public function find($id): ?Contract

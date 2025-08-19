@@ -47,10 +47,25 @@ class CommissionRepository
     {
         $query = $this->model->with(['employee.user', 'contract']);
 
-        // Por defecto, mostrar solo comisiones padre (no divisiones de pago)
-        // A menos que se especifique explícitamente incluir divisiones
-        if (!isset($filters['include_split_payments']) || !$filters['include_split_payments']) {
-            $query->whereNull('parent_commission_id');
+        // Mostrar todas las comisiones por defecto
+        // Solo aplicar filtro payable si se especifica explícitamente
+        if (isset($filters['only_payable']) && $filters['only_payable']) {
+            $query->payable();
+        }
+
+        // Mantener compatibilidad con filtros existentes
+        if (isset($filters['include_split_payments'])) {
+            if ($filters['include_split_payments']) {
+                // Si se incluyen split payments, mostrar todas las comisiones
+                $query = $this->model->with(['employee.user', 'contract']);
+            } else {
+                // Si NO se incluyen split payments, solo mostrar comisiones padre (no payables)
+                $query->where('is_payable', false);
+            }
+        }
+
+        if (isset($filters['only_split_payments']) && $filters['only_split_payments']) {
+            $query->payableDivisions();
         }
 
         if (isset($filters['employee_id'])) {
@@ -79,11 +94,6 @@ class CommissionRepository
 
         if (isset($filters['payment_period'])) {
             $query->where('payment_period', $filters['payment_period']);
-        }
-
-        // Si se solicitan solo comisiones hijas
-        if (isset($filters['only_split_payments']) && $filters['only_split_payments']) {
-            $query->whereNotNull('parent_commission_id');
         }
 
         return $query->orderBy('created_at', 'desc')->get();
@@ -93,10 +103,25 @@ class CommissionRepository
     {
         $query = $this->model->with(['employee.user', 'contract']);
 
-        // Por defecto, mostrar solo comisiones padre (no divisiones de pago)
-        // A menos que se especifique explícitamente incluir divisiones
-        if (!isset($filters['include_split_payments']) || !$filters['include_split_payments']) {
-            $query->whereNull('parent_commission_id');
+        // Mostrar todas las comisiones por defecto
+        // Solo aplicar filtro payable si se especifica explícitamente
+        if (isset($filters['only_payable']) && $filters['only_payable']) {
+            $query->payable();
+        }
+
+        // Mantener compatibilidad con filtros existentes
+        if (isset($filters['include_split_payments'])) {
+            if ($filters['include_split_payments']) {
+                // Si se incluyen split payments, mostrar todas las comisiones
+                $query = $this->model->with(['employee.user', 'contract']);
+            } else {
+                // Si NO se incluyen split payments, solo mostrar comisiones padre (no payables)
+                $query->where('is_payable', false);
+            }
+        }
+
+        if (isset($filters['only_split_payments']) && $filters['only_split_payments']) {
+            $query->payableDivisions();
         }
 
         if (isset($filters['employee_id'])) {
@@ -125,11 +150,6 @@ class CommissionRepository
 
         if (isset($filters['payment_period'])) {
             $query->where('payment_period', $filters['payment_period']);
-        }
-
-        // Si se solicitan solo comisiones hijas
-        if (isset($filters['only_split_payments']) && $filters['only_split_payments']) {
-            $query->whereNotNull('parent_commission_id');
         }
 
         return $query->orderBy('created_at', 'desc')->paginate($perPage);
@@ -169,6 +189,7 @@ class CommissionRepository
     public function getPendingForPeriod(int $month, int $year): Collection
     {
         return $this->model->with(['employee.user', 'contract'])
+            ->payable()
             ->pending()
             ->byPeriod($month, $year)
             ->get();

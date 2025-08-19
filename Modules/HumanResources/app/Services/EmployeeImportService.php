@@ -172,6 +172,8 @@ class EmployeeImportService
                 'afp_code' => $row['AFP'] ?? null,
                 'cuspp' => !empty($row['CUSPP']) ? $row['CUSPP'] : '0',
                 'social_security_number' => $row['SUNAT'] ?? null,
+                'is_commission_eligible' => 1,
+                'is_bonus_eligible' => 1,
             ]
         ];
     }

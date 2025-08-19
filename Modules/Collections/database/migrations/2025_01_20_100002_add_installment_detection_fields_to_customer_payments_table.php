@@ -11,6 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Verificar si la tabla customer_payments existe antes de modificarla
+        if (!Schema::hasTable('customer_payments')) {
+            return;
+        }
+        
         Schema::table('customer_payments', function (Blueprint $table) {
             // Campos para detección de cuotas
             $table->enum('installment_type', ['first', 'second', 'regular', 'unknown'])
@@ -79,6 +84,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // Verificar si la tabla customer_payments existe antes de modificarla
+        if (!Schema::hasTable('customer_payments')) {
+            return;
+        }
+        
         Schema::table('customer_payments', function (Blueprint $table) {
             // Eliminar clave foránea
             $table->dropForeign(['installment_detected_by']);

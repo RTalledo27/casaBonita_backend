@@ -19,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Exception;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use Illuminate\Support\Facades\Log;
 
 class ContractImportController extends Controller
 {
@@ -44,8 +45,8 @@ class ContractImportController extends Controller
             $filePath = $file->storeAs('temp/imports', $fileName, 'local');
             $fullPath = Storage::disk('local')->path($filePath);
 
-            // Procesar archivo
-            $result = $this->importService->processExcel($fullPath);
+            // Procesar archivo usando lógica simplificada
+            $result = $this->importService->processExcelSimplified($fullPath);
 
             // Limpiar archivo temporal
             Storage::disk('local')->delete($filePath);
@@ -240,6 +241,78 @@ class ContractImportController extends Controller
     }
 
     /**
+     * Validar estructura del archivo Excel simplificado sin procesarlo
+     */
+    public function validateStructureSimplified(Request $request): JsonResponse
+    {
+        try {
+            // Verificar que el usuario esté autenticado
+            $user = $request->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Usuario no autenticado'
+                ], 401);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'file' => [
+                    'required',
+                    'file',
+                    'mimes:xlsx,xls,csv',
+                    'max:51200'
+                ]
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error de validación',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $file = $request->file('file');
+            $fileName = 'validate_' . time() . '_' . $user->id . '.' . $file->getClientOriginalExtension();
+            $filePath = $file->storeAs('temp/imports', $fileName, 'local');
+            $fullPath = Storage::disk('local')->path($filePath);
+
+            // Leer solo los headers
+            $spreadsheet = IOFactory::load($fullPath);
+            $worksheet = $spreadsheet->getActiveSheet();
+            $headers = $worksheet->rangeToArray('A1:' . $worksheet->getHighestColumn() . '1')[0];
+
+            // Validar estructura simplificada
+            $validation = $this->importService->validateExcelStructureSimplified($headers);
+
+            // Limpiar archivo temporal
+            Storage::disk('local')->delete($filePath);
+
+            return response()->json([
+                'success' => $validation['valid'],
+                'message' => $validation['valid'] ? 'Estructura válida' : $validation['error'],
+                'headers' => $headers,
+                'required_headers' => [
+                    'ASESOR_NOMBRE', 'ASESOR_CODIGO', 'ASESOR_EMAIL',
+                    'CLIENTE_NOMBRE_COMPLETO', 'CLIENTE_TIPO_DOC', 'CLIENTE_NUM_DOC', 'CLIENTE_TELEFONO_1', 'CLIENTE_EMAIL',
+                    'LOTE_NUMERO', 'LOTE_MANZANA',
+                    'FECHA_VENTA', 'TIPO_OPERACION', 'OBSERVACIONES', 'ESTADO_CONTRATO'
+                ]
+            ]);
+
+        } catch (Exception $e) {
+            if (isset($filePath)) {
+                Storage::disk('local')->delete($filePath);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al validar archivo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Validar estructura del archivo Excel sin procesarlo
      */
     public function validateStructure(Request $request): JsonResponse
@@ -296,7 +369,7 @@ class ContractImportController extends Controller
                 ],
                 'optional_headers' => [
                     'ASESOR_CODIGO', 'ASESOR_EMAIL', 'ASESOR_TELEFONO', 'CANAL_VENTA', 'CAMPANA',
-                    'CLIENTE_NOMBRES', 'CLIENTE_APELLIDOS', 'CLIENTE_TIPO_DOCUMENTO', 'CLIENTE_NUMERO_DOCUMENTO',
+                    'CLIENTE_NOMBRES', 'CLIENTE_TIPO_DOCUMENTO', 'CLIENTE_NUMERO_DOCUMENTO',
                     'CLIENTE_EMAIL', 'CLIENTE_TELEFONO_1', 'CLIENTE_TELEFONO_2', 'CLIENTE_FECHA_NACIMIENTO',
                     'CLIENTE_ESTADO_CIVIL', 'CLIENTE_OCUPACION', 'CLIENTE_SALARIO', 'CLIENTE_TIPO', 'CLIENTE_OBSERVACIONES',
                     'CLIENTE_DIRECCION', 'CLIENTE_REFERENCIA', 'CLIENTE_DISTRITO', 'CLIENTE_PROVINCIA',
@@ -317,6 +390,163 @@ class ContractImportController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al validar archivo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Descargar plantilla simplificada de ejemplo para importación
+     * Solo incluye 15 campos esenciales, usa Lot Financial Templates para datos financieros
+     */
+    public function downloadSimplifiedTemplate()
+    {
+        try {
+            // Template simplificado con solo 14 campos esenciales
+            $headers = [
+                // Sección Asesor (3 campos)
+                'ASESOR_NOMBRE',
+                'ASESOR_CODIGO',
+                'ASESOR_EMAIL',
+                
+                // Sección Cliente (5 campos) - Solo nombres completos
+                'CLIENTE_NOMBRE_COMPLETO',
+                'CLIENTE_TIPO_DOC',
+                'CLIENTE_NUM_DOC',
+                'CLIENTE_TELEFONO_1',
+                'CLIENTE_EMAIL',
+                
+                // Sección Lote (2 campos)
+                'LOTE_NUMERO',
+                'LOTE_MANZANA',
+                
+                // Sección Venta y Control (4 campos)
+                'FECHA_VENTA',
+                'TIPO_OPERACION',
+                'OBSERVACIONES',
+                'ESTADO_CONTRATO'
+            ];
+
+            // Datos de ejemplo simplificados
+            $exampleData = [
+                [
+                    // Asesor
+                    'Juan Carlos Pérez',
+                    'ASE001',
+                    'juan.perez@casabonita.com',
+                    
+                    // Cliente - Solo nombres completos
+                    'María Elena García López',
+                    'DNI',
+                    '12345678',
+                    '987654321',
+                    'maria.garcia@email.com',
+                    
+                    // Lote
+                    '15',
+                    'A',
+                    
+                    // Venta y Control
+                    '2024-01-15',
+                    'RESERVA',
+                    'Cliente preferencial',
+                    'ACTIVO'
+                ],
+                [
+                    // Asesor
+                    'Ana Sofía Rodríguez',
+                    'ASE002',
+                    'ana.rodriguez@casabonita.com',
+                    
+                    // Cliente - Solo nombres completos
+                    'Carlos Alberto Mendoza Silva',
+                    'DNI',
+                    '87654321',
+                    '998877665',
+                    'carlos.mendoza@email.com',
+                    
+                    // Lote
+                    '22',
+                    'B',
+                    
+                    // Venta y Control
+                    '2024-01-22',
+                    'CONTRATO',
+                    'Cliente nuevo',
+                    'ACTIVO'
+                ]
+            ];
+
+            // Crear el archivo Excel
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Plantilla Simplificada');
+
+            // Configurar encabezados
+            $sheet->fromArray($headers, null, 'A1');
+            
+            // Aplicar estilos a los encabezados
+            $headerRange = 'A1:' . $sheet->getHighestColumn() . '1';
+            $sheet->getStyle($headerRange)->applyFromArray([
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => 'FFFFFF']
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => '4472C4']
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER
+                ],
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => '000000']
+                    ]
+                ]
+            ]);
+
+            // Agregar datos de ejemplo
+            $sheet->fromArray($exampleData, null, 'A2');
+            
+            // Ajustar ancho de columnas
+            foreach (range('A', $sheet->getHighestColumn()) as $column) {
+                $sheet->getColumnDimension($column)->setAutoSize(true);
+            }
+
+            // Agregar comentarios explicativos
+            $sheet->getComment('A1')->getText()->createTextRun(
+                "PLANTILLA SIMPLIFICADA DE IMPORTACIÓN DE CONTRATOS\n\n" .
+                "Esta plantilla contiene solo 14 campos esenciales.\n" .
+                "Los datos financieros se obtienen automáticamente\n" .
+                "de las Plantillas Financieras de Lotes configuradas.\n\n" .
+                "TIPO_OPERACION: RESERVA o CONTRATO\n" .
+                "ESTADO_CONTRATO: ACTIVO, INACTIVO, CANCELADO"
+            );
+
+            // Crear el archivo temporal
+            $writer = new Xlsx($spreadsheet);
+            $filename = 'plantilla_simplificada_contratos_' . date('Y-m-d_H-i-s') . '.xlsx';
+            $tempPath = storage_path('app/temp/' . $filename);
+            
+            // Asegurar que el directorio existe
+            if (!file_exists(dirname($tempPath))) {
+                mkdir(dirname($tempPath), 0755, true);
+            }
+            
+            $writer->save($tempPath);
+
+            // Retornar el archivo para descarga
+            return response()->download($tempPath, $filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])->deleteFileAfterSend(true);
+
+        } catch (Exception $e) {
+            Log::error('Error al generar plantilla simplificada de contratos: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al generar la plantilla: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -588,7 +818,7 @@ class ContractImportController extends Controller
             // Agregar headers
             $columnIndex = 1;
             foreach ($headers as $header) {
-                $sheet->setCellValueByColumnAndRow($columnIndex, 1, $header);
+                $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex) . '1', $header);
                 $columnIndex++;
             }
 
@@ -627,7 +857,7 @@ class ContractImportController extends Controller
             foreach ($exampleData as $row) {
                 $columnIndex = 1;
                 foreach ($row as $value) {
-                    $sheet->setCellValueByColumnAndRow($columnIndex, $rowIndex, $value);
+                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($columnIndex) . $rowIndex, $value);
                     $columnIndex++;
                 }
                 $rowIndex++;
@@ -735,7 +965,7 @@ class ContractImportController extends Controller
             foreach ($instructions as $instruction) {
                 $colIndex = 1;
                 foreach ($instruction as $value) {
-                    $instructionsSheet->setCellValueByColumnAndRow($colIndex, $rowIndex, $value);
+                    $instructionsSheet->setCellValue(Coordinate::stringFromColumnIndex($colIndex) . $rowIndex, $value);
                     $colIndex++;
                 }
                 $rowIndex++;

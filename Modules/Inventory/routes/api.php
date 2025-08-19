@@ -34,9 +34,19 @@ Route::prefix('v1')->group(function () {
             Route::post('/', [LotImportController::class, 'import'])->name('lot-import.import');
             Route::post('/validate', [LotImportController::class, 'validateFile'])->name('lot-import.validate');
             Route::get('/statistics', [LotImportController::class, 'getStatistics'])->name('lot-import.statistics');
+            Route::get('/diagnose-lot-financial-templates', [LotImportController::class, 'diagnoseLotFinancialTemplates'])->name('lot-import.diagnose-templates');
+            
+            // Diagnóstico de reglas de financiamiento desde Excel
+            Route::post('/diagnose-financing-rules', [LotController::class, 'diagnoseFinancingRules']);
+            Route::post('/diagnose-column-j', [LotController::class, 'diagnoseColumnJ']);
+            Route::get('/history', [LotImportController::class, 'history'])->name('lot-import.history');
             Route::get('/financing-rules', [LotImportController::class, 'getFinancingRules'])->name('lot-import.financing-rules');
             Route::get('/lots-with-financial-data', [LotImportController::class, 'getLotsWithFinancialData'])->name('lot-import.lots-financial');
             Route::delete('/clear-data', [LotImportController::class, 'clearImportData'])->name('lot-import.clear-data');
+            
+            // Rutas para importación asíncrona
+            Route::post('/async', [LotImportController::class, 'asyncImport'])->name('lot-import.async');
+            Route::get('/async/{id}/status', [LotImportController::class, 'getAsyncStatus'])->name('lot-import.async-status');
         });
     });
 });

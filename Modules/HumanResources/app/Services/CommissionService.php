@@ -10,6 +10,7 @@ use Modules\HumanResources\Models\Employee;
 use Modules\HumanResources\Repositories\CommissionRepository;
 use Modules\HumanResources\Repositories\EmployeeRepository;
 use Modules\Sales\Models\Contract;
+use Modules\Lots\Models\LotFinancialTemplate;
 
 class CommissionService
 {
@@ -32,32 +33,63 @@ class CommissionService
                                ->get();
 
             foreach ($contracts as $contract) {
-                // Verificar si ya existe comisión para este contrato
-                $existingCommission = Commission::where('contract_id', $contract->contract_id)
-                                               ->where('period_month', $month)
-                                               ->where('period_year', $year)
-                                               ->first();
-
-                if (!$existingCommission && $contract->advisor && $contract->financing_amount > 0) {
-                    $totalCommissionAmount = $this->calculateCommission($contract);
+                // Usar LotFinancialTemplate como fuente única de datos financieros
+                try {
+                    $commissionData = $this->calculateCommissionFromTemplate($contract);
+                } catch (Exception $e) {
+                    // Fallback a datos del contrato si no hay template
+                    // Usar la misma lógica de tabla de rangos que calculateCommissionFromTemplate
+                    $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
+                    $commissionRatePercent = $this->getCommissionRate($salesCount, $contract->term_months);
+                    $commissionRate = $commissionRatePercent / 100; // Convertir a decimal para consistencia
                     
-                    // Solo procesar si hay comisión a pagar
-                    if ($totalCommissionAmount > 0) {
-                        $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
-                        $commissionRate = $this->getCommissionRate($salesCount, $contract->term_months);
-                        
-                        // Crear comisiones divididas según el número de ventas
-                        $commissionParts = $this->createSplitCommissions(
-                            $contract,
-                            $totalCommissionAmount,
-                            $commissionRate,
-                            $salesCount,
-                            $month,
-                            $year
-                        );
-                        
-                        $commissions = array_merge($commissions, $commissionParts);
-                    }
+                    $commissionData = [
+                        'commission_amount' => $contract->financing_amount * $commissionRate,
+                        'commission_rate' => $commissionRate,
+                        'financing_amount' => $contract->financing_amount,
+                        'term_months' => $contract->term_months,
+                        'template_id' => null,
+                        'template_version' => null,
+                        'financial_source' => 'contract_direct'
+                    ];
+                }
+                
+                // Verificar si ya existe una comisión COMPLETA (padre + 2 hijas) para este contrato
+                $existingParentCommissions = Commission::where('contract_id', $contract->contract_id)
+                                                       ->where('period_month', $month)
+                                                       ->where('period_year', $year)
+                                                       ->where('employee_id', $contract->advisor_id)
+                                                       ->whereNull('parent_commission_id')
+                                                       ->count();
+                                                       
+                $existingChildCommissions = Commission::where('contract_id', $contract->contract_id)
+                                                      ->where('period_month', $month)
+                                                      ->where('period_year', $year)
+                                                      ->where('employee_id', $contract->advisor_id)
+                                                      ->whereNotNull('parent_commission_id')
+                                                      ->count();
+
+                // Procesar si no existe comisión completa (padre + 2 hijas) o si faltan comisiones hijas
+                $needsProcessing = ($existingParentCommissions == 0) || ($existingParentCommissions > 0 && $existingChildCommissions < 2);
+                
+                if ($needsProcessing && $contract->advisor && $contract->financing_amount > 0) {
+                    $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
+                    
+                    // Crear pagos divididos automáticamente (incluye comisión padre)
+                    $splitCommissions = $this->createSplitCommissions(
+                        $contract,
+                        $commissionData['commission_amount'],
+                        $commissionData['commission_rate'],
+                        $salesCount,
+                        $month,
+                        $year,
+                        $commissionData['financial_source'] ?? null,
+                        $commissionData['template_id'] ?? null,
+                        now()->toDateString()
+                    );
+                    
+                    // Agregar todas las comisiones (padre + divisiones)
+                    $commissions = array_merge($commissions, $splitCommissions);
                 }
             }
         });
@@ -106,6 +138,43 @@ class CommissionService
     }
 
     /**
+     * Calcula la comisión basada en LotFinancialTemplate como fuente única
+     */
+    private function calculateCommissionFromTemplate(Contract $contract): array
+    {
+        // Obtener el lote y su template financiero
+        $lot = $contract->getLot();
+        if (!$lot || !$lot->lotFinancialTemplate) {
+            throw new Exception('No se encontró template financiero para el lote del contrato');
+        }
+
+        $template = $lot->lotFinancialTemplate;
+        
+        // Usar datos del template como fuente única de verdad
+        $financingAmount = $template->financing_amount;
+        $termMonths = $template->term_months;
+        
+        // Contar ventas financiadas del asesor para determinar la tasa correcta
+        $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
+        
+        // Usar la tabla de rangos por número de ventas (NO el método de porcentajes fijos por plazo)
+        $commissionRatePercent = $this->getCommissionRate($salesCount, $termMonths); // Mantener como porcentaje
+        $commissionRateDecimal = $commissionRatePercent / 100; // Convertir a decimal para cálculo
+        $commissionAmount = $financingAmount * $commissionRateDecimal;
+        
+        return [
+            'commission_amount' => $commissionAmount,
+            'commission_rate' => $commissionRatePercent, // Guardar como porcentaje
+            'financing_amount' => $financingAmount,
+            'term_months' => $termMonths,
+            'sales_count' => $salesCount,
+            'template_id' => $template->id,
+            'template_version' => $template->version ?? 1,
+            'financial_source' => 'lot_financial_template'
+        ];
+    }
+
+    /**
       * Determina el porcentaje de comisión según la tabla de rangos
       */
     private function getCommissionRate(int $salesCount, int $termMonths): float
@@ -125,6 +194,23 @@ class CommissionService
     }
 
     /**
+     * Calcula la comisión basada en el monto de financiamiento y plazo
+     */
+    private function calculateCommissionRate(float $financingAmount, int $termMonths): float
+    {
+        // Lógica de comisiones basada en el plazo
+        if ($termMonths <= 12) {
+            return 0.03; // 3%
+        } elseif ($termMonths <= 24) {
+            return 0.035; // 3.5%
+        } elseif ($termMonths <= 36) {
+            return 0.04; // 4%
+        } else {
+            return 0.045; // 4.5%
+        }
+    }
+
+    /**
      * Crea comisiones divididas según el número de ventas
      */
     private function createSplitCommissions(
@@ -133,9 +219,46 @@ class CommissionService
         float $commissionRate,
         int $salesCount,
         int $month,
-        int $year
+        int $year,
+        string $financialSource = null,
+        int $templateVersionId = null,
+        string $calculationDate = null
     ): array {
         $commissions = [];
+        
+        // Validación adicional: verificar que no exista una comisión PADRE para este contrato/empleado/período
+        $existingParentCount = Commission::where('contract_id', $contract->contract_id)
+                                         ->where('employee_id', $contract->advisor_id)
+                                         ->where('period_month', $month)
+                                         ->where('period_year', $year)
+                                         ->whereNull('parent_commission_id') // Solo comisiones padre
+                                         ->count();
+        
+        if ($existingParentCount > 0) {
+            // Ya existe una comisión padre, verificar si faltan las comisiones hijas
+            $existingChildrenCount = Commission::where('contract_id', $contract->contract_id)
+                                               ->where('employee_id', $contract->advisor_id)
+                                               ->where('period_month', $month)
+                                               ->where('period_year', $year)
+                                               ->whereNotNull('parent_commission_id') // Solo comisiones hijas
+                                               ->count();
+            
+            if ($existingChildrenCount >= 2) {
+                // Ya existen las comisiones hijas, retornar array vacío
+                return [];
+            }
+            
+            // Obtener la comisión padre existente para crear las hijas faltantes
+            $parentCommission = Commission::where('contract_id', $contract->contract_id)
+                                          ->where('employee_id', $contract->advisor_id)
+                                          ->where('period_month', $month)
+                                          ->where('period_year', $year)
+                                          ->whereNull('parent_commission_id')
+                                          ->first();
+        } else {
+            // No existe comisión padre, crear una nueva
+            $parentCommission = null;
+        }
         
         // Generar período de comisión (YYYY-MM)
         $commissionPeriod = Commission::generateCommissionPeriod($month, $year);
@@ -151,30 +274,36 @@ class CommissionService
             $secondPaymentPercentage = 50;
         }
         
-        // Crear comisión principal (padre)
-        $parentCommission = $this->commissionRepo->create([
-            'employee_id' => $contract->advisor_id,
-            'contract_id' => $contract->contract_id,
-            'commission_type' => 'venta_financiada',
-            'sale_amount' => $contract->financing_amount,
-            'installment_plan' => $contract->term_months,
-            'commission_percentage' => $commissionRate,
-            'commission_amount' => $totalAmount,
-            'period_month' => $month,
-            'period_year' => $year,
-            'commission_period' => $commissionPeriod,
-            'payment_period' => null, // Se asignará cuando se procese el pago
-            'payment_percentage' => 100.0,
-            'status' => 'generated',
-            'payment_status' => 'pendiente',
-            'parent_commission_id' => null,
-            'payment_part' => 1,
-            'total_commission_amount' => $totalAmount,
-            'sales_count' => $salesCount,
-            'notes' => "Comisión por venta financiada - {$salesCount} ventas - Total: $" . number_format($totalAmount, 2)
-        ]);
-        
-        $commissions[] = $parentCommission;
+        // Crear comisión principal (padre) solo si no existe - NO PAGABLE (registro de control)
+        if ($parentCommission === null) {
+            $parentCommission = $this->commissionRepo->create([
+                'employee_id' => $contract->advisor_id,
+                'contract_id' => $contract->contract_id,
+                'commission_type' => 'venta_financiada',
+                'sale_amount' => $contract->financing_amount,
+                'installment_plan' => $contract->term_months,
+                'commission_percentage' => $commissionRate,
+                'commission_amount' => $totalAmount,
+                'period_month' => $month,
+                'period_year' => $year,
+                'commission_period' => $commissionPeriod,
+                'payment_period' => null, // Se asignará cuando se procese el pago
+                'payment_percentage' => 100.0,
+                'status' => 'generated',
+                'payment_status' => 'pendiente',
+                'parent_commission_id' => null,
+                'payment_part' => 1,
+                'total_commission_amount' => $totalAmount,
+                'sales_count' => $salesCount,
+                'is_payable' => false, // Registro de control, no pagable directamente
+                'financial_source' => $financialSource,
+                'template_version_id' => $templateVersionId,
+                'calculation_date' => $calculationDate,
+                'notes' => "Comisión por venta financiada - {$salesCount} ventas - Total: $" . number_format($totalAmount, 2)
+            ]);
+            
+            $commissions[] = $parentCommission;
+        }
         
         // Si hay división de pagos, crear los registros de pago dividido
         if ($secondPaymentPercentage > 0) {
@@ -210,6 +339,10 @@ class CommissionService
                 'payment_part' => 1,
                 'total_commission_amount' => $totalAmount,
                 'sales_count' => $salesCount,
+                'is_payable' => true, // División pagable
+                'financial_source' => $financialSource,
+                'template_version_id' => $templateVersionId,
+                'calculation_date' => $calculationDate,
                 'notes' => "Pago dividido 1/2 - {$firstPaymentPercentage}% - Período: {$firstPaymentPeriod}"
             ]);
             
@@ -247,6 +380,10 @@ class CommissionService
                 'payment_part' => 2,
                 'total_commission_amount' => $totalAmount,
                 'sales_count' => $salesCount,
+                'is_payable' => true, // División pagable
+                'financial_source' => $financialSource,
+                'template_version_id' => $templateVersionId,
+                'calculation_date' => $calculationDate,
                 'notes' => "Pago dividido 2/2 - {$secondPaymentPercentage}% - Período: {$secondPaymentPeriod}"
             ]);
             

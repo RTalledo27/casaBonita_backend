@@ -22,9 +22,12 @@ class Contract extends Model
      */
     protected $fillable = [
         'reservation_id',
+        'client_id', // Cliente directo (para contratos sin reserva)
+        'lot_id', // Lote directo (para contratos sin reserva)
         'advisor_id', // Asesor inmobiliario que gestiona el contrato
         'previous_contract_id',
         'contract_number',
+        'contract_date', // Fecha del contrato
         'sign_date',
         'total_price',
         'down_payment',
@@ -35,6 +38,7 @@ class Contract extends Model
         'balloon_payment',
         'currency',
         'status',
+        'notes', // Notas del contrato
         'transferred_amount_from_previous_contract',
         // Nuevos campos financieros migrados desde Lot:
         'funding',
@@ -48,6 +52,7 @@ class Contract extends Model
      * The attributes that should be cast.
      */
     protected $casts = [
+        'contract_date' => 'date',
         'sign_date' => 'date',
         'total_price' => 'decimal:2',
         'down_payment' => 'decimal:2',
@@ -70,6 +75,17 @@ class Contract extends Model
     public function reservation()
     {
         return $this->belongsTo(Reservation::class, 'reservation_id');
+    }
+
+    // Relaciones directas para contratos sin reserva
+    public function client()
+    {
+        return $this->belongsTo(\Modules\CRM\Models\Client::class, 'client_id');
+    }
+
+    public function lot()
+    {
+        return $this->belongsTo(\Modules\Inventory\Models\Lot::class, 'lot_id');
     }
 
     public function advisor()
@@ -131,5 +147,79 @@ class Contract extends Model
     public function validateFinancialConsistency(): bool
     {
         return abs(($this->down_payment + $this->financing_amount) - $this->total_price) < 0.01;
+    }
+
+    // --- MÉTODOS AUXILIARES PARA CONTRATOS DIRECTOS ---
+
+    /**
+     * Obtiene el cliente del contrato (directo o desde reserva)
+     */
+    public function getClient()
+    {
+        if ($this->client_id) {
+            return $this->client;
+        }
+        
+        if ($this->reservation_id && $this->reservation) {
+            return $this->reservation->client;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Obtiene el lote del contrato (directo o desde reserva)
+     */
+    public function getLot()
+    {
+        if ($this->lot_id) {
+            return $this->lot;
+        }
+        
+        if ($this->reservation_id && $this->reservation) {
+            return $this->reservation->lot;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Verifica si es un contrato directo (sin reserva)
+     */
+    public function isDirectContract(): bool
+    {
+        return $this->client_id !== null && $this->lot_id !== null;
+    }
+
+    /**
+     * Verifica si es un contrato desde reserva
+     */
+    public function isFromReservation(): bool
+    {
+        return $this->reservation_id !== null;
+    }
+
+    /**
+     * Obtiene el nombre completo del cliente
+     */
+    public function getClientName(): ?string
+    {
+        $client = $this->getClient();
+        if ($client) {
+            return $client->first_name . ' ' . $client->last_name;
+        }
+        return null;
+    }
+
+    /**
+     * Obtiene el nombre/número del lote
+     */
+    public function getLotName(): ?string
+    {
+        $lot = $this->getLot();
+        if ($lot) {
+            return $lot->lot_number ?? 'N/A';
+        }
+        return null;
     }
 }

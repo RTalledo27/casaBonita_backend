@@ -193,6 +193,11 @@ class PermissionSeeder extends Seeder
             // MODULE COLLECTIONS - ACCOUNTS RECEIVABLE
             'collections.accounts-receivable.view',      // Ver cuentas por cobrar
             'collections.accounts-receivable.overdue',   // Ver cuentas por cobrar vencidas
+            
+            // MODULE COLLECTIONS - SIMPLIFIED
+            'collections.view',                          // Ver módulo Collections simplificado
+            'collections.create',                        // Crear cronogramas de pago
+            'collections.reports',                       // Ver reportes de Collections
 
         ];
 

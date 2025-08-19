@@ -30,12 +30,18 @@ class ContractResource extends JsonResource
             'pdf_path'       => $this->pdf_path,
             'previous_contract_id' => $this->previous_contract_id,
             'transferred_amount_from_previous_contract' => $this->transferred_amount_from_previous_contract,
+            'financing_type' => $this->financing_type,
+            'with_financing' => $this->financing_type === 'WITH_FINANCING',
             
             // Campos financieros migrados desde Lot
             'funding'        => $this->funding,
             'bpp'            => $this->bpp,
             'bfh'            => $this->bfh,
             'initial_quota'  => $this->initial_quota,
+
+            // Campos derivados de relaciones para el frontend
+            'client_name'    => $this->getClientName() ?? 'N/A',
+            'lot_name'       => $this->getLotName() ?? 'N/A',
 
             // Relaciones
             'reservation'    => new ReservationResource($this->whenLoaded('reservation')),

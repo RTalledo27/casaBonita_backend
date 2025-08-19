@@ -30,4 +30,9 @@ class Manzana extends Model
     {
         return $this->hasMany(Lot::class, 'manzana_id');
     }
+    
+    public function financingRule()
+    {
+        return $this->hasOne(ManzanaFinancingRule::class, 'manzana_id', 'manzana_id');
+    }
 }

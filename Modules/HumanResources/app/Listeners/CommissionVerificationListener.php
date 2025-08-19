@@ -33,12 +33,24 @@ class CommissionVerificationListener implements ShouldQueue
     public function handle(InstallmentPaidEvent $event): void
     {
         try {
+            $contractId = $event->getContractId();
+            
             Log::info('Commission verification listener triggered', [
                 'event_id' => $event->id,
                 'payment_id' => $event->payment->payment_id,
                 'installment_type' => $event->installmentType,
-                'contract_id' => $event->getContractId()
+                'contract_id' => $contractId
             ]);
+
+            // Verificar si el evento tiene contract_id válido
+            if ($contractId === null) {
+                Log::info('Event has no contract_id, skipping commission verification', [
+                    'event_id' => $event->id,
+                    'payment_id' => $event->payment->payment_id,
+                    'ar_id' => $event->payment->ar_id
+                ]);
+                return;
+            }
 
             // Verificar si el evento afecta comisiones
             if (!$event->affectsCommissions()) {
@@ -109,11 +121,22 @@ class CommissionVerificationListener implements ShouldQueue
      */
     private function recordPaymentEvent(InstallmentPaidEvent $event): void
     {
+        $contractId = $event->getContractId();
+        
+        // Solo registrar eventos con contract_id válido
+        if ($contractId === null) {
+            Log::warning('Skipping payment event recording due to null contract_id', [
+                'event_id' => $event->id,
+                'payment_id' => $event->payment->payment_id
+            ]);
+            return;
+        }
+        
         PaymentEvent::create([
             'id' => $event->id,
             'event_type' => 'installment_paid',
             'payment_id' => $event->payment->payment_id,
-            'contract_id' => $event->getContractId(),
+            'contract_id' => $contractId,
             'installment_type' => $event->installmentType,
             'event_data' => $event->getEventData(),
             'triggered_by' => auth()->id(),

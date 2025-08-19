@@ -63,21 +63,27 @@ return new class extends Migration
                   ->useCurrent()
                   ->comment('Fecha de creación del evento');
             
-            // Claves foráneas
-            $table->foreign('payment_id')
-                  ->references('payment_id')
-                  ->on('customer_payments')
-                  ->onDelete('cascade');
+            // Claves foráneas - solo si las tablas existen
+            if (Schema::hasTable('customer_payments')) {
+                $table->foreign('payment_id')
+                      ->references('payment_id')
+                      ->on('customer_payments')
+                      ->onDelete('cascade');
+            }
             
-            $table->foreign('contract_id')
-                  ->references('contract_id')
-                  ->on('contracts')
-                  ->onDelete('cascade');
+            if (Schema::hasTable('contracts')) {
+                $table->foreign('contract_id')
+                      ->references('contract_id')
+                      ->on('contracts')
+                      ->onDelete('cascade');
+            }
             
-            $table->foreign('triggered_by')
-                  ->references('user_id')
-                  ->on('users')
-                  ->onDelete('set null');
+            if (Schema::hasTable('users')) {
+                $table->foreign('triggered_by')
+                      ->references('user_id')
+                      ->on('users')
+                      ->onDelete('set null');
+            }
             
             // Índices para mejorar rendimiento
             $table->index(['event_type']);

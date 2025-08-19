@@ -19,10 +19,11 @@ class PaymentSchedule extends Model
      */
     protected $fillable = [
         'contract_id',
+        'installment_number',
         'due_date',
         'amount',
-        'status'
-
+        'status',
+        'notes'
     ];
 
     // protected static function newFactory(): PaymentSheduleFactory
@@ -38,6 +39,6 @@ class PaymentSchedule extends Model
 
     public function payments()
     {
-        return $this->hasMany(Payment::class);
+        return $this->hasMany(Payment::class, 'schedule_id', 'schedule_id');
     }
 }

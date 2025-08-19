@@ -32,6 +32,8 @@ class ContractResource extends JsonResource
             'currency' => $this->currency,
             'status' => $this->status,
             'transferred_amount_from_previous_contract' => $this->transferred_amount_from_previous_contract,
+            'financing_type' => $this->financing_type,
+            'with_financing' => $this->financing_type === 'WITH_FINANCING',
             
             // Nuevos campos financieros migrados desde Lote:
             'funding' => $this->funding,

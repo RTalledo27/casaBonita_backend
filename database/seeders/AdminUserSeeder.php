@@ -4,9 +4,10 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Modules\Security\Models\User;
-use Spatie\Permission\Models\Permission;
 use Modules\Security\Models\Role;
+use Spatie\Permission\Models\Permission;
 
 class AdminUserSeeder extends Seeder
 {
@@ -15,37 +16,49 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->command->info('🚀 Creando permisos, roles y usuario administrador...');
+        $this->command->info('🚀 Iniciando creación de usuario administrador...');
 
-        // 1. Crear todos los permisos necesarios
+        // Crear todos los permisos necesarios
         $this->createPermissions();
 
-        // 2. Crear rol admin con todos los permisos
-        $this->createAdminRole();
+        // Crear rol de administrador
+        $adminRole = $this->createAdminRole();
 
-        // 3. Crear usuario administrador
-        $this->createAdminUser();
+        // Crear usuario administrador
+        $adminUser = $this->createAdminUser();
+
+        // Asignar rol al usuario
+        $adminUser->assignRole($adminRole);
 
         $this->command->info('✅ Usuario administrador creado exitosamente!');
-        $this->command->info('📧 Email: admin@casabonita.com');
-        $this->command->info('🔑 Password: password');
+        $this->command->info('📋 Detalles del usuario:');
+        $this->command->line('   • ID: ' . $adminUser->id);
+        $this->command->line('   • Usuario: ' . $adminUser->username);
+        $this->command->line('   • Email: ' . $adminUser->email);
+        $this->command->line('   • Rol: ' . $adminRole->name);
+        $this->command->line('   • Permisos: ' . $adminRole->permissions->count() . ' permisos asignados');
     }
 
+    /**
+     * Crear todos los permisos del sistema
+     */
     private function createPermissions(): void
     {
-        $this->command->info('📋 Creando permisos...');
+        $this->command->info('🔐 Creando permisos del sistema...');
 
         $permissions = [
-            // MODULE SECURITY
-            'security.access',
+            //MODULE SECURITY - PERMISSIONS
+            'security.access', //Permiso para acceder a la sección de seguridad
             'security.permissions.view',
             'security.permissions.store',
             'security.permissions.update',
             'security.permissions.destroy',
+            //MODULE SECURITY - ROLES
             'security.roles.view',
             'security.roles.store',
             'security.roles.update',
             'security.roles.destroy',
+            //MODULE SECURITY - USERS
             'security.users.index',
             'security.users.store',
             'security.users.update',
@@ -53,12 +66,12 @@ class AdminUserSeeder extends Seeder
             'security.users.change-password',
             'security.users.toggle-status',
 
-            // MODULE CRM
-            'crm.access',
+            //MODULE CRM - ADDRESS
             'crm.addresses.view',
             'crm.addresses.store',
             'crm.addresses.update',
             'crm.addresses.destroy',
+            //MODULE CRM - CLIENTS
             'crm.clients.view',
             'crm.clients.store',
             'crm.clients.update',
@@ -67,6 +80,8 @@ class AdminUserSeeder extends Seeder
             'crm.clients.spouses.store',
             'crm.clients.spouses.delete',
             'crm.clients.export',
+            //MODULE CRM - INTERACTIONS
+            'crm.access', //Permiso para acceder a la sección de CRM
             'crm.interactions.view',
             'crm.interactions.store',
             'crm.interactions.update',
@@ -93,20 +108,20 @@ class AdminUserSeeder extends Seeder
             'inventory.media.destroy',
 
             // MODULE SALES
-            'sales.access',
             'sales.reservations.access',
             'sales.reservations.view',
             'sales.reservations.store',
             'sales.reservations.update',
             'sales.reservations.cancel',
             'sales.reservations.convert',
+            'sales.access',
             'sales.contracts.view',
             'sales.contracts.store',
             'sales.contracts.update',
             'sales.contracts.delete',
             'sales.conversions.process',
 
-            // MODULE SERVICE DESK
+            // MODULE SERVICE DESK - TICKETS
             'service-desk.tickets.view',
             'service-desk.tickets.store',
             'service-desk.tickets.update',
@@ -114,6 +129,8 @@ class AdminUserSeeder extends Seeder
             'service-desk.tickets.assign',
             'service-desk.tickets.actions',
             'service-desk.tickets.close',
+
+            // MODULE SERVICE DESK - ACCIONES (HISTORIAL)
             'service-desk.actions.view',
             'service-desk.actions.store',
             'service-desk.actions.update',
@@ -165,9 +182,8 @@ class AdminUserSeeder extends Seeder
             'hr.employee-import.validate',
             'hr.employee-import.import',
             'hr.employee-import.template',
-            'hr.employees.commissions.view',
 
-            // MODULE COLLECTIONS - CRÍTICO PARA RESOLVER EL PROBLEMA
+            // MODULE COLLECTIONS
             'collections.access',
             'collections.customer-payments.view',
             'collections.customer-payments.create',
@@ -177,92 +193,82 @@ class AdminUserSeeder extends Seeder
             'collections.customer-payments.stats',
             'collections.accounts-receivable.view',
             'collections.accounts-receivable.overdue',
-            'collections.hr-integration.view',
-            'collections.hr-integration.sync',
-            'collections.hr-integration.process',
-            'collections.hr-integration.mark',
-
-            // MODULE FINANCE
-            'finance.access',
-            'finance.accounts.view',
-            'finance.accounts.store',
-            'finance.accounts.update',
-            'finance.accounts.delete',
-
-            // MODULE ACCOUNTING
-            'accounting.access',
-            'accounting.entries.view',
-            'accounting.entries.store',
-            'accounting.entries.update',
-            'accounting.entries.delete',
-
-            // MODULE AUDIT
-            'audit.access',
-            'audit.logs.view',
-            'audit.reports.view',
+            'collections.view',
+            'collections.create',
+            'collections.reports',
         ];
 
+        $createdCount = 0;
         foreach ($permissions as $permission) {
-            Permission::firstOrCreate([
-                'name' => $permission,
-                'guard_name' => 'sanctum',
-            ]);
+            Permission::firstOrCreate(
+                ['name' => $permission],
+                ['guard_name' => 'sanctum']
+            );
+            $createdCount++;
         }
 
-        $this->command->info('✅ ' . count($permissions) . ' permisos creados/verificados.');
+        $this->command->line("   ✓ {$createdCount} permisos creados/verificados");
     }
 
-    private function createAdminRole(): void
+    /**
+     * Crear rol de administrador con todos los permisos
+     */
+    private function createAdminRole(): Role
     {
-        $this->command->info('👑 Creando rol administrador...');
+        $this->command->info('👑 Creando rol de administrador...');
 
-        // Crear rol admin
-        $adminRole = Role::firstOrCreate([
-            'name' => 'admin',
-            'guard_name' => 'sanctum',
-        ]);
+        // Crear o actualizar rol de administrador
+        $adminRole = Role::firstOrCreate(
+            ['name' => 'Administrador'],
+            [
+                'guard_name' => 'sanctum',
+                'description' => 'Rol con acceso completo al sistema'
+            ]
+        );
 
-        // Verificar que el rol se creó correctamente
+        // Asegurar que el rol se haya guardado correctamente
+        $adminRole->refresh();
+        
+        // Verificar que el rol tiene un ID válido (la tabla roles usa role_id)
         if (!$adminRole->role_id) {
-            $this->command->error('❌ Error: No se pudo crear el rol admin');
-            return;
+            throw new \Exception('Error: No se pudo crear el rol de administrador');
         }
 
-        $this->command->info('✅ Rol admin creado con ID: ' . $adminRole->role_id);
-
-        // Asignar TODOS los permisos al rol admin
+        // Asignar todos los permisos al rol
         $allPermissions = Permission::where('guard_name', 'sanctum')->get();
         
         if ($allPermissions->count() > 0) {
             $adminRole->syncPermissions($allPermissions);
-            $this->command->info('✅ ' . $allPermissions->count() . ' permisos asignados al rol admin.');
+            $this->command->line("   ✓ Rol 'Administrador' creado con {$allPermissions->count()} permisos");
         } else {
-            $this->command->warn('⚠️ No se encontraron permisos para asignar.');
+            $this->command->warn('   ⚠ No se encontraron permisos para asignar al rol');
         }
+
+        return $adminRole;
     }
 
-    private function createAdminUser(): void
+    /**
+     * Crear usuario administrador
+     */
+    private function createAdminUser(): User
     {
         $this->command->info('👤 Creando usuario administrador...');
 
-        // Crear usuario administrador
-        $adminUser = User::firstOrCreate(
-            ['email' => 'admin@casabonita.com'],
-            [
-                'username' => 'admin',
-                'first_name' => 'Administrador',
-                'last_name' => 'Sistema',
-                'password_hash' => Hash::make('password'),
-                'status' => 'active',
-            ]
-        );
+        // Eliminar usuario admin existente si existe
+        User::where('email', 'admin@casabonita.com')->delete();
 
-        // Asignar rol admin al usuario
-        $adminRole = Role::where('name', 'admin')->first();
-        if ($adminRole) {
-            $adminUser->assignRole($adminRole);
-        }
+        // Crear nuevo usuario administrador
+        $adminUser = User::create([
+            'username' => 'admin',
+            'email' => 'admin@casabonita.com',
+            'password_hash' => Hash::make('admin123'),
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $this->command->info('✅ Usuario administrador creado y configurado.');
+        $this->command->line("   ✓ Usuario administrador creado (ID: {$adminUser->id})");
+
+        return $adminUser;
     }
 }

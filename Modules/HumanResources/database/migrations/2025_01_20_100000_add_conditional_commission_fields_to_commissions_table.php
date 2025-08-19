@@ -11,6 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Verificar si la tabla commissions existe antes de modificarla
+        if (!Schema::hasTable('commissions')) {
+            return;
+        }
+        
         Schema::table('commissions', function (Blueprint $table) {
             // Campos para comisiones condicionadas
             $table->enum('payment_dependency_type', ['none', 'client_installments'])
@@ -102,6 +107,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // Verificar si la tabla commissions existe antes de modificarla
+        if (!Schema::hasTable('commissions')) {
+            return;
+        }
+        
         Schema::table('commissions', function (Blueprint $table) {
             // Restaurar enum original de payment_status
             $table->enum('payment_status_old', ['pendiente', 'pagado', 'cancelado'])
