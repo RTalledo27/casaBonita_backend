@@ -1,0 +1,83 @@
+{
+    "name": "laravel/laravel",
+    "type": "project",
+    "description": "Casa Bonita API - Laravel modular application",
+    "keywords": ["laravel", "framework"],
+    "license": "MIT",
+    "require": {
+        "php": "^8.1",
+        "laravel/framework": "^11.0",
+        "laravel/sanctum": "^4.0",
+        "laravel/tinker": "^2.9",
+        "nwidart/laravel-modules": "^11.0",
+        "phpoffice/phpspreadsheet": "^4.5",
+        "pusher/pusher-php-server": "^7.2",
+        "spatie/laravel-permission": "^6.0"
+    },
+    "require-dev": {
+        "fakerphp/faker": "^1.23",
+        "laravel/pint": "^1.13",
+        "laravel/sail": "^1.26",
+        "mockery/mockery": "^1.6",
+        "nunomaduro/collision": "^8.0",
+        "phpunit/phpunit": "^11.0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/",
+            "Modules\\services\\": "Modules/services/",
+            "Modules\\Security\\": "Modules/Security/app/",
+            "Modules\\CRM\\": "Modules/CRM/app/",
+            "Modules\\Inventory\\": "Modules/Inventory/app/",
+            "Modules\\Sales\\": "Modules/Sales/app/",
+            "Modules\\Accounting\\": "Modules/Accounting/app/",
+            "Modules\\Integrations\\": "Modules/Integrations/app/",
+            "Modules\\ServiceDesk\\": "Modules/ServiceDesk/app/",
+            "Modules\\Audit\\": "Modules/Audit/app/",
+            "Modules\\Finance\\": "Modules/Finance/app/",
+            "Modules\\Collections\\": "Modules/Collections/app/",
+            "Modules\\HumanResources\\": "Modules/HumanResources/app/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi"
+        ],
+        "post-update-cmd": [
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+        ],
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "post-create-project-cmd": [
+            "@php artisan key:generate --ansi",
+            "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
+            "@php artisan migrate --graceful --ansi"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "dont-discover": []
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true,
+            "wikimedia/composer-merge-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

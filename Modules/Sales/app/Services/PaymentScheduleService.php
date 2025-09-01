@@ -1,0 +1,280 @@
+<?php
+
+namespace Modules\Sales\Services;
+
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Modules\Sales\Models\Contract;
+use Modules\Sales\Models\PaymentSchedule;
+use Modules\Inventory\Models\LotFinancialTemplate;
+use Modules\Inventory\Models\ManzanaFinancingRule;
+
+class PaymentScheduleService
+{
+    /**
+     * Genera un cronograma de pagos inteligente basado en LotFinancialTemplate
+     */
+    public function generateIntelligentSchedule(Contract $contract, array $options = []): array
+    {
+        try {
+            // Validar que el contrato tenga reserva y lote
+            if (!$contract->reservation || !$contract->reservation->lot) {
+                throw new Exception('El contrato debe tener una reserva con lote asociado');
+            }
+
+            $lot = $contract->reservation->lot;
+            $financialTemplate = $lot->financialTemplate;
+            $manzanaRule = $lot->manzana->financingRule ?? null;
+
+            if (!$financialTemplate) {
+                throw new Exception("El lote {$lot->num_lot} no tiene plantilla financiera configurada");
+            }
+
+            // Determinar tipo de pago y validaciones
+            $paymentType = $options['payment_type'] ?? 'installments';
+            $installments = $options['installments'] ?? 24;
+
+            // Validar reglas de la manzana si existen
+            if ($manzanaRule) {
+                $this->validateManzanaRules($manzanaRule, $paymentType, $installments);
+            }
+
+            // Generar cronograma según el tipo de pago
+            if ($paymentType === 'cash') {
+                return $this->generateCashSchedule($contract, $financialTemplate);
+            } else {
+                return $this->generateInstallmentSchedule($contract, $financialTemplate, $installments, $options);
+            }
+
+        } catch (Exception $e) {
+            Log::error('Error generando cronograma inteligente', [
+                'contract_id' => $contract->contract_id,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Valida las reglas de financiamiento de la manzana
+     */
+    private function validateManzanaRules(ManzanaFinancingRule $rule, string $paymentType, int $installments): void
+    {
+        if ($paymentType === 'cash' && $rule->isCashOnly()) {
+            return; // Válido
+        }
+
+        if ($paymentType === 'installments') {
+            if ($rule->isCashOnly()) {
+                throw new Exception('Esta manzana solo acepta pagos al contado');
+            }
+
+            if (!$rule->isValidInstallmentOption($installments)) {
+                $validOptions = implode(', ', $rule->getAvailableInstallmentOptions());
+                throw new Exception("Número de cuotas inválido. Opciones disponibles: {$validOptions}");
+            }
+        }
+    }
+
+    /**
+     * Genera cronograma para pago al contado
+     */
+    private function generateCashSchedule(Contract $contract, LotFinancialTemplate $template): array
+    {
+        if (!$template->hasCashPrice()) {
+            throw new Exception('Este lote no tiene precio de contado disponible');
+        }
+
+        $schedules = [];
+        $dueDate = Carbon::parse($contract->sign_date ?? now())->addDays(30);
+
+        $schedules[] = [
+            'contract_id' => $contract->contract_id,
+            'installment_number' => 1,
+            'due_date' => $dueDate->format('Y-m-d'),
+            'amount' => $template->precio_contado,
+            'status' => 'pendiente',
+            'payment_type' => 'contado',
+            'description' => 'Pago único al contado'
+        ];
+
+        return $schedules;
+    }
+
+    /**
+     * Genera cronograma para pago a plazos
+     */
+    private function generateInstallmentSchedule(
+        Contract $contract, 
+        LotFinancialTemplate $template, 
+        int $installments, 
+        array $options = []
+    ): array {
+        if (!$template->hasInstallmentOptions()) {
+            throw new Exception('Este lote no tiene opciones de financiamiento disponibles');
+        }
+
+        $monthlyAmount = $template->getInstallmentAmount($installments);
+        if ($monthlyAmount <= 0) {
+            throw new Exception("No hay monto configurado para {$installments} cuotas");
+        }
+
+        $schedules = [];
+        $startDate = Carbon::parse($contract->sign_date ?? now());
+        $installmentNumber = 1;
+
+        // Cuota inicial si existe
+        if ($template->cuota_inicial > 0) {
+            $schedules[] = [
+                'contract_id' => $contract->contract_id,
+                'installment_number' => $installmentNumber++,
+                'due_date' => $startDate->copy()->addDays(15)->format('Y-m-d'),
+                'amount' => $template->cuota_inicial,
+                'status' => 'pendiente',
+                'payment_type' => 'cuota_inicial',
+                'description' => 'Cuota inicial'
+            ];
+        }
+
+        // Cuotas mensuales regulares
+        for ($i = 1; $i <= $installments; $i++) {
+            $dueDate = $startDate->copy()->addMonths($i);
+            
+            $schedules[] = [
+                'contract_id' => $contract->contract_id,
+                'installment_number' => $installmentNumber++,
+                'due_date' => $dueDate->format('Y-m-d'),
+                'amount' => $monthlyAmount,
+                'status' => 'pendiente',
+                'payment_type' => 'cuota_mensual',
+                'description' => "Cuota {$i} de {$installments}"
+            ];
+        }
+
+        // Cuota balón si existe
+        if ($template->cuota_balon > 0) {
+            $balloonDate = $startDate->copy()->addMonths($installments + 1);
+            
+            $schedules[] = [
+                'contract_id' => $contract->contract_id,
+                'installment_number' => $installmentNumber++,
+                'due_date' => $balloonDate->format('Y-m-d'),
+                'amount' => $template->cuota_balon,
+                'status' => 'pendiente',
+                'payment_type' => 'cuota_balon',
+                'description' => 'Cuota balón final'
+            ];
+        }
+
+        return $schedules;
+    }
+
+    /**
+     * Guarda el cronograma en la base de datos
+     */
+    public function saveSchedule(array $schedules): array
+    {
+        $savedSchedules = [];
+
+        DB::transaction(function () use ($schedules, &$savedSchedules) {
+            foreach ($schedules as $scheduleData) {
+                $schedule = PaymentSchedule::create($scheduleData);
+                $savedSchedules[] = $schedule;
+            }
+        });
+
+        return $savedSchedules;
+    }
+
+    /**
+     * Obtiene las opciones de financiamiento disponibles para un contrato
+     */
+    public function getFinancingOptions(Contract $contract): array
+    {
+        if (!$contract->reservation || !$contract->reservation->lot) {
+            return [];
+        }
+
+        $lot = $contract->reservation->lot;
+        $financialTemplate = $lot->financialTemplate;
+        $manzanaRule = $lot->manzana->financingRule ?? null;
+
+        if (!$financialTemplate) {
+            return [];
+        }
+
+        $options = [
+            'cash_available' => $financialTemplate->hasCashPrice(),
+            'installments_available' => $financialTemplate->hasInstallmentOptions(),
+            'cash_price' => $financialTemplate->precio_contado,
+            'sale_price' => $financialTemplate->precio_venta,
+            'down_payment' => $financialTemplate->cuota_inicial,
+            'balloon_payment' => $financialTemplate->cuota_balon,
+            'installment_options' => []
+        ];
+
+        // Agregar opciones de cuotas disponibles
+        $availableInstallments = $financialTemplate->getAvailableInstallmentOptions();
+        
+        foreach ($availableInstallments as $months => $amount) {
+            // Validar con reglas de manzana si existen
+            if ($manzanaRule && !$manzanaRule->isValidInstallmentOption($months)) {
+                continue;
+            }
+
+            $options['installment_options'][$months] = [
+                'months' => $months,
+                'monthly_amount' => $amount,
+                'total_amount' => $financialTemplate->getTotalPaymentForInstallments($months)
+            ];
+        }
+
+        return $options;
+    }
+
+    /**
+     * Valida si un contrato puede generar cronograma
+     */
+    public function canGenerateSchedule(Contract $contract): array
+    {
+        $result = [
+            'can_generate' => false,
+            'reasons' => []
+        ];
+
+        // Verificar que tenga reserva y lote
+        if (!$contract->reservation) {
+            $result['reasons'][] = 'El contrato no tiene reserva asociada';
+            return $result;
+        }
+
+        if (!$contract->reservation->lot) {
+            $result['reasons'][] = 'La reserva no tiene lote asociado';
+            return $result;
+        }
+
+        // Verificar plantilla financiera
+        $financialTemplate = $contract->reservation->lot->financialTemplate;
+        if (!$financialTemplate) {
+            $result['reasons'][] = 'El lote no tiene plantilla financiera configurada';
+            return $result;
+        }
+
+        // Verificar que tenga al menos una opción de pago
+        if (!$financialTemplate->hasCashPrice() && !$financialTemplate->hasInstallmentOptions()) {
+            $result['reasons'][] = 'El lote no tiene opciones de pago configuradas';
+            return $result;
+        }
+
+        // Verificar que no tenga cronograma existente
+        if ($contract->paymentSchedules()->count() > 0) {
+            $result['reasons'][] = 'El contrato ya tiene cronograma de pagos generado';
+            return $result;
+        }
+
+        $result['can_generate'] = true;
+        return $result;
+    }
+}
