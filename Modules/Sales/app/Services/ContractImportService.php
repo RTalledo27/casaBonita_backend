@@ -1958,8 +1958,9 @@ class ContractImportService
             $parsedName = $this->parseClientName($data['client_full_name'] ?? '');
             
             // Validar que el documento no esté vacío si se proporciona
+            // Convertir valores inválidos a NULL para evitar violaciones de unicidad
             $docNumber = trim($data['cliente_num_doc'] ?? '');
-            if ($docNumber === '' || $docNumber === '-') {
+            if ($docNumber === '' || $docNumber === '-' || $docNumber === '0') {
                 $docNumber = null;
             }
             
@@ -1969,9 +1970,15 @@ class ContractImportService
             if (!empty($docNumber)) {
                 $query->where('doc_number', $docNumber);
             } else {
-                // Buscar por nombre completo usando los nombres separados
-                $query->where('first_name', 'LIKE', '%' . $parsedName['first_name'] . '%')
-                      ->where('last_name', 'LIKE', '%' . $parsedName['last_name'] . '%');
+                // Buscar por nombre exacto usando los nombres separados
+                // Solo buscar si ambos nombres no están vacíos para evitar coincidencias incorrectas
+                if (!empty($parsedName['first_name']) && !empty($parsedName['last_name'])) {
+                    $query->where('first_name', $parsedName['first_name'])
+                          ->where('last_name', $parsedName['last_name']);
+                } else {
+                    // Si no hay nombres válidos, no buscar cliente existente
+                    $query->whereRaw('1 = 0'); // Forzar que no encuentre nada
+                }
             }
             
             $client = $query->first();
@@ -1992,6 +1999,13 @@ class ContractImportService
             }
             
             // Crear nuevo cliente con nombres separados
+            Log::info('Creando nuevo cliente', [
+                'first_name' => $parsedName['first_name'],
+                'last_name' => $parsedName['last_name'],
+                'doc_number' => $docNumber,
+                'original_doc_number' => $data['cliente_num_doc'] ?? ''
+            ]);
+            
             return Client::create([
                 'first_name' => $parsedName['first_name'],
                 'last_name' => $parsedName['last_name'],
@@ -2005,7 +2019,11 @@ class ContractImportService
             
         } catch (Exception $e) {
             Log::error('Error creando cliente simplificado: ' . $e->getMessage(), [
-                'data' => $data,
+                'client_full_name' => $data['client_full_name'] ?? '',
+                'parsed_name' => $parsedName ?? [],
+                'doc_number_original' => $data['cliente_num_doc'] ?? '',
+                'doc_number_processed' => $docNumber ?? null,
+                'error_message' => $e->getMessage(),
                 'exception' => $e->getTraceAsString()
             ]);
             return null;
