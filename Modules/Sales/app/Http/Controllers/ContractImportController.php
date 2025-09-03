@@ -294,9 +294,13 @@ class ContractImportController extends Controller
                 'headers' => $headers,
                 'required_headers' => [
                     'ASESOR_NOMBRE', 'ASESOR_CODIGO', 'ASESOR_EMAIL',
-                    'CLIENTE_NOMBRE_COMPLETO', 'CLIENTE_TIPO_DOC', 'CLIENTE_NUM_DOC', 'CLIENTE_TELEFONO_1', 'CLIENTE_EMAIL',
+                    'CLIENTE_NOMBRE_COMPLETO (o CLIENTE_NOMBRES)', 
+                    'CLIENTE_TIPO_DOC (o CLIENTE_TIPO_DOCUMENTO)', 
+                    'CLIENTE_NUM_DOC (o CLIENTE_NUMERO_DOCUMENTO)', 
+                    'CLIENTE_TELEFONO_1', 'CLIENTE_EMAIL',
                     'LOTE_NUMERO', 'LOTE_MANZANA',
-                    'FECHA_VENTA', 'TIPO_OPERACION', 'OBSERVACIONES', 'ESTADO_CONTRATO'
+                    'FECHA_VENTA', 'TIPO_OPERACION', 'OBSERVACIONES', 
+                    'ESTADO_CONTRATO (o CONTRATO_ESTADO)'
                 ]
             ]);
 

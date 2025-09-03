@@ -238,44 +238,57 @@ class ContractImportService
 
     /**
      * Validar estructura del archivo Excel - VERSIÓN SIMPLIFICADA (14 campos)
+     * Acepta múltiples variaciones de nombres de columnas para mayor flexibilidad
      */
     public function validateExcelStructureSimplified(array $headers): array
     {
-        $requiredHeaders = [
-            'ASESOR_NOMBRE',
-            'ASESOR_CODIGO', 
-            'ASESOR_EMAIL',
-            'CLIENTE_NOMBRE_COMPLETO',
-            'CLIENTE_TIPO_DOC',
-            'CLIENTE_NUM_DOC',
-            'CLIENTE_TELEFONO_1',
-            'CLIENTE_EMAIL',
-            'LOTE_NUMERO',
-            'LOTE_MANZANA',
-            'FECHA_VENTA',
-            'TIPO_OPERACION',
-            'OBSERVACIONES',
-            'ESTADO_CONTRATO'
+        // Definir campos requeridos con sus variaciones aceptadas
+        $requiredFieldsWithVariations = [
+            'asesor_nombre' => ['ASESOR_NOMBRE'],
+            'asesor_codigo' => ['ASESOR_CODIGO'], 
+            'asesor_email' => ['ASESOR_EMAIL'],
+            'cliente_nombre_completo' => ['CLIENTE_NOMBRE_COMPLETO', 'CLIENTE_NOMBRES'],
+            'cliente_tipo_doc' => ['CLIENTE_TIPO_DOC', 'CLIENTE_TIPO_DOCUMENTO', 'CLIENTE_DOCUMENTO'],
+            'cliente_num_doc' => ['CLIENTE_NUM_DOC', 'CLIENTE_NUMERO_DOCUMENTO'],
+            'cliente_telefono_1' => ['CLIENTE_TELEFONO_1', 'CLIENTE_TELEFONO'],
+            'cliente_email' => ['CLIENTE_EMAIL'],
+            'lote_numero' => ['LOTE_NUMERO'],
+            'lote_manzana' => ['LOTE_MANZANA'],
+            'fecha_venta' => ['FECHA_VENTA'],
+            'tipo_operacion' => ['TIPO_OPERACION'],
+            'observaciones' => ['OBSERVACIONES'],
+            'estado_contrato' => ['ESTADO_CONTRATO', 'CONTRATO_ESTADO']
         ];
 
-        $missingHeaders = [];
-        foreach ($requiredHeaders as $required) {
+        // Convertir headers a mayúsculas para comparación
+        $upperHeaders = array_map(function($header) {
+            return trim(strtoupper($header));
+        }, $headers);
+
+        $missingFields = [];
+        
+        // Verificar cada campo requerido
+        foreach ($requiredFieldsWithVariations as $fieldKey => $variations) {
             $found = false;
-            foreach ($headers as $header) {
-                if (trim(strtoupper($header)) === $required) {
+            
+            // Buscar cualquiera de las variaciones del campo
+            foreach ($variations as $variation) {
+                if (in_array($variation, $upperHeaders)) {
                     $found = true;
                     break;
                 }
             }
+            
             if (!$found) {
-                $missingHeaders[] = $required;
+                // Usar la primera variación como nombre de referencia
+                $missingFields[] = $variations[0];
             }
         }
 
-        if (!empty($missingHeaders)) {
+        if (!empty($missingFields)) {
             return [
                 'valid' => false,
-                'error' => 'Faltan las siguientes columnas requeridas: ' . implode(', ', $missingHeaders)
+                'error' => 'Faltan las siguientes columnas requeridas: ' . implode(', ', $missingFields)
             ];
         }
 
@@ -568,9 +581,11 @@ class ContractImportService
                     break;
                 case 'CLIENTE_DOCUMENTO': // Variación estándar
                 case 'CLIENTE_TIPO_DOC': // Variación del template
+                case 'CLIENTE_TIPO_DOCUMENTO': // Variación del Excel descargado
                     $map['cliente_tipo_doc'] = $index;
                     break;
                 case 'CLIENTE_NUM_DOC':
+                case 'CLIENTE_NUMERO_DOCUMENTO': // Variación del Excel descargado
                     $map['cliente_num_doc'] = $index;
                     break;
                 case 'CLIENTE_TELEFONO': // Variación estándar
