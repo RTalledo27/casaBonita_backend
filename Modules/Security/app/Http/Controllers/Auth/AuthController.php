@@ -75,11 +75,18 @@ class AuthController extends Controller
     }
 
     /**
-     * Obtener el usuario autenticado
+     * Obtener el usuario autenticado con permisos y roles
      */
     public function me(Request $request)
     {
-        return response()->json($request->user());
+        $user = $request->user();
+        $user->load('roles', 'permissions');
+        
+        return response()->json([
+            'user' => $user,
+            'permissions' => $user->getAllPermissions()->pluck('name'),
+            'roles' => $user->getRoleNames()
+        ]);
     }
 
     /**

@@ -28,6 +28,7 @@ class AccountReceivable extends Model
         'currency',
         'status',
         'assigned_collector_id',
+        'description',
         'notes'
     ];
 

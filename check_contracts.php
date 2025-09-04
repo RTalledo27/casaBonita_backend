@@ -1,50 +1,33 @@
 <?php
 
-require_once __DIR__ . '/vendor/autoload.php';
+require_once 'vendor/autoload.php';
 
-$app = require_once __DIR__ . '/bootstrap/app.php';
+$app = require_once 'bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use Modules\Sales\Models\Contract;
-use Modules\Sales\Models\PaymentSchedule;
 
 try {
-    echo "=== Contracts Data ===\n";
-    $contracts = Contract::select('contract_id', 'contract_number', 'sign_date', 'total_price', 'status')
-        ->orderBy('contract_id')
+    $totalContracts = Contract::count();
+    echo "Total de contratos: $totalContracts\n";
+    
+    $contractsWithFinancing = Contract::where('financing_amount', '>', 0)->count();
+    echo "Contratos con financiamiento (financing_amount > 0): $contractsWithFinancing\n";
+    
+    $activeContractsWithFinancing = Contract::where('status', 'vigente')
+        ->where('financing_amount', '>', 0)
+        ->count();
+    echo "Contratos activos con financiamiento: $activeContractsWithFinancing\n";
+    
+    // Mostrar algunos ejemplos
+    $examples = Contract::where('financing_amount', '>', 0)
+        ->select('contract_id', 'contract_number', 'financing_amount', 'status')
+        ->limit(5)
         ->get();
     
-    if ($contracts->isEmpty()) {
-        echo "No contracts found.\n";
-    } else {
-        echo "Found " . $contracts->count() . " contracts:\n\n";
-        foreach ($contracts as $contract) {
-            echo "Contract ID: {$contract->contract_id}\n";
-            echo "Contract Number: {$contract->contract_number}\n";
-            echo "Sign Date: {$contract->sign_date}\n";
-            echo "Total Price: {$contract->total_price}\n";
-            echo "Status: {$contract->status}\n";
-            echo "---\n";
-        }
-    }
-    
-    echo "\n=== Payment Schedules Contract IDs ===\n";
-    $scheduleContractIds = PaymentSchedule::select('contract_id')
-        ->distinct()
-        ->orderBy('contract_id')
-        ->pluck('contract_id')
-        ->toArray();
-    
-    echo "Unique contract_ids in payment_schedules: " . implode(', ', $scheduleContractIds) . "\n";
-    
-    echo "\n=== Missing Contracts ===\n";
-    $existingContractIds = $contracts->pluck('contract_id')->toArray();
-    $missingContractIds = array_diff($scheduleContractIds, $existingContractIds);
-    
-    if (empty($missingContractIds)) {
-        echo "No missing contracts found.\n";
-    } else {
-        echo "Contract IDs in payment_schedules but not in contracts table: " . implode(', ', $missingContractIds) . "\n";
+    echo "\nEjemplos de contratos con financiamiento:\n";
+    foreach ($examples as $contract) {
+        echo "ID: {$contract->contract_id}, Número: {$contract->contract_number}, Monto: {$contract->financing_amount}, Estado: {$contract->status}\n";
     }
     
 } catch (Exception $e) {

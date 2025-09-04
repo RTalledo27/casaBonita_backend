@@ -1318,6 +1318,25 @@ class ContractImportService
             'is_financed' => $isFinanced
         ]);
         
+        // Verificar si ya existe un contrato activo para el mismo cliente y lote
+        $existingContract = Contract::where('client_id', $reservation->client_id)
+            ->where('lot_id', $reservation->lot_id)
+            ->where('status', 'vigente')
+            ->first();
+
+        if ($existingContract) {
+            Log::warning('createContractIntegral - Contrato duplicado detectado', [
+                'existing_contract_id' => $existingContract->contract_id,
+                'existing_contract_number' => $existingContract->contract_number,
+                'client_id' => $reservation->client_id,
+                'lot_id' => $reservation->lot_id,
+                'action' => 'Saltando creación de contrato duplicado'
+            ]);
+            
+            // Retornar el contrato existente en lugar de crear uno nuevo
+            return $existingContract;
+        }
+        
         return Contract::create([
             'reservation_id' => $reservation->reservation_id,
             'advisor_id' => $advisor->employee_id,
@@ -1888,6 +1907,25 @@ class ContractImportService
             
             Log::info('createDirectContract - Creando contrato con datos:', $contractData);
 
+            // Verificar si ya existe un contrato activo para el mismo cliente y lote
+            $existingContract = Contract::where('client_id', $client->client_id)
+                ->where('lot_id', $lot->lot_id)
+                ->where('status', 'vigente')
+                ->first();
+
+            if ($existingContract) {
+                Log::warning('createDirectContract - Contrato duplicado detectado', [
+                    'existing_contract_id' => $existingContract->contract_id,
+                    'existing_contract_number' => $existingContract->contract_number,
+                    'client_id' => $client->client_id,
+                    'lot_id' => $lot->lot_id,
+                    'action' => 'Saltando creación de contrato duplicado'
+                ]);
+                
+                // Retornar el contrato existente en lugar de crear uno nuevo
+                return $existingContract;
+            }
+
             // Crear el contrato
             $contract = Contract::create($contractData);
 
@@ -2438,6 +2476,25 @@ class ContractImportService
                 ],
                 'contract_data' => $contractData
             ]);
+            
+            // Verificar si ya existe un contrato activo para el mismo cliente y lote
+            $existingContract = Contract::where('client_id', $reservation->client_id)
+                ->where('lot_id', $reservation->lot_id)
+                ->where('status', 'vigente')
+                ->first();
+
+            if ($existingContract) {
+                Log::warning('createContractFromTemplate - Contrato duplicado detectado', [
+                    'existing_contract_id' => $existingContract->contract_id,
+                    'existing_contract_number' => $existingContract->contract_number,
+                    'client_id' => $reservation->client_id,
+                    'lot_id' => $reservation->lot_id,
+                    'action' => 'Saltando creación de contrato duplicado'
+                ]);
+                
+                // Retornar el contrato existente en lugar de crear uno nuevo
+                return $existingContract;
+            }
             
             Log::info('Intentando crear contrato con Contract::create()');
             

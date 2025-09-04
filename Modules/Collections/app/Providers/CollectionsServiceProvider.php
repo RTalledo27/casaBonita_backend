@@ -43,7 +43,9 @@ class CollectionsServiceProvider extends ServiceProvider
      */
     protected function registerCommands(): void
     {
-        // $this->commands([]);
+        $this->commands([
+            \Modules\Collections\Console\Commands\GeneratePaymentSchedulesCommand::class,
+        ]);
     }
 
     /**

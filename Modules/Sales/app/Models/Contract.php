@@ -184,6 +184,22 @@ class Contract extends Model
     }
 
     /**
+     * Obtiene el asesor del contrato (directo o desde reserva)
+     */
+    public function getAdvisor()
+    {
+        if ($this->advisor_id) {
+            return $this->advisor;
+        }
+        
+        if ($this->reservation_id && $this->reservation) {
+            return $this->reservation->advisor;
+        }
+        
+        return null;
+    }
+
+    /**
      * Verifica si es un contrato directo (sin reserva)
      */
     public function isDirectContract(): bool

@@ -185,6 +185,9 @@ class AdminUserSeeder extends Seeder
 
             // MODULE COLLECTIONS
             'collections.access',
+            'collections.dashboard.view',
+            'collections.schedules.create',
+            'collections.schedules.view',
             'collections.customer-payments.view',
             'collections.customer-payments.create',
             'collections.customer-payments.update',
@@ -192,10 +195,25 @@ class AdminUserSeeder extends Seeder
             'collections.customer-payments.redetect',
             'collections.customer-payments.stats',
             'collections.accounts-receivable.view',
+            'collections.accounts-receivable.create',
+            'collections.accounts-receivable.update',
+            'collections.accounts-receivable.delete',
             'collections.accounts-receivable.overdue',
+            'collections.accounts-receivable.assign_collector',
+            'collections.receivables.view',
+            'collections.receivables.create',
+            'collections.receivables.update',
+            'collections.receivables.delete',
+            'collections.hr-integration.view',
+            'collections.hr-integration.sync',
+            'collections.hr-integration.process',
+            'collections.hr-integration.mark',
+            'collections.reports.view',
+            'collections.alerts.view',
+            'collections.collectors.view',
             'collections.view',
             'collections.create',
-            'collections.reports',
+            'collections.reports'
         ];
 
         $createdCount = 0;

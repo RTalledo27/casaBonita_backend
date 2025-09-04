@@ -303,4 +303,99 @@ class ContractController extends Controller
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
+
+    /**
+     * Obtiene contratos con financiamiento
+     */
+    public function withFinancing(Request $request)
+    {
+        try {
+            // Cargar relaciones para ambos tipos de contratos: con reserva y directos
+            $query = Contract::with([
+                'reservation.client', 
+                'reservation.lot.manzana',
+                'client', // Para contratos directos
+                'lot.manzana' // Para contratos directos
+            ])
+                ->where('status', 'vigente')
+                ->where('financing_amount', '>', 0);
+
+            // Filtros opcionales
+            if ($request->has('search')) {
+                $search = $request->input('search');
+                $query->where(function($q) use ($search) {
+                    $q->where('contract_number', 'like', "%{$search}%")
+                      // Buscar en contratos con reserva
+                      ->orWhereHas('reservation.client', function($clientQuery) use ($search) {
+                          $clientQuery->where('first_name', 'like', "%{$search}%")
+                                     ->orWhere('last_name', 'like', "%{$search}%")
+                                     ->orWhere('document_number', 'like', "%{$search}%");
+                      })
+                      // Buscar en contratos directos
+                      ->orWhereHas('client', function($clientQuery) use ($search) {
+                          $clientQuery->where('first_name', 'like', "%{$search}%")
+                                     ->orWhere('last_name', 'like', "%{$search}%")
+                                     ->orWhere('document_number', 'like', "%{$search}%");
+                      })
+                      // Buscar en lotes (tanto de reserva como directos)
+                      ->orWhereHas('reservation.lot', function($lotQuery) use ($search) {
+                          $lotQuery->where('num_lot', 'like', "%{$search}%")
+                                   ->orWhereHas('manzana', function($manzanaQuery) use ($search) {
+                                       $manzanaQuery->where('name', 'like', "%{$search}%");
+                                   });
+                      })
+                      ->orWhereHas('lot', function($lotQuery) use ($search) {
+                          $lotQuery->where('num_lot', 'like', "%{$search}%")
+                                   ->orWhereHas('manzana', function($manzanaQuery) use ($search) {
+                                       $manzanaQuery->where('name', 'like', "%{$search}%");
+                                   });
+                      });
+                });
+            }
+
+            // Paginación
+            $perPage = $request->input('per_page', 15);
+            $contracts = $query->paginate($perPage);
+
+            // Formatear los datos para incluir información del cliente y lote
+            $formattedContracts = $contracts->getCollection()->map(function($contract) {
+                // Determinar si es contrato directo o con reserva
+                $client = $contract->client ?? $contract->reservation?->client;
+                $lot = $contract->lot ?? $contract->reservation?->lot;
+                $manzana = $lot?->manzana;
+
+                return [
+                    'contract_id' => $contract->contract_id,
+                    'contract_number' => $contract->contract_number,
+                    'financing_amount' => $contract->financing_amount,
+                    'term_months' => $contract->term_months,
+                    'interest_rate' => $contract->interest_rate,
+                    'monthly_payment' => $contract->monthly_payment,
+                    'status' => $contract->status,
+                    'client_name' => $client ? trim(($client->first_name ?? '') . ' ' . ($client->last_name ?? '')) : 'N/A',
+                    'client_document' => $client?->document_number ?? 'N/A',
+                    'lot_name' => $lot ? ($manzana?->name ?? 'N/A') . '-' . ($lot->num_lot ?? 'N/A') : 'N/A',
+                    'manzana_name' => $manzana?->name ?? 'N/A',
+                    'lot_number' => $lot?->num_lot ?? 'N/A'
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $formattedContracts,
+                'meta' => [
+                    'current_page' => $contracts->currentPage(),
+                    'last_page' => $contracts->lastPage(),
+                    'per_page' => $contracts->perPage(),
+                    'total' => $contracts->total()
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error obteniendo contratos con financiamiento: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('description', 500);
             $table->decimal('original_amount', 15, 2);
             $table->decimal('outstanding_amount', 15, 2);
-            $table->enum('currency', ['PEN', 'USD'])->default('PEN');
+            $table->enum('currency', ['PEN', 'USD', 'DOP'])->default('PEN');
             $table->date('issue_date');
             $table->date('due_date');
             $table->enum('status', ['PENDING', 'PARTIAL', 'PAID', 'OVERDUE', 'CANCELLED'])->default('PENDING');

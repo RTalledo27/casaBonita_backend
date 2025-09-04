@@ -19,12 +19,20 @@ class PaymentScheduleService
     public function generateIntelligentSchedule(Contract $contract, array $options = []): array
     {
         try {
-            // Validar que el contrato tenga reserva y lote
-            if (!$contract->reservation || !$contract->reservation->lot) {
-                throw new Exception('El contrato debe tener una reserva con lote asociado');
+            // Obtener lote: desde reserva o directamente del contrato
+            $lot = null;
+            if ($contract->reservation && $contract->reservation->lot) {
+                // Contrato con reserva
+                $lot = $contract->reservation->lot;
+            } elseif ($contract->lot_id) {
+                // Contrato directo
+                $lot = $contract->lot;
+            }
+            
+            if (!$lot) {
+                throw new Exception('El contrato debe tener un lote asociado (directamente o a través de reserva)');
             }
 
-            $lot = $contract->reservation->lot;
             $financialTemplate = $lot->financialTemplate;
             $manzanaRule = $lot->manzana->financingRule ?? null;
 
@@ -244,19 +252,23 @@ class PaymentScheduleService
             'reasons' => []
         ];
 
-        // Verificar que tenga reserva y lote
-        if (!$contract->reservation) {
-            $result['reasons'][] = 'El contrato no tiene reserva asociada';
-            return $result;
+        // Obtener lote: desde reserva o directamente del contrato
+        $lot = null;
+        if ($contract->reservation && $contract->reservation->lot) {
+            // Contrato con reserva
+            $lot = $contract->reservation->lot;
+        } elseif ($contract->lot_id) {
+            // Contrato directo - cargar relación si no está cargada
+            $lot = $contract->lot ?? $contract->load('lot')->lot;
         }
-
-        if (!$contract->reservation->lot) {
-            $result['reasons'][] = 'La reserva no tiene lote asociado';
+        
+        if (!$lot) {
+            $result['reasons'][] = 'El contrato no tiene lote asociado (ni directamente ni a través de reserva)';
             return $result;
         }
 
         // Verificar plantilla financiera
-        $financialTemplate = $contract->reservation->lot->financialTemplate;
+        $financialTemplate = $lot->financialTemplate;
         if (!$financialTemplate) {
             $result['reasons'][] = 'El lote no tiene plantilla financiera configurada';
             return $result;

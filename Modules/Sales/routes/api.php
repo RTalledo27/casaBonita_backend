@@ -15,6 +15,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
     
     // Sales specific routes
         Route::apiResource('reservations', ReservationController::class);
+        
+        // Contract specific routes (must be before apiResource)
+        Route::get('contracts/with-financing', [ContractController::class, 'withFinancing']);
         Route::apiResource('contracts',    ContractController::class);
         Route::get('contracts/{contract}/preview', [ContractController::class, 'preview']);
         Route::post('contracts/calculate-payment', [ContractController::class, 'calculatePayment']);
@@ -24,6 +27,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
         Route::apiResource('schedules',    PaymentScheduleController::class);
         Route::post('schedules/generate-intelligent', [PaymentScheduleController::class, 'generateIntelligentSchedule']);
         Route::get('contracts/{contract}/financing-options', [PaymentScheduleController::class, 'getFinancingOptions']);
+        Route::patch('schedules/{schedule}/mark-paid', [PaymentScheduleController::class, 'markAsPaid']);
+        Route::get('schedules/metrics', [PaymentScheduleController::class, 'getMetrics']);
+        Route::get('schedules/report', [PaymentScheduleController::class, 'getReport']);
+        Route::get('schedules/generate-report', [PaymentScheduleController::class, 'generateReport']);
+        Route::get('contracts/{contract}/schedules', [PaymentScheduleController::class, 'getContractSchedules']);
         Route::apiResource('payments',     PaymentController::class);
         Route::post('contract-approvals/{approval}/approve', [ContractApprovalController::class, 'approve']);
         Route::post('contract-approvals/{approval}/reject',  [ContractApprovalController::class, 'reject']);
