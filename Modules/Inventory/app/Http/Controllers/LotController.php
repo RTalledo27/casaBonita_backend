@@ -144,15 +144,15 @@ class LotController extends Controller
             $lots = Lot::with([
                 'manzana', 
                 'streetType', 
-                'lotFinancialTemplate'
+                'financialTemplate'
             ])
             ->where('status', 'available')
             ->get()
             ->map(function ($lot) {
                 $financingOptions = [];
                 
-                if ($lot->lotFinancialTemplate) {
-                    $template = $lot->lotFinancialTemplate;
+                if ($lot->financialTemplate) {
+                    $template = $lot->financialTemplate;
                     
                     if ($template->hasCashPrice()) {
                         $financingOptions['cash_price'] = $template->precio_contado;
@@ -210,16 +210,16 @@ class LotController extends Controller
         ]);
         
         try {
-            $lot = Lot::with('lotFinancialTemplate')->findOrFail($request->lot_id);
+            $lot = Lot::with('financialTemplate')->findOrFail($request->lot_id);
             
-            if (!$lot->lotFinancialTemplate) {
+            if (!$lot->financialTemplate) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Este lote no tiene información financiera disponible'
                 ], 404);
             }
             
-            $template = $lot->lotFinancialTemplate;
+            $template = $lot->financialTemplate;
             $financingType = $request->financing_type;
             
             if ($financingType === 'cash') {
@@ -285,7 +285,7 @@ class LotController extends Controller
     public function getFinancialTemplate(Lot $lot): JsonResponse
     {
         try {
-            $template = $lot->lotFinancialTemplate;
+            $template = $lot->financialTemplate;
             
             if (!$template) {
                 return response()->json([

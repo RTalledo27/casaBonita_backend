@@ -15,6 +15,13 @@ class LotRepository
             ->when($filters['status'] ?? null, fn($q, $s) => $q->where('status', $s))
             ->when($filters['manzana_id'] ?? null, fn($q, $m) => $q->where('manzana_id', $m))
             ->when($filters['street_type_id'] ?? null, fn($q, $s) => $q->where('street_type_id', $s))
+            ->when($filters['search'] ?? null, function($q, $search) {
+                $q->where(function($query) use ($search) {
+                    $query->where('num_lot', 'like', "%{$search}%")
+                          ->orWhereHas('manzana', fn($q) => $q->where('name', 'like', "%{$search}%"))
+                          ->orWhereHas('streetType', fn($q) => $q->where('name', 'like', "%{$search}%"));
+                });
+            })
             ->paginate($filters['per_page'] ?? $perPage);
     }
 

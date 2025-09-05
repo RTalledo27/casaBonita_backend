@@ -241,11 +241,11 @@ class LotImportController extends Controller
             $imports->getCollection()->transform(function ($import) {
                 return [
                     'import_log_id' => $import->import_log_id,
-                    'user' => [
+                    'user' => $import->user ? [
                         'id' => $import->user->id,
                         'name' => $import->user->first_name . ' ' . $import->user->last_name,
                         'email' => $import->user->email
-                    ],
+                    ] : null,
                     'file_name' => $import->file_name,
                     'file_size' => $import->file_size,
                     'formatted_file_size' => $import->formatted_file_size,
