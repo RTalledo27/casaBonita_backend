@@ -1,6 +1,6 @@
 <?php
 
-namespace Modules\services;
+namespace Modules\Services;
 
 use Illuminate\Support\Facades\Log;
 use Pusher\Pusher;
