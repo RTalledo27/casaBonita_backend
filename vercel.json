@@ -27,8 +27,12 @@
             "dest": "/build/$1"
         },
         {
+            "src": "/api/(.*)",
+            "dest": "/index.php"
+        },
+        {
             "src": "/(.*)",
-            "dest": "/api/index.php"
+            "dest": "/index.php"
         }
   ],
   "env": {
