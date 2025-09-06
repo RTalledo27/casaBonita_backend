@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -9,8 +11,10 @@ Route::get('/', function () {
 // routes/web.php
 Route::get('/health', function () {
     try {
+        $database = DB::select('SELECT 1 AS result');
         $checks = [
             'php_version' => PHP_VERSION,
+            'database' => ($database[0]->result ?? null) === 1,
             'extensions' => [
                 'pdo' => extension_loaded('pdo'),
                 'mbstring' => extension_loaded('mbstring'),
@@ -28,9 +32,11 @@ Route::get('/health', function () {
             'checks' => $checks
         ]);
     } catch (Exception $e) {
+        Log::error('Health check failed', ['exception' => $e]);
+
         return response()->json([
             'status' => 'error',
-            'message' => $e->getMessage()
+            'message' => 'Health check failed'
         ], 500);
     }
 });

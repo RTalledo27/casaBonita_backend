@@ -80,6 +80,12 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         $user = $request->user();
+          if (! $user) {
+            return response()->json([
+                'message' => 'Usuario no autenticado.'
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+
         $user->load('roles', 'permissions');
         
         return response()->json([
