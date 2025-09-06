@@ -26,10 +26,7 @@
       "src": "/build/(.*)",
       "dest": "/build/$1"
     },
-    {
-      "src": "/api/(.*)",
-      "dest": "index.php"
-    },
+   
     {
       "src": "/(.*)",
       "dest": "/index.php"
