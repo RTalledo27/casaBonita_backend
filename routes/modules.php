@@ -26,7 +26,6 @@ try {
             $apiRoutePath = "{$modulesPath}/{$module}/Routes/api.php";
             if (file_exists($apiRoutePath)) {
                 Route::middleware('api')
-                    ->prefix('api')
                     ->group(function () use ($apiRoutePath) {
                         require $apiRoutePath;
                     });
