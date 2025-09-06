@@ -20,31 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
-            // Registrar rutas de módulos automáticamente
-            if (class_exists('\Nwidart\Modules\Facades\Module')) {
-                foreach (\Nwidart\Modules\Facades\Module::allEnabled() as $module) {
-                    $moduleApiRoutes = $module->getPath() . '/routes/api.php';
-                    if (file_exists($moduleApiRoutes)) {
-                        \Illuminate\Support\Facades\Route::middleware('api')
-                            ->prefix('api')
-                            ->group($moduleApiRoutes);
-                    }
-                }
-            } else {
-                // Fallback para entornos serverless como Vercel
-                $modulesPath = base_path('Modules');
-                if (is_dir($modulesPath)) {
-                    $modules = ['Security', 'CRM', 'Inventory', 'Sales', 'Accounting', 'Integrations', 'ServiceDesk', 'Audit', 'Finance', 'Collections', 'HumanResources'];
-                    foreach ($modules as $moduleName) {
-                        $moduleApiRoutes = $modulesPath . '/' . $moduleName . '/routes/api.php';
-                        if (file_exists($moduleApiRoutes)) {
-                            \Illuminate\Support\Facades\Route::middleware('api')
-                                ->prefix('api')
-                                ->group($moduleApiRoutes);
-                        }
-                    }
-                }
-            }
+            // Incluir rutas de módulos
+            require __DIR__.'/../routes/modules.php';
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
