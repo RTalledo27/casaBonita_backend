@@ -37,12 +37,6 @@
     "CACHE_DRIVER": "array",
     "QUEUE_CONNECTION": "sync"
   },
-  "functions": {
-    "index.php": {
-      "runtime": "vercel-php@0.6.0",
-      "maxDuration": 30
-    }
-  },
   "regions": ["iad1"],
   "github": {
     "autoAlias": false
