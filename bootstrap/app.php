@@ -8,11 +8,9 @@ use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
 
-use Nwidart\Modules\LaravelModulesServiceProvider;
-
 return Application::configure(basePath: dirname(__DIR__))
     ->withProviders([
-        LaravelModulesServiceProvider::class,
+        Nwidart\Modules\LaravelModulesServiceProvider::class,
     ])
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
@@ -20,8 +18,33 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
-            // Incluir rutas de módulos
-            require __DIR__.'/../routes/modules.php';
+            // Cargar rutas de todos los módulos activos
+            if (file_exists(__DIR__.'/../routes/modules.php')) {
+                require __DIR__.'/../routes/modules.php';
+            }
+            
+            // Cargar rutas de cada módulo individualmente
+            try {
+                $modulesPath = __DIR__.'/../Modules';
+                if (is_dir($modulesPath)) {
+                    $modules = scandir($modulesPath);
+                    foreach ($modules as $module) {
+                        if ($module === '.' || $module === '..') continue;
+                        
+                        $routePath = "{$modulesPath}/{$module}/Routes/web.php";
+                        if (file_exists($routePath)) {
+                            require $routePath;
+                        }
+                        
+                        $apiRoutePath = "{$modulesPath}/{$module}/Routes/api.php";
+                        if (file_exists($apiRoutePath)) {
+                            require $apiRoutePath;
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                // Silenciar errores durante el routing
+            }
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
@@ -30,6 +53,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role' => RoleMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+        ]);
+        
+        // Middleware global para módulos
+        $middleware->append([
+            \Illuminate\Foundation\Http\Middleware\CheckForMaintenanceMode::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

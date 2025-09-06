@@ -11,12 +11,16 @@
           "app/**",
           "bootstrap/**",
           "config/**",
+          "database/**",
+          "public/**",
           "resources/**",
           "routes/**",
           "storage/**",
           "vendor/**",
           "modules_statuses.json",
-          ".env"
+          ".env",
+          "composer.json",
+          "composer.lock"
         ]
       }
     }
@@ -24,9 +28,26 @@
   "routes": [
     {
       "src": "/build/(.*)",
-      "dest": "/build/$1"
+      "dest": "/public/build/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
     },
-   
+    {
+      "src": "/storage/(.*)",
+      "dest": "/public/storage/$1",
+      "headers": {
+        "Cache-Control": "public, max-age=3600"
+      }
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/public/assets/$1"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/index.php"
+    },
     {
       "src": "/(.*)",
       "dest": "/index.php"
@@ -40,6 +61,7 @@
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
     "SESSION_DRIVER": "cookie",
+    "SESSION_LIFETIME": "120",
 
     "APP_CONFIG_CACHE": "/tmp/config.php",
     "APP_EVENTS_CACHE": "/tmp/events.php",
