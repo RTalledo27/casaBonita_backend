@@ -1,49 +1,40 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "public/index.php",
-      "use": "vercel-php@0.7.3",
-      "config": {
-        "includeFiles": "**",
-        "excludeFiles": [
-          "node_modules/**",
-          ".git/**",
-          "tests/**",
-          "storage/logs/**",
-          "storage/framework/cache/**",
-          "storage/framework/sessions/**",
-          "storage/framework/views/**",
-          ".env*",
-          "*.md",
-          "deploy.*",
-          "check_*.php",
-          "debug_*.php",
-          "test_*.php",
-          "create_*.php",
-          "list_*.php",
-          "find_*.php",
-          "generate_*.php",
-          "read_*.php",
-          "update_*.php",
-          "verify_*.php",
-          "diagnose_*.php"
-        ]
-      }
+  "framework": null,
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.7.3"
     }
-  ],
+  },
+  "outputDirectory": "public",
   "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/public/index.php"
-    }
+        {
+            "src": "/build/(.*)",
+            "dest": "/build/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/api/index.php"
+        }
   ],
   "env": {
     "APP_ENV": "production",
     "APP_DEBUG": "false",
-    "LOG_CHANNEL": "stderr",
-    "SESSION_DRIVER": "array",
+    "APP_URL": "https://casa-bonita-backend-7d25.vercel.app",
+
+
     "CACHE_DRIVER": "array",
+    "LOG_CHANNEL": "stderr",
+    "SESSION_DRIVER": "cookie",
+
+       "APP_CONFIG_CACHE": "/tmp/config.php",
+        "APP_EVENTS_CACHE": "/tmp/events.php",
+        "APP_PACKAGES_CACHE": "/tmp/packages.php",
+        "APP_ROUTES_CACHE": "/tmp/routes.php",
+        "APP_SERVICES_CACHE": "/tmp/services.php",
+        "VIEW_COMPILED_PATH": "/tmp",
+
+
     "QUEUE_CONNECTION": "sync",
     "DB_CONNECTION": "sqlite",
     "DB_DATABASE": "/tmp/database.sqlite",
