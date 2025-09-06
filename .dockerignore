@@ -1,0 +1,74 @@
+# Dependencies
+node_modules
+vendor
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+storage/logs/*
+!storage/logs/.gitkeep
+
+# Cache
+storage/framework/cache/*
+!storage/framework/cache/.gitkeep
+storage/framework/sessions/*
+!storage/framework/sessions/.gitkeep
+storage/framework/views/*
+!storage/framework/views/.gitkeep
+bootstrap/cache/*
+!bootstrap/cache/.gitkeep
+
+# Development files
+.git
+.gitignore
+.gitattributes
+README.md
+DEPLOY.md
+TESTING-GUIDE.md
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+tests
+phpunit.xml
+.phpunit.result.cache
+
+# Development scripts
+*.php
+!artisan
+!public/index.php
+!api/index.php
+
+# Composer
+composer.phar
+composer.lock
+
+# NPM
+package-lock.json
+package.json
+
+# Vercel
+vercel.json
+vercel-production.json
+.vercel
+.vercelignore
+
+# Scripts
+*.sh
+*.ps1
+
+# Modules development files
+Modules/*/node_modules
+Modules/*/package*.json
