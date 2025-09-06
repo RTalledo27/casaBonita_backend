@@ -1,4 +1,3 @@
-
 {
   "version": 2,
   "name": "casa-bonita-api",
@@ -19,16 +18,13 @@
           ".env*",
           "*.md",
           "deploy.*"
-        ]
+        ],
+        "installCommand": "composer install --no-dev --prefer-dist --optimize-autoloader",
+        "buildCommand": "php artisan package:discover --ansi && php artisan config:clear && php artisan route:clear && php artisan view:clear && php artisan config:cache && php artisan route:cache"
       }
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.php"
-    }
-  ],
+  "routes": [{ "src": "/(.*)", "dest": "/index.php" }],
   "env": {
     "APP_ENV": "production",
     "APP_DEBUG": "false",
@@ -38,7 +34,5 @@
     "QUEUE_CONNECTION": "sync"
   },
   "regions": ["iad1"],
-  "github": {
-    "autoAlias": false
-  }
+  "github": { "autoAlias": false }
 }
