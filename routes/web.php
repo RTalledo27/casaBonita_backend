@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -32,4 +33,24 @@ Route::get('/health', function () {
             'message' => $e->getMessage()
         ], 500);
     }
+});
+
+
+// routes/web.php
+Route::get('/debug-proxies', function (Request $request) {
+    return response()->json([
+        'app_version' => app()->version(),
+        'trusted_proxies' => config('trustedhosts.proxies'),
+        'trusted_headers' => config('trustedhosts.headers'),
+        'current_ip' => $request->ip(),
+        'client_ips' => $request->ips(),
+        'forwarded_headers' => [
+            'x-forwarded-for' => $request->header('x-forwarded-for'),
+            'x-forwarded-host' => $request->header('x-forwarded-host'),
+            'x-forwarded-proto' => $request->header('x-forwarded-proto'),
+            'x-forwarded-port' => $request->header('x-forwarded-port'),
+        ],
+        'is_secure' => $request->secure(),
+        'is_https' => $request->isSecure(),
+    ]);
 });

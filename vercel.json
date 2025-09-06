@@ -58,6 +58,9 @@
     "APP_DEBUG": "false",
     "APP_URL": "https://casa-bonita-backend-7d25.vercel.app",
 
+    "TRUST_ALL_PROXIES": "true",
+    "FORWARDED_ALL": "true",
+
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
     "SESSION_DRIVER": "cookie",
