@@ -3,7 +3,6 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Http\Request;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -23,15 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // ✅ CONFIGURACIÓN DE PROXIES PARA VERCEL (LARAVEL 12)
-        $middleware->trustProxies(at: '*');
-        $middleware->trustProxies(headers: 
-            Request::HEADER_X_FORWARDED_FOR |
-            Request::HEADER_X_FORWARDED_HOST |
-            Request::HEADER_X_FORWARDED_PORT |
-            Request::HEADER_X_FORWARDED_PROTO |
-            Request::HEADER_X_FORWARDED_AWS_ELB
-        );
+        $middleware->prepend(\App\Http\Middleware\TrustProxies::class);
 
         // Register permission middleware aliases
         $middleware->alias([

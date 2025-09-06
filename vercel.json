@@ -1,44 +1,23 @@
 {
   "version": 2,
-  "framework": null,
   "builds": [
     {
+      "src": "api/index.php",
+      "use": "@vercel/php"
+    },
+    {
       "src": "index.php",
-      "use": "vercel-php@0.7.3",
-      "config": {
-        "includeFiles": [
-          "Modules/**",
-          "app/**",
-          "bootstrap/**",
-          "config/**",
-          "database/**",
-          "public/**",
-          "resources/**",
-          "routes/**",
-          "storage/**",
-          "vendor/**",
-          "modules_statuses.json",
-          ".env",
-          "composer.json",
-          "composer.lock"
-        ]
-      }
+      "use": "@vercel/php"
     }
   ],
   "routes": [
     {
       "src": "/build/(.*)",
-      "dest": "/public/build/$1",
-      "headers": {
-        "Cache-Control": "public, max-age=31536000, immutable"
-      }
+      "dest": "/public/build/$1"
     },
     {
       "src": "/storage/(.*)",
-      "dest": "/public/storage/$1",
-      "headers": {
-        "Cache-Control": "public, max-age=3600"
-      }
+      "dest": "/public/storage/$1"
     },
     {
       "src": "/assets/(.*)",
@@ -46,7 +25,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "/index.php"
+      "dest": "/api/index.php"
     },
     {
       "src": "/(.*)",
@@ -64,18 +43,13 @@
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
     "SESSION_DRIVER": "cookie",
-    "SESSION_LIFETIME": "120",
 
     "APP_CONFIG_CACHE": "/tmp/config.php",
-    "APP_EVENTS_CACHE": "/tmp/events.php",
-    "APP_PACKAGES_CACHE": "/tmp/packages.php",
     "APP_ROUTES_CACHE": "/tmp/routes.php",
-    "APP_SERVICES_CACHE": "/tmp/services.php",
     "VIEW_COMPILED_PATH": "/tmp",
 
     "QUEUE_CONNECTION": "sync",
     "DB_CONNECTION": "sqlite",
-    "DB_DATABASE": "/tmp/database.sqlite",
-    "BROADCAST_CONNECTION": "log"
+    "DB_DATABASE": "/tmp/database.sqlite"
   }
 }
