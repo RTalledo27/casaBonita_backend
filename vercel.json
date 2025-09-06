@@ -1,9 +1,9 @@
 {
   "version": 2,
   "framework": null,
-   "builds": [
+  "builds": [
     {
-      "src": "api/index.php",
+      "src": "index.php",
       "use": "vercel-php@0.7.3",
       "config": {
         "includeFiles": [
@@ -15,25 +15,20 @@
           "routes/**",
           "storage/**",
           "vendor/**",
-                    "modules_statuses.json",
-                    "config/modules_statuses.php"
+          "modules_statuses.json"
         ]
       }
     }
   ],
   "routes": [
-        {
-            "src": "/build/(.*)",
-            "dest": "/build/$1"
-        },
-        {
-            "src": "/api/(.*)",
-            "dest": "/index.php"
-        },
-        {
-            "src": "/(.*)",
-            "dest": "/index.php"
-        }
+      {
+      "src": "/build/(.*)",
+      "dest": "/build/$1"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/index.php"
+    }
   ],
   "env": {
     "APP_ENV": "production",
