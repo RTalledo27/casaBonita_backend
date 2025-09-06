@@ -49,3 +49,8 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('securities', SecurityController::class)->names('securities');
     });
 });
+Route::get('ping', fn () => ['ok' => true]); // para probar rápido
+
+Route::post('login',  [AuthController::class, 'login'])->name('security.login');
+Route::post('logout', [AuthController::class, 'logout'])->name('security.logout');
+Route::get('me',     [AuthController::class, 'me'])->name('security.me');
