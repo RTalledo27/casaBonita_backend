@@ -28,7 +28,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.php"
+      "dest": "index.php"
     },
     {
       "src": "/(.*)",
