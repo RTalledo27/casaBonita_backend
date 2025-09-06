@@ -26,8 +26,6 @@ return Application::configure(basePath: dirname(__DIR__))
                     $moduleApiRoutes = $module->getPath() . '/routes/api.php';
                     if (file_exists($moduleApiRoutes)) {
                         \Illuminate\Support\Facades\Route::middleware('api')
-                            ->prefix('api')
-                            ->name('api.')
                             ->group($moduleApiRoutes);
                     }
                 }
