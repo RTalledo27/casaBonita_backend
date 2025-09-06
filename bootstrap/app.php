@@ -18,11 +18,27 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
         then: function () {
             // Cargar rutas de módulos
-            require __DIR__.'/../routes/modules.php';
+            if (file_exists(__DIR__.'/../routes/modules.php')) {
+                require __DIR__.'/../routes/modules.php';
+            }
         },
     )
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->prepend(\App\Http\Middleware\TrustProxies::class);
+        // Para Laravel 11, necesitamos crear el middleware TrustProxies
+        $middleware->trustProxies(at: [
+            '127.0.0.1',
+            'localhost',
+            '*.vercel.app',
+            '*.now.sh'
+        ]);
+        
+        $middleware->trustProxies(headers: 
+            Illuminate\Http\Request::HEADER_X_FORWARDED_FOR |
+            Illuminate\Http\Request::HEADER_X_FORWARDED_HOST |
+            Illuminate\Http\Request::HEADER_X_FORWARDED_PORT |
+            Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO |
+            Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
+        );
 
         // Register permission middleware aliases
         $middleware->alias([
