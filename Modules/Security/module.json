@@ -2,7 +2,7 @@
     "name": "Security",
     "alias": "security",
     "description": "",
-    "enabled": true,
+    "active": true,
     "keywords": [],
     "priority": 0,
     "providers": [

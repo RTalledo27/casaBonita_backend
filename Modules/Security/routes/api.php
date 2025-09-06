@@ -9,6 +9,9 @@ use Modules\Security\Http\Controllers\SecurityController;
 use Modules\Security\Http\Controllers\UserController;
 use Modules\Security\Models\Role;
 
+Route::get('ping', fn () => ['ok' => true]); // prueba rápida: GET /api/v1/security/ping
+
+
 Route::prefix('v1')->group(function () {
     // Login (sin token)
     Route::post('security/login', [AuthController::class, 'login']);
@@ -49,8 +52,3 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('securities', SecurityController::class)->names('securities');
     });
 });
-Route::get('ping', fn () => ['ok' => true]); // para probar rápido
-
-Route::post('login',  [AuthController::class, 'login'])->name('security.login');
-Route::post('logout', [AuthController::class, 'logout'])->name('security.logout');
-Route::get('me',     [AuthController::class, 'me'])->name('security.me');

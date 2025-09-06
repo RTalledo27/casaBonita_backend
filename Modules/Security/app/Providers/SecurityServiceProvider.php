@@ -4,6 +4,7 @@ namespace Modules\Security\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Config;
 use Modules\Security\Http\Middleware\CheckPasswordChange;
 
 class SecurityServiceProvider extends ServiceProvider
@@ -121,7 +122,7 @@ class SecurityServiceProvider extends ServiceProvider
     private function getPublishableViewPaths(): array
     {
         $paths = [];
-        foreach (\Config::get('view.paths') as $path) {
+        foreach (Config::get('view.paths') as $path) {
             if (is_dir($path . '/modules/' . $this->moduleNameLower)) {
                 $paths[] = $path . '/modules/' . $this->moduleNameLower;
             }
