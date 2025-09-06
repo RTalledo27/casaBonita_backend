@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "public/index.php",
+      "src": "api/index.php",
       "use": "vercel-php@0.7.3",
       "config": {
         "includeFiles": "**",
@@ -35,7 +35,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/public/index.php"
+      "dest": "/api/index.php"
     }
   ],
   "env": {
@@ -47,6 +47,11 @@
     "QUEUE_CONNECTION": "sync",
     "DB_CONNECTION": "sqlite",
     "DB_DATABASE": "/tmp/database.sqlite",
-    "BROADCAST_CONNECTION": "log"
+    "BROADCAST_CONNECTION": "log",
+    "FILESYSTEM_DISK": "local"
+  },
+  "regions": ["iad1"],
+  "github": {
+    "autoAlias": false
   }
 }
