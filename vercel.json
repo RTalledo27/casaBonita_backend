@@ -14,7 +14,9 @@
           "resources/**",
           "routes/**",
           "storage/**",
-          "vendor/**"
+          "vendor/**",
+                    "modules_statuses.json",
+                    "config/modules_statuses.php"
         ]
       }
     }
