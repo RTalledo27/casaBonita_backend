@@ -20,9 +20,20 @@ class PermissionController extends Controller
         $this->middleware('can:security.permissions.update')->only(['update']);
         $this->middleware('can:security.permissions.destroy')->only(['destroy']);
     }
-    public function index()
+    public function index(Request $request)
     {
-        return PermissionResource::collection(Permission::all());
+        $perPage = $request->get('per_page', 15);
+        $search = $request->get('search');
+        
+        $query = Permission::query();
+        
+        if ($search) {
+            $query->where('name', 'like', "%{$search}%");
+        }
+        
+        $permissions = $query->orderBy('name', 'asc')->paginate($perPage);
+        
+        return PermissionResource::collection($permissions);
     }
 
     public function show(Permission $permission)

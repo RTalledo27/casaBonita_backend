@@ -1,28 +1,50 @@
 
 {
-    "version": 2,
-    "framework": null,
-    "functions": {
-        "api/index.php": {
-            "runtime": "vercel-php@0.7.3"
-        }
-    },
-    "routes": [
-        {
-            "src": "/build/assets/(.*)",
-            "dest": "/build/assets/$1"
-        },
-        {
-            "src": "/images/(.*)",
-            "dest": "/public/images/$1"
-        },
-        {
-            "src": "/(.*\\.php)",
-            "dest": "/api/$1"
-        },
-        {
-            "src": "/(.*)",
-            "dest": "/api/index.php"
-        }
-    ]
+  "version": 2,
+  "name": "casa-bonita-api",
+  "builds": [
+    {
+      "src": "index.php",
+      "use": "vercel-php@0.6.0",
+      "config": {
+        "includeFiles": "**",
+        "excludeFiles": [
+          "node_modules/**",
+          ".git/**",
+          "tests/**",
+          "storage/logs/**",
+          "storage/framework/cache/**",
+          "storage/framework/sessions/**",
+          "storage/framework/views/**",
+          ".env*",
+          "*.md",
+          "deploy.*"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.php"
+    }
+  ],
+  "env": {
+    "APP_ENV": "production",
+    "APP_DEBUG": "false",
+    "LOG_CHANNEL": "stderr",
+    "SESSION_DRIVER": "cookie",
+    "CACHE_DRIVER": "array",
+    "QUEUE_CONNECTION": "sync"
+  },
+  "functions": {
+    "index.php": {
+      "runtime": "vercel-php@0.6.0",
+      "maxDuration": 30
+    }
+  },
+  "regions": ["iad1"],
+  "github": {
+    "autoAlias": false
+  }
 }

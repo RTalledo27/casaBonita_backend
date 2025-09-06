@@ -71,11 +71,16 @@ class UserController extends Controller
      *
      * @response 200
      */
-    public function index()
+    public function index(Request $request)
     {
-      
+        $filters = [
+            'search' => $request->get('search'),
+            'sort_by' => $request->get('sort_by', 'created_at'),
+            'sort_dir' => $request->get('sort_dir', 'desc'),
+            'per_page' => $request->get('per_page', 15)
+        ];
 
-        $users = $this->repository->allWithRoles();
+        $users = $this->repository->paginate($filters);
         return UserResource::collection($users);
     }
 

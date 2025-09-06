@@ -1,0 +1,100 @@
+# Dependencies
+node_modules/
+vendor/phpunit/
+vendor/mockery/
+vendor/fakerphp/
+
+# Development files
+.env*
+!.env.production.example
+.phpunit.result.cache
+phpunit.xml
+.phpunit.cache
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Laravel specific
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/testing/
+storage/framework/views/
+storage/app/public/
+bootstrap/cache/
+
+# Tests
+tests/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Deploy scripts
+deploy.*
+PRE-DEPLOY-CHECKLIST.md
+
+# Backup files
+*.bak
+*.backup
+*.sql
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts
+build/
+dist/
+
+# Package files
+*.zip
+*.tar.gz
+*.rar
+
+# Editor configs
+.editorconfig
+
+# Linting
+.eslintrc*
+.prettierrc*
+.stylelintrc*
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Vagrant
+Vagrantfile
+.vagrant/
+
+# Local development
+.env.local
+.env.development
+.env.testing
+
+# Composer dev dependencies (will be excluded by composer install --no-dev)
+# But adding here as extra safety
+vendor/phpstan/
+vendor/psalm/
+vendor/squizlabs/
