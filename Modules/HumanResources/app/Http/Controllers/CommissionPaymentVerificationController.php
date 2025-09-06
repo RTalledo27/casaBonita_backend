@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Modules\Collections\Models\CustomerPayment;
 use Modules\HumanResources\Models\Commission;
 use Modules\HumanResources\Services\CommissionPaymentVerificationService;
@@ -114,7 +115,7 @@ class CommissionPaymentVerificationController extends Controller
                     'message' => 'Verificación procesada exitosamente'
                 ]);
             } catch (\Exception $e) {
-                \Log::error('Error enviando notificación Pusher:', ['error' => $e->getMessage()]);
+                Log::error('Error enviando notificación Pusher:', ['error' => $e->getMessage()]);
             }
 
             return response()->json([
@@ -169,7 +170,7 @@ class CommissionPaymentVerificationController extends Controller
                     'message' => 'Verificaciones automáticas completadas'
                 ]);
             } catch (\Exception $e) {
-                \Log::error('Error enviando notificación Pusher:', ['error' => $e->getMessage()]);
+                Log::error('Error enviando notificación Pusher:', ['error' => $e->getMessage()]);
             }
 
             return response()->json([
