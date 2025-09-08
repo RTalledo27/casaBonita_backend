@@ -12,7 +12,7 @@ use Modules\CRM\Http\Requests\{
 use Modules\CRM\Models\CrmInteraction;
 use Modules\CRM\Repositories\CrmInteractionRepository;
 use Modules\CRM\Transformers\CrmInteractionResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class CrmInteractionController extends Controller
 {

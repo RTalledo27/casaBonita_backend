@@ -9,7 +9,7 @@ use Modules\CRM\Http\Requests\UpdateFamilyMemberRequest;
 use Modules\CRM\Models\FamilyMember;
 use Modules\CRM\Repositories\FamilyMemberRepository;
 use Modules\CRM\Transformers\FamilyMemberResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class FamilyMemberController extends Controller
 {

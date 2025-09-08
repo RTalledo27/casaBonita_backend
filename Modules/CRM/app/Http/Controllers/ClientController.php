@@ -17,7 +17,7 @@ use Modules\CRM\Repositories\{
 };
 use Modules\CRM\Models\Client;
 use Modules\CRM\Transformers\ClientResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ClientController extends Controller

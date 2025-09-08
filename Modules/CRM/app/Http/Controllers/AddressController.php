@@ -9,7 +9,7 @@ use Modules\CRM\Http\Requests\UpdateAddressRequest;
 use Modules\CRM\Models\Address;
 use Modules\CRM\Repositories\AddressRepository;
 use Modules\CRM\Transformers\AddressResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class AddressController extends Controller
 {
