@@ -1,10 +1,10 @@
-# Etapa base PHP + Apache
+# Use official PHP 8.2 image with Apache
 FROM php:8.2-apache
 
-# Trabajamos en /var/www/html
+# Set working directory
 WORKDIR /var/www/html
 
-# Dependencias del sistema
+# System deps
 RUN apt-get update && apt-get install -y \
     git curl libpng-dev libonig-dev libxml2-dev zip unzip \
     libzip-dev libicu-dev libpq-dev \
@@ -12,31 +12,26 @@ RUN apt-get update && apt-get install -y \
  && docker-php-ext-install pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip intl \
  && rm -rf /var/lib/apt/lists/*
 
-# Habilitar mod_rewrite
+# Apache mods
 RUN a2enmod rewrite
+RUN printf "\nServerName localhost\n" >> /etc/apache2/apache2.conf
 
-# Composer (copiamos binario desde imagen oficial)
+# Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# ---- Capa de dependencias PHP (mejor cache) ----
-# Copiamos solo composer.* primero para cachear composer install
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
-
-# ---- Copiamos el resto de la app ----
-COPY . .
-
-# Permisos para storage y cache
+# --- Copiamos la app primero (como en tu versión que funcionaba) ---
+COPY . /var/www/html
+# No dupliques COPY; mejor ajustamos permisos explícitos
 RUN chown -R www-data:www-data storage bootstrap/cache \
  && chmod -R 775 storage bootstrap/cache
 
-# DocumentRoot a /public
+# Instalar dependencias PHP
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+# Re-optimiza autoload por si algo cambió
+RUN composer dump-autoload --no-dev --optimize
+
+# DocumentRoot a /public (vhost)
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
-
-# Silenciar warning de ServerName (opcional)
-RUN printf "\nServerName localhost\n" >> /etc/apache2/apache2.conf
-
-# VirtualHost (por si el de arriba se sobreescribe)
 RUN printf "<VirtualHost *:80>\n\
     DocumentRoot /var/www/html/public\n\
     <Directory /var/www/html/public>\n\
@@ -47,11 +42,10 @@ RUN printf "<VirtualHost *:80>\n\
     CustomLog \${APACHE_LOG_DIR}/access.log combined\n\
 </VirtualHost>\n" > /etc/apache2/sites-available/000-default.conf
 
-# Copiamos entrypoint y lo hacemos ejecutable
+# Entrypoint: migraciones + caches + arrancar Apache
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Normaliza fin de línea por si guardaste CRLF en Windows y hazlo ejecutable
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 80
-
-# Usamos el entrypoint (corre migraciones y arranca Apache)
 CMD ["bash","-lc","/usr/local/bin/entrypoint.sh"]
