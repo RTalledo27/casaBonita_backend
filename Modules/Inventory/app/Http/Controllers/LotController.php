@@ -3,6 +3,7 @@
 namespace Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -12,10 +13,13 @@ use Modules\Inventory\Models\Lot;
 use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Inventory\Models\ManzanaFinancingRule;
 use Modules\Inventory\Repositories\LotRepository;
-use Modules\Inventory\Transformers\lotResource;
+use Modules\Inventory\Transformers\LotResource;
 use Modules\services\PusherNotifier;
 use Pusher\Pusher;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use Modules\Inventory\Services\LotImportService;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class LotController extends Controller
 {
@@ -400,7 +404,7 @@ class LotController extends Controller
             ]);
             
         } catch (Exception $e) {
-            \Log::error('[LotController] Error en diagnóstico de columna J', [
+            Log::error('[LotController] Error en diagnóstico de columna J', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
