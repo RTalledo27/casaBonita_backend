@@ -14,7 +14,7 @@ use Modules\Sales\Repositories\ContractRepository;
 use Modules\Sales\Repositories\ReservationRepository;
 use Modules\Sales\Transformers\ContractResource;
 use Modules\Sales\Transformers\ReservationResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class ReservationController extends Controller
 {
