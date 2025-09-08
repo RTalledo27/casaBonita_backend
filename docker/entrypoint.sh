@@ -7,7 +7,7 @@ if [ -z "${APP_KEY}" ] || [ "${APP_KEY}" = "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 fi
 
 #Regenerar autoload optimizado SIEMPRE
-log "Regenerando autoload de Composer..."
+#log "Regenerando autoload de Composer..."
 composer dump-autoload -o
 
 # 2.1) Sanity check: ¿existe la clase?
