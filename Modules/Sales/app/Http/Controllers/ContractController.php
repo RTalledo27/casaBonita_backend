@@ -11,7 +11,7 @@ use Modules\Sales\Http\Requests\UpdateContractRequest;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Repositories\ContractRepository;
 use Modules\Sales\Transformers\ContractResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class ContractController extends Controller
 {

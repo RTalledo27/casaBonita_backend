@@ -96,7 +96,7 @@ class ContractImportController extends Controller
             $user = $request->user();
             
             // Log de debug para verificar el usuario
-            \Log::info('ContractImportController::importAsync - Usuario obtenido', [
+            Log::info('ContractImportController::importAsync - Usuario obtenido', [
                 'user_exists' => $user !== null,
                 'user_id' => $user ? $user->id : null,
                 'user_email' => $user ? $user->email : null,
@@ -126,7 +126,7 @@ class ContractImportController extends Controller
             $filePath = $file->storeAs('temp/imports', $fileName, 'local');
             
             // Log antes de crear el ContractImportLog
-            \Log::info('ContractImportController::importAsync - Creando ContractImportLog', [
+            Log::info('ContractImportController::importAsync - Creando ContractImportLog', [
                 'user_id' => $user->id,
                 'file_name' => $file->getClientOriginalName(),
                 'file_size' => $file->getSize(),
@@ -151,7 +151,7 @@ class ContractImportController extends Controller
             $importLog = ContractImportLog::create($importLogData);
             
             // Log después de crear el ContractImportLog
-            \Log::info('ContractImportController::importAsync - ContractImportLog creado exitosamente', [
+            Log::info('ContractImportController::importAsync - ContractImportLog creado exitosamente', [
                 'import_log_id' => $importLog->import_log_id,
                 'user_id' => $importLog->user_id
             ]);
@@ -176,7 +176,7 @@ class ContractImportController extends Controller
             
         } catch (Exception $e) {
             // Log del error completo
-            \Log::error('ContractImportController::importAsync - Error', [
+            Log::error('ContractImportController::importAsync - Error', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
