@@ -8,7 +8,7 @@ use Pusher\Pusher;
 class PusherNotifier
 {
     protected Pusher $pusher;
-
+//cambio
     public function __construct()
     {
         $this->pusher = new Pusher(
