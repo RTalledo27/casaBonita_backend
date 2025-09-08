@@ -1,60 +1,57 @@
-# Use official PHP 8.2 image with Apache
+# Etapa base PHP + Apache
 FROM php:8.2-apache
 
-# Set working directory
+# Trabajamos en /var/www/html
 WORKDIR /var/www/html
 
-# Install system dependencies
+# Dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    libzip-dev \
-    libicu-dev \
-    libpq-dev \
-    && docker-php-ext-configure intl \
-    && docker-php-ext-install pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip intl
+    git curl libpng-dev libonig-dev libxml2-dev zip unzip \
+    libzip-dev libicu-dev libpq-dev \
+ && docker-php-ext-configure intl \
+ && docker-php-ext-install pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip intl \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Enable Apache mod_rewrite
+# Habilitar mod_rewrite
 RUN a2enmod rewrite
 
-# Copy existing application directory contents
-COPY . /var/www/html
+# Composer (copiamos binario desde imagen oficial)
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy existing application directory permissions
-COPY --chown=www-data:www-data . /var/www/html
+# ---- Capa de dependencias PHP (mejor cache) ----
+# Copiamos solo composer.* primero para cachear composer install
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+# ---- Copiamos el resto de la app ----
+COPY . .
 
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Permisos para storage y cache
+RUN chown -R www-data:www-data storage bootstrap/cache \
+ && chmod -R 775 storage bootstrap/cache
 
-# Configure Apache DocumentRoot
+# DocumentRoot a /public
 RUN sed -i 's|/var/www/html|/var/www/html/public|g' /etc/apache2/sites-available/000-default.conf
 
-# Create Apache configuration if it doesn't exist
-RUN mkdir -p /var/www/html/.docker/apache
-RUN echo '<VirtualHost *:80>\n\
+# Silenciar warning de ServerName (opcional)
+RUN printf "\nServerName localhost\n" >> /etc/apache2/apache2.conf
+
+# VirtualHost (por si el de arriba se sobreescribe)
+RUN printf "<VirtualHost *:80>\n\
     DocumentRoot /var/www/html/public\n\
     <Directory /var/www/html/public>\n\
         AllowOverride All\n\
         Require all granted\n\
     </Directory>\n\
-    ErrorLog ${APACHE_LOG_DIR}/error.log\n\
-    CustomLog ${APACHE_LOG_DIR}/access.log combined\n\
-</VirtualHost>' > /etc/apache2/sites-available/000-default.conf
+    ErrorLog \${APACHE_LOG_DIR}/error.log\n\
+    CustomLog \${APACHE_LOG_DIR}/access.log combined\n\
+</VirtualHost>\n" > /etc/apache2/sites-available/000-default.conf
 
-# Expose port 80
+# Copiamos entrypoint y lo hacemos ejecutable
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 EXPOSE 80
 
-# Start Apache
-CMD ["apache2-foreground"]
+# Usamos el entrypoint (corre migraciones y arranca Apache)
+CMD ["bash","-lc","/usr/local/bin/entrypoint.sh"]
