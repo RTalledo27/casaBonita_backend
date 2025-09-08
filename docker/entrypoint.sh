@@ -6,13 +6,14 @@ if [ -z "${APP_KEY}" ] || [ "${APP_KEY}" = "base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   php artisan key:generate --force || true
 fi
 
-Regenerar autoload optimizado SIEMPRE
+#Regenerar autoload optimizado SIEMPRE
 log "Regenerando autoload de Composer..."
 composer dump-autoload -o
 
 # 2.1) Sanity check: ¿existe la clase?
 php -r 'echo "class_exists? "; var_export(class_exists("Modules\\Services\\PusherNotifier")); echo PHP_EOL;' || true
 
+composer require pusher/pusher-php-server
 
 # Limpiar caches (si falla, no detengas)
 php artisan config:clear || true
