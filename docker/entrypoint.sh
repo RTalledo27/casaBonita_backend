@@ -18,5 +18,12 @@ php artisan cache:clear || true
 # Ejecuta migraciones (no-interactivo, no revienta si no hay cambios)
 php artisan migrate --force --no-interaction || true
 
+# Seeder de Admin
+if [ "${RUN_SEED:-false}" = "true" ]; then
+  echo ">> Ejecutando AdminUserSeeder"
+  php artisan db:seed --class=Database\\Seeders\\AdminUserSeeder --force
+fi
+
+
 # Arranca Apache en primer plano
 exec apache2-foreground
