@@ -60,3 +60,8 @@ Route::get('/debug-proxies', function (Request $request) {
         'is_https' => $request->isSecure(),
     ]);
 });
+
+// Include debug routes
+// if (app()->environment('local')) {
+//     require __DIR__ . '/web_debug.php';
+// }

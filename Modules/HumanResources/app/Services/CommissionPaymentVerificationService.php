@@ -29,9 +29,23 @@ class CommissionPaymentVerificationService
                 'payment_part' => $commission->payment_part
             ];
             
-            // Solo procesar si la comisión requiere verificación
+            // Si la comisión no requiere verificación, marcarla automáticamente como verificada
             if (!$commission->requires_client_payment_verification) {
-                $results['message'] = 'La comisión no requiere verificación de pagos del cliente';
+                $results['message'] = 'La comisión no requiere verificación de pagos del cliente - Marcada automáticamente como verificada';
+                
+                // Marcar automáticamente como verificada y elegible para pago
+                $commission->update([
+                    'payment_verification_status' => 'fully_verified',
+                    'is_eligible_for_payment' => true,
+                    'verification_notes' => 'Comisión marcada automáticamente como verificada - No requiere verificación de pagos del cliente. Verificación automática realizada el ' . now()->format('d/m/Y H:i:s')
+                ]);
+                
+                Log::info('Comisión marcada automáticamente como verificada', [
+                    'commission_id' => $commission->id,
+                    'contract_id' => $commission->contract_id,
+                    'reason' => 'requires_client_payment_verification = false'
+                ]);
+                
                 DB::commit();
                 return $results;
             }

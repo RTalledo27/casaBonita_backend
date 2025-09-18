@@ -46,6 +46,12 @@ class LotImportService
         ]);
 
         try {
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                $importLog->markAsFailed('Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.');
+                throw new Exception('Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.');
+            }
+            
             $spreadsheet = IOFactory::load($file->getPathname());
             $worksheet = $spreadsheet->getActiveSheet();
             $rows = $worksheet->toArray();
@@ -675,6 +681,16 @@ class LotImportService
     public function validateExcelStructure(UploadedFile $file): array
     {
         try {
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                return [
+                    'valid' => false,
+                    'errors' => ['Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.'],
+                    'warnings' => [],
+                    'detected_manzanas' => []
+                ];
+            }
+            
             $spreadsheet = IOFactory::load($file->getPathname());
             $worksheet = $spreadsheet->getActiveSheet();
             $headers = $worksheet->rangeToArray('A1:Z1')[0];
@@ -820,6 +836,11 @@ class LotImportService
             
             if (!file_exists($filePath)) {
                 throw new Exception('Archivo no encontrado: ' . $filePath);
+            }
+            
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                throw new Exception('Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.');
             }
             
             $spreadsheet = IOFactory::load($filePath);

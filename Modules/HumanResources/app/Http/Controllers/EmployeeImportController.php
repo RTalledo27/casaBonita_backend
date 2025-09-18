@@ -41,6 +41,14 @@ class EmployeeImportController
 
             $file = $request->file('file');
             
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.'
+                ], 500);
+            }
+            
             // Leer archivo Excel
             $spreadsheet = IOFactory::load($file->getPathname());
             $worksheet = $spreadsheet->getActiveSheet();
@@ -118,6 +126,14 @@ class EmployeeImportController
             }
 
             $file = $request->file('file');
+            
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.'
+                ], 500);
+            }
             
             // Leer archivo Excel
             $spreadsheet = IOFactory::load($file->getPathname());

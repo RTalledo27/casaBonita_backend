@@ -10,9 +10,12 @@ use Modules\Inventory\Services\LotImportService;
 use Modules\Inventory\Http\Requests\LotImportRequest;
 use Modules\Inventory\Models\LotImportLog;
 use Exception;
+use Illuminate\Routing\Exceptions\StreamedResponseException;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class LotImportController extends Controller
 {
@@ -196,10 +199,14 @@ class LotImportController extends Controller
                     'Cache-Control' => 'max-age=0',
                 ]
             );
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             // En caso de error, devolver respuesta de error
-            return response('Error al generar template: ' . $e->getMessage(), 500)
-                ->header('Content-Type', 'text/plain');
+           // Mantener el tipo de retorno: StreamedResponse
+            return response()->stream(function () use ($e) {
+                echo 'Error al generar template: ' . $e->getMessage();
+            }, 500, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+            ]);
         }
     }
 

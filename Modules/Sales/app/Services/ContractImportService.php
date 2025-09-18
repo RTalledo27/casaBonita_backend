@@ -71,6 +71,18 @@ class ContractImportService
     public function processExcelSimplified(string $filePath): array
     {
         try {
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                return [
+                    'success' => false,
+                    'message' => 'Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.',
+                    'processed' => 0,
+                    'errors' => 1,
+                    'skipped' => 0,
+                    'error_details' => []
+                ];
+            }
+            
             $spreadsheet = IOFactory::load($filePath);
             $worksheet = $spreadsheet->getActiveSheet();
             $rows = $worksheet->toArray();
@@ -161,6 +173,18 @@ class ContractImportService
     public function processExcel(string $filePath): array
     {
         try {
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                return [
+                    'success' => false,
+                    'message' => 'Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.',
+                    'processed' => 0,
+                    'errors' => 1,
+                    'skipped' => 0,
+                    'error_details' => []
+                ];
+            }
+            
             $spreadsheet = IOFactory::load($filePath);
             $worksheet = $spreadsheet->getActiveSheet();
             $rows = $worksheet->toArray();

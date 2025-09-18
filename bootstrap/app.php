@@ -40,12 +40,24 @@ return Application::configure(basePath: dirname(__DIR__))
             Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
         );
 
+        // Add CORS middleware for API routes
+        $middleware->api([
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
+        
+        // Enable CORS for all routes
+        $middleware->web([
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
+
         // Register permission middleware aliases
         $middleware->alias([
             'permission' => PermissionMiddleware::class,
             'role' => RoleMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
         ]);
+        
+        // Agregar middleware global para manejar errores de ZipArchive
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

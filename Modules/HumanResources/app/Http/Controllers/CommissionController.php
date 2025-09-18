@@ -133,6 +133,93 @@ class CommissionController extends Controller
     }
 
     /**
+     * Paga una parte específica de una comisión dividida
+     * Valida que el cliente haya pagado la cuota correspondiente
+     */
+    public function payPart(Request $request, int $commissionId): JsonResponse
+    {
+        $request->validate([
+            'payment_part' => 'required|integer|in:1,2'
+        ]);
+
+        try {
+            // Buscar la comisión específica
+            $commission = $this->commissionRepo->findById($commissionId);
+            
+            if (!$commission) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ], 404);
+            }
+
+            // Verificar que la comisión corresponda al payment_part solicitado
+            if ($commission->payment_part !== $request->payment_part) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'La parte de pago no coincide con la comisión solicitada'
+                ], 400);
+            }
+
+            // Verificar que la comisión no esté ya pagada
+            if ($commission->status === 'paid') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Esta parte de la comisión ya ha sido pagada'
+                ], 400);
+            }
+
+            // Verificar que el cliente haya pagado la cuota correspondiente
+            $verificationResult = $this->paymentVerificationService->verifyClientPayments($commission);
+            
+            $canPay = false;
+            if ($request->payment_part === 1) {
+                $canPay = $verificationResult['first_payment'] ?? false;
+            } elseif ($request->payment_part === 2) {
+                $canPay = $verificationResult['second_payment'] ?? false;
+            }
+
+            if (!$canPay) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se puede pagar esta parte de la comisión porque el cliente no ha pagado la cuota correspondiente',
+                    'verification_details' => $verificationResult
+                ], 400);
+            }
+
+            // Proceder con el pago
+            $success = $this->commissionService->payCommissions([$commissionId]);
+
+            if ($success) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Parte de la comisión pagada exitosamente',
+                    'commission_id' => $commissionId,
+                    'payment_part' => $request->payment_part,
+                    'amount' => $commission->commission_amount
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pudo procesar el pago de la comisión'
+                ], 400);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error al pagar parte de comisión', [
+                'commission_id' => $commissionId,
+                'payment_part' => $request->payment_part,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al procesar el pago: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Obtiene el detalle de ventas individuales con sus comisiones para un asesor
      */
     public function getSalesDetail(Request $request): JsonResponse

@@ -45,7 +45,7 @@ class CommissionRepository
 
     public function getAll(array $filters = []): Collection
     {
-        $query = $this->model->with(['employee.user', 'contract']);
+        $query = $this->model->with(['employee.user', 'contract', 'childCommissions', 'parentCommission']);
 
         // Mostrar todas las comisiones por defecto
         // Solo aplicar filtro payable si se especifica explícitamente
@@ -57,7 +57,7 @@ class CommissionRepository
         if (isset($filters['include_split_payments'])) {
             if ($filters['include_split_payments']) {
                 // Si se incluyen split payments, mostrar todas las comisiones
-                $query = $this->model->with(['employee.user', 'contract']);
+                $query = $this->model->with(['employee.user', 'contract', 'childCommissions', 'parentCommission']);
             } else {
                 // Si NO se incluyen split payments, solo mostrar comisiones padre (no payables)
                 $query->where('is_payable', false);
@@ -101,7 +101,7 @@ class CommissionRepository
 
     public function getPaginated(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = $this->model->with(['employee.user', 'contract']);
+        $query = $this->model->with(['employee.user', 'contract', 'childCommissions', 'parentCommission']);
 
         // Mostrar todas las comisiones por defecto
         // Solo aplicar filtro payable si se especifica explícitamente

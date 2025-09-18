@@ -83,31 +83,84 @@ return new class extends Migration
         }
         
         Schema::table('commissions', function (Blueprint $table) {
-            // Eliminar índices
-            $table->dropIndex(['payment_dependency_type']);
-            $table->dropIndex(['payment_verification_status']);
-            $table->dropIndex(['next_verification_date']);
-            $table->dropIndex(['auto_verification_enabled']);
-            $table->dropIndex(['last_payment_event_id']);
+            // Eliminar índices solo si existen
+            if (Schema::hasColumn('commissions', 'payment_dependency_type')) {
+                try {
+                    $table->dropIndex('commissions_payment_dependency_type_index');
+                } catch (Exception $e) {
+                    // Índice no existe, continuar
+                }
+            }
             
-            // Eliminar campos agregados
-            $table->dropColumn([
-                'payment_dependency_type',
-                'required_client_payments',
-                'client_payments_verified',
-                'payment_verification_status',
-                'next_verification_date',
-                'verification_notes',
-                'last_payment_event_id',
-                'auto_verification_enabled',
-                'verification_retry_count',
-                'last_verification_attempt',
-                'payment_status'
-            ]);
-        });
-        
-        Schema::table('commissions', function (Blueprint $table) {
-            $table->renameColumn('payment_status_old', 'payment_status');
+            if (Schema::hasColumn('commissions', 'payment_verification_status')) {
+                try {
+                    $table->dropIndex('commissions_payment_verification_status_index');
+                } catch (Exception $e) {
+                    // Índice no existe, continuar
+                }
+            }
+            
+            if (Schema::hasColumn('commissions', 'next_verification_date')) {
+                try {
+                    $table->dropIndex('commissions_next_verification_date_index');
+                } catch (Exception $e) {
+                    // Índice no existe, continuar
+                }
+            }
+            
+            if (Schema::hasColumn('commissions', 'auto_verification_enabled')) {
+                try {
+                    $table->dropIndex('commissions_auto_verification_enabled_index');
+                } catch (Exception $e) {
+                    // Índice no existe, continuar
+                }
+            }
+            
+            if (Schema::hasColumn('commissions', 'last_payment_event_id')) {
+                try {
+                    $table->dropIndex('commissions_last_payment_event_id_index');
+                } catch (Exception $e) {
+                    // Índice no existe, continuar
+                }
+            }
+            
+            // Eliminar campos agregados solo si existen
+            $columnsToRemove = [];
+            
+            if (Schema::hasColumn('commissions', 'payment_dependency_type')) {
+                $columnsToRemove[] = 'payment_dependency_type';
+            }
+            if (Schema::hasColumn('commissions', 'required_client_payments')) {
+                $columnsToRemove[] = 'required_client_payments';
+            }
+            if (Schema::hasColumn('commissions', 'client_payments_verified')) {
+                $columnsToRemove[] = 'client_payments_verified';
+            }
+            if (Schema::hasColumn('commissions', 'payment_verification_status')) {
+                $columnsToRemove[] = 'payment_verification_status';
+            }
+            if (Schema::hasColumn('commissions', 'next_verification_date')) {
+                $columnsToRemove[] = 'next_verification_date';
+            }
+            if (Schema::hasColumn('commissions', 'verification_notes')) {
+                $columnsToRemove[] = 'verification_notes';
+            }
+            if (Schema::hasColumn('commissions', 'last_payment_event_id')) {
+                $columnsToRemove[] = 'last_payment_event_id';
+            }
+            if (Schema::hasColumn('commissions', 'auto_verification_enabled')) {
+                $columnsToRemove[] = 'auto_verification_enabled';
+            }
+            if (Schema::hasColumn('commissions', 'verification_retry_count')) {
+                $columnsToRemove[] = 'verification_retry_count';
+            }
+            if (Schema::hasColumn('commissions', 'last_verification_attempt')) {
+                $columnsToRemove[] = 'last_verification_attempt';
+            }
+            
+            if (!empty($columnsToRemove)) {
+                $table->dropColumn($columnsToRemove);
+            }
         });
     }
 };

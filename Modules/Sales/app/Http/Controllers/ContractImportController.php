@@ -277,6 +277,15 @@ class ContractImportController extends Controller
             $filePath = $file->storeAs('temp/imports', $fileName, 'local');
             $fullPath = Storage::disk('local')->path($filePath);
 
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                Storage::disk('local')->delete($filePath);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.'
+                ], 500);
+            }
+            
             // Leer solo los headers
             $spreadsheet = IOFactory::load($fullPath);
             $worksheet = $spreadsheet->getActiveSheet();
@@ -353,6 +362,15 @@ class ContractImportController extends Controller
             $filePath = $file->storeAs('temp/imports', $fileName, 'local');
             $fullPath = Storage::disk('local')->path($filePath);
 
+            // Verificar que ZipArchive esté disponible
+            if (!class_exists('ZipArchive')) {
+                Storage::disk('local')->delete($filePath);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error del servidor: La extensión ZIP de PHP no está disponible. Contacte al administrador del sistema.'
+                ], 500);
+            }
+            
             // Leer solo los headers
             $spreadsheet = IOFactory::load($fullPath);
             $worksheet = $spreadsheet->getActiveSheet();

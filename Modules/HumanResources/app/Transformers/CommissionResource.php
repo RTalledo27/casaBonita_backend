@@ -46,6 +46,29 @@ class CommissionResource extends JsonResource
                     'sign_date' => $this->contract->sign_date?->format('Y-m-d'),
                     'status' => $this->contract->status
                 ];
+            }),
+
+            // Relaciones padre-hijo
+            'parent_commission' => $this->whenLoaded('parentCommission', function () {
+                return [
+                    'commission_id' => $this->parentCommission->commission_id,
+                    'commission_amount' => $this->parentCommission->commission_amount,
+                    'payment_status' => $this->parentCommission->payment_status,
+                    'payment_date' => $this->parentCommission->payment_date?->format('Y-m-d')
+                ];
+            }),
+
+            'child_commissions' => $this->whenLoaded('childCommissions', function () {
+                return $this->childCommissions->map(function ($child) {
+                    return [
+                        'commission_id' => $child->commission_id,
+                        'commission_amount' => $child->commission_amount,
+                        'payment_part' => $child->payment_part,
+                        'payment_status' => $child->payment_status,
+                        'payment_date' => $child->payment_date?->format('Y-m-d'),
+                        'is_payable' => $child->is_payable
+                    ];
+                });
             })
         ];
     }

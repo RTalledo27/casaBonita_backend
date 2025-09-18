@@ -57,6 +57,7 @@ Route::prefix('v1')->group(function () {
                 Route::post('/process-period', [CommissionController::class, 'processForPeriod'])->name('hr.commissions.process-period');
                 Route::post('/process-for-payroll', [CommissionController::class, 'processForPayroll'])->name('hr.commissions.process-for-payroll');
                 Route::post('/pay', [CommissionController::class, 'pay'])->name('hr.commissions.pay');
+                Route::post('/{commission}/pay-part', [CommissionController::class, 'payPart'])->name('hr.commissions.pay-part');
                 Route::post('/mark-multiple-paid', [CommissionController::class, 'markMultipleAsPaid'])->name('hr.commissions.mark-multiple-paid');
                 Route::post('/{commission}/split-payment', [CommissionController::class, 'createSplitPayment'])->name('hr.commissions.split-payment');
             });
