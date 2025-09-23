@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Collections\Models\CustomerPayment;
 use Modules\HumanResources\Models\Commission;
-use Modules\HumanResources\Services\CommissionPaymentVerificationService;
+use Modules\HumanResources\app\Services\CommissionPaymentVerificationService;
 use Pusher\Pusher;
 
 class CommissionPaymentVerificationController extends Controller

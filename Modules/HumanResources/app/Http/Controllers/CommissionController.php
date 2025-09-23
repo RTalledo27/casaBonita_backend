@@ -1,24 +1,26 @@
 <?php
 
-namespace Modules\HumanResources\Http\Controllers;
+namespace Modules\HumanResources\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Modules\HumanResources\app\Services\SplitPaymentService;
+use Exception;
+use Modules\HumanResources\app\Services\CommissionPaymentVerificationService;
+use Modules\HumanResources\Models\Commission;
 use Modules\HumanResources\Repositories\CommissionRepository;
 use Modules\HumanResources\Services\CommissionService;
-use Modules\HumanResources\Services\CommissionVerificationService;
-use Modules\HumanResources\Services\CommissionPaymentVerificationService;
 use Modules\HumanResources\Transformers\CommissionResource;
-use Exception;
+use Modules\Collections\Models\AccountReceivable;
+use App\Models\CommissionPaymentVerification;
 
 class CommissionController extends Controller
 {
     public function __construct(
         protected CommissionRepository $commissionRepo,
         protected CommissionService $commissionService,
-        protected CommissionVerificationService $verificationService,
         protected CommissionPaymentVerificationService $paymentVerificationService
     ) {}
 
@@ -143,15 +145,35 @@ class CommissionController extends Controller
         ]);
 
         try {
+            Log::info('=== INICIO PAGO PARTE COMISIÓN DESDE FRONTEND ===', [
+                'commission_id' => $commissionId,
+                'payment_part' => $request->payment_part,
+                'timestamp' => now()->format('Y-m-d H:i:s'),
+                'user_id' => auth()->id()
+            ]);
+
             // Buscar la comisión específica
             $commission = $this->commissionRepo->findById($commissionId);
             
             if (!$commission) {
+                Log::error('Comisión no encontrada', ['commission_id' => $commissionId]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Comisión no encontrada'
                 ], 404);
             }
+
+            Log::info('Comisión encontrada - Datos iniciales', [
+                'commission_id' => $commission->commission_id,
+                'contract_id' => $commission->contract_id,
+                'payment_part' => $commission->payment_part,
+                'status' => $commission->status,
+                'payment_verification_status' => $commission->payment_verification_status,
+                'requires_client_payment_verification' => $commission->requires_client_payment_verification,
+                'is_eligible_for_payment' => $commission->is_eligible_for_payment,
+                'first_payment_verified_at' => $commission->first_payment_verified_at,
+                'second_payment_verified_at' => $commission->second_payment_verified_at
+            ]);
 
             // Verificar que la comisión corresponda al payment_part solicitado
             if ($commission->payment_part !== $request->payment_part) {
@@ -169,17 +191,59 @@ class CommissionController extends Controller
                 ], 400);
             }
 
+            Log::info('Iniciando verificación de pagos del cliente', [
+                'commission_id' => $commission->commission_id,
+                'contract_id' => $commission->contract_id,
+                'requires_verification' => $commission->requires_client_payment_verification
+            ]);
+
             // Verificar que el cliente haya pagado la cuota correspondiente
             $verificationResult = $this->paymentVerificationService->verifyClientPayments($commission);
             
+            Log::info('Resultado de verificación de pagos', [
+                'commission_id' => $commission->commission_id,
+                'verification_result' => $verificationResult,
+                'first_payment' => $verificationResult['first_payment'] ?? 'N/A',
+                'second_payment' => $verificationResult['second_payment'] ?? 'N/A'
+            ]);
+            
             $canPay = false;
-            if ($request->payment_part === 1) {
-                $canPay = $verificationResult['first_payment'] ?? false;
-            } elseif ($request->payment_part === 2) {
-                $canPay = $verificationResult['second_payment'] ?? false;
+            
+            // Si la comisión no requiere verificación de pagos del cliente, permitir el pago
+            if (!$commission->requires_client_payment_verification) {
+                $canPay = $commission->is_eligible_for_payment;
+                Log::info('Comisión no requiere verificación - usando is_eligible_for_payment', [
+                    'commission_id' => $commission->commission_id,
+                    'is_eligible_for_payment' => $commission->is_eligible_for_payment,
+                    'can_pay' => $canPay
+                ]);
+            } else {
+                // Para comisiones que requieren verificación, verificar los pagos específicos
+                if ($request->payment_part === 1) {
+                    $canPay = $verificationResult['first_payment'] ?? false;
+                    Log::info('Verificando payment_part = 1', [
+                        'commission_id' => $commission->commission_id,
+                        'first_payment_verified' => $verificationResult['first_payment'] ?? false,
+                        'can_pay' => $canPay
+                    ]);
+                } elseif ($request->payment_part === 2) {
+                    $canPay = $verificationResult['second_payment'] ?? false;
+                    Log::info('Verificando payment_part = 2', [
+                        'commission_id' => $commission->commission_id,
+                        'second_payment_verified' => $verificationResult['second_payment'] ?? false,
+                        'can_pay' => $canPay
+                    ]);
+                }
             }
 
             if (!$canPay) {
+                Log::error('Pago rechazado - Cliente no ha pagado cuota correspondiente', [
+                    'commission_id' => $commission->commission_id,
+                    'payment_part' => $request->payment_part,
+                    'can_pay' => $canPay,
+                    'requires_verification' => $commission->requires_client_payment_verification,
+                    'verification_result' => $verificationResult
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'No se puede pagar esta parte de la comisión porque el cliente no ha pagado la cuota correspondiente',
@@ -187,21 +251,43 @@ class CommissionController extends Controller
                 ], 400);
             }
 
-            // Proceder con el pago
-            $success = $this->commissionService->payCommissions([$commissionId]);
+            Log::info('Procesando pago de comisión', [
+                'commission_id' => $commission->commission_id,
+                'payment_part' => $request->payment_part,
+                'can_pay' => $canPay
+            ]);
 
-            if ($success) {
+            // Procesar el pago
+            $result = $this->commissionService->processCommissionPayment($commission, $request->payment_part);
+
+            Log::info('Resultado del procesamiento de pago', [
+                'commission_id' => $commission->commission_id,
+                'payment_part' => $request->payment_part,
+                'result_success' => $result['success'],
+                'result_message' => $result['message'] ?? 'N/A'
+            ]);
+
+            if ($result['success']) {
+                Log::info('=== PAGO PROCESADO EXITOSAMENTE ===', [
+                    'commission_id' => $commission->commission_id,
+                    'payment_part' => $request->payment_part,
+                    'timestamp' => now()->format('Y-m-d H:i:s')
+                ]);
                 return response()->json([
                     'success' => true,
-                    'message' => 'Parte de la comisión pagada exitosamente',
-                    'commission_id' => $commissionId,
-                    'payment_part' => $request->payment_part,
-                    'amount' => $commission->commission_amount
+                    'message' => 'Pago procesado exitosamente',
+                    'data' => $result['data']
                 ]);
             } else {
+                Log::error('=== ERROR EN PROCESAMIENTO DE PAGO ===', [
+                    'commission_id' => $commission->commission_id,
+                    'payment_part' => $request->payment_part,
+                    'error_message' => $result['message'],
+                    'timestamp' => now()->format('Y-m-d H:i:s')
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'No se pudo procesar el pago de la comisión'
+                    'message' => $result['message']
                 ], 400);
             }
 
@@ -716,4 +802,632 @@ class CommissionController extends Controller
             ], 500);
         }
     }
+
+    public function debugPayPart($commissionId)
+    {
+        Log::info('DEBUG: Iniciando debugPayPart', [
+            'commission_id' => $commissionId,
+            'timestamp' => now()->format('Y-m-d H:i:s'),
+            'method' => 'debugPayPart'
+        ]);
+
+        // Obtener información de otras comisiones
+        $otherCommissions = Commission::select('commission_id', 'status', 'payment_dependency_type', 'verification_status')
+            ->take(10)
+            ->get();
+
+        Log::info('DEBUG: Otras comisiones en BD', [
+            'other_commissions' => $otherCommissions->toArray()
+        ]);
+
+        // Obtener comisiones con status approved
+        $approvedCommissions = Commission::select('commission_id', 'status', 'payment_dependency_type', 'verification_status')
+            ->where('status', 'approved')
+            ->take(5)
+            ->get();
+
+        Log::info('DEBUG: Comisiones con status approved', [
+            'approved_commissions' => $approvedCommissions->toArray()
+        ]);
+
+        $commission = Commission::where('commission_id', $commissionId)->first();
+
+        if (!$commission) {
+            Log::warning('DEBUG: Comisión no encontrada', ['commission_id' => $commissionId]);
+            return response()->json(['error' => 'Commission not found'], 404);
+        }
+
+        Log::info('DEBUG: Comisión encontrada', [
+            'commission' => $commission->toArray()
+        ]);
+
+        if ($commission->status !== 'approved') {
+            Log::warning('DEBUG: Comisión no está aprobada', [
+                'commission_id' => $commissionId,
+                'current_status' => $commission->status
+            ]);
+            return response()->json(['error' => 'Commission is not approved'], 400);
+        }
+
+        // Continuar con el proceso normal
+        return $this->payPart($commissionId);
+    }
+
+    /**
+     * Endpoint de debug para cambiar el estado de una comisión a 'approved'
+     */
+    public function debugSetApproved($commissionId)
+    {
+        Log::info('DEBUG: Intentando cambiar estado de comisión a approved', [
+            'commission_id' => $commissionId
+        ]);
+        
+        try {
+            $commission = Commission::find($commissionId);
+            
+            if (!$commission) {
+                Log::error('DEBUG: Comisión no encontrada', [
+                    'commission_id' => $commissionId
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Comisión no encontrada'
+                ], 404);
+            }
+            
+            // Intentar actualizar el estado
+            $commission->status = 'approved';
+            $commission->save();
+            
+            Log::info('DEBUG: Estado de comisión actualizado exitosamente', [
+                'commission_id' => $commissionId,
+                'new_status' => 'approved'
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Estado actualizado a approved',
+                'commission' => $commission
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('DEBUG: Error al actualizar estado de comisión', [
+                'commission_id' => $commissionId,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Endpoint de debugging para rastrear el proceso completo de verificación de pagos
+     * Simula el proceso sin modificar datos y muestra todas las consultas ejecutadas
+     */
+    public function debugCommissionPaymentVerification($commissionId)
+    {
+        Log::info('=== DEBUG: INICIO RASTREO VERIFICACIÓN DE PAGOS ===', [
+            'commission_id' => $commissionId,
+            'timestamp' => now()->toDateTimeString()
+        ]);
+        
+        try {
+            $debugInfo = [
+                'commission_info' => [],
+                'database_queries' => [],
+                'verification_process' => [],
+                'final_result' => [],
+                'current_state' => [],
+                'comparison' => []
+            ];
+            
+            // 1. INFORMACIÓN DE LA COMISIÓN
+            $commission = Commission::find($commissionId);
+            if (!$commission) {
+                return response()->json([
+                    'error' => 'Comisión no encontrada',
+                    'commission_id' => $commissionId
+                ], 404);
+            }
+            
+            $debugInfo['commission_info'] = [
+                'commission_id' => $commission->commission_id,
+                'contract_id' => $commission->contract_id,
+                'payment_part' => $commission->payment_part,
+                'requires_client_payment_verification' => $commission->requires_client_payment_verification,
+                'is_eligible_for_payment' => $commission->is_eligible_for_payment,
+                'payment_verification_status' => $commission->payment_verification_status,
+                'status' => $commission->status,
+                'payment_type' => $commission->payment_type ?? 'N/A'
+            ];
+            
+            // 2. CONSULTA: Verificar si hay cronograma de pagos
+            $hasPaymentSchedule = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)->exists();
+            $debugInfo['database_queries']['payment_schedules_check'] = [
+                'query' => 'SELECT EXISTS(SELECT 1 FROM payment_schedules WHERE contract_id = ' . $commission->contract_id . ')',
+                'result' => $hasPaymentSchedule,
+                'table' => 'payment_schedules',
+                'fields_checked' => ['contract_id']
+            ];
+            
+            // 3. CONSULTA: Obtener cuentas por cobrar
+            $accountsReceivable = AccountReceivable::where('contract_id', $commission->contract_id)
+                ->orderBy('due_date', 'asc')
+                ->get();
+            
+            $debugInfo['database_queries']['accounts_receivable'] = [
+                'query' => 'SELECT * FROM accounts_receivable WHERE contract_id = ' . $commission->contract_id . ' ORDER BY due_date ASC',
+                'count' => $accountsReceivable->count(),
+                'table' => 'accounts_receivable',
+                'fields_checked' => ['contract_id', 'due_date', 'ar_id', 'original_amount', 'paid_amount', 'status'],
+                'results' => $accountsReceivable->map(function($ar) {
+                    return [
+                        'ar_id' => $ar->ar_id,
+                        'due_date' => $ar->due_date,
+                        'original_amount' => $ar->original_amount,
+                        'paid_amount' => $ar->paid_amount,
+                        'status' => $ar->status
+                    ];
+                })->toArray()
+            ];
+            
+            // 4. PROCESO DE VERIFICACIÓN SIMULADO
+            if (!$commission->requires_client_payment_verification) {
+                $debugInfo['verification_process']['auto_verified'] = [
+                    'reason' => 'requires_client_payment_verification = false',
+                    'action' => 'Marcada automáticamente como verificada',
+                    'result' => 'fully_verified'
+                ];
+            } else {
+                // Simular verificación según el tipo de contrato
+                if ($hasPaymentSchedule) {
+                    $debugInfo['verification_process']['type'] = 'with_payment_schedule';
+                    $this->simulateVerificationWithSchedule($commission, $debugInfo);
+                } else {
+                    $debugInfo['verification_process']['type'] = 'without_payment_schedule';
+                    $this->simulateVerificationWithoutSchedule($commission, $accountsReceivable, $debugInfo);
+                }
+            }
+            
+            // 5. CONSULTA: Verificaciones existentes
+            $existingVerifications = CommissionPaymentVerification::where('commission_id', $commission->commission_id)
+                ->get();
+            
+            $debugInfo['database_queries']['commission_payment_verifications'] = [
+                'query' => 'SELECT * FROM commission_payment_verifications WHERE commission_id = ' . $commission->commission_id,
+                'count' => $existingVerifications->count(),
+                'table' => 'commission_payment_verifications',
+                'fields_checked' => ['commission_id', 'payment_installment', 'verification_status', 'verification_date'],
+                'results' => $existingVerifications->map(function($v) {
+                    return [
+                        'payment_installment' => $v->payment_installment,
+                        'verification_status' => $v->verification_status,
+                        'verification_date' => $v->verification_date,
+                        'verified_amount' => $v->verified_amount
+                    ];
+                })->toArray()
+            ];
+            
+            // 6. ESTADO ACTUAL VS RESULTADO SIMULADO
+            $debugInfo['current_state'] = [
+                'payment_verification_status' => $commission->payment_verification_status,
+                'is_eligible_for_payment' => $commission->is_eligible_for_payment,
+                'first_payment_verified_at' => $commission->first_payment_verified_at,
+                'second_payment_verified_at' => $commission->second_payment_verified_at
+            ];
+            
+            // 7. COMPARACIÓN Y ANÁLISIS
+            $debugInfo['comparison'] = [
+                'verification_matches' => $debugInfo['current_state']['payment_verification_status'] === ($debugInfo['final_result']['status'] ?? 'pending_verification'),
+                'eligibility_matches' => $debugInfo['current_state']['is_eligible_for_payment'] === ($debugInfo['final_result']['is_eligible'] ?? false),
+                'discrepancies' => []
+            ];
+            
+            if (!$debugInfo['comparison']['verification_matches']) {
+                $debugInfo['comparison']['discrepancies'][] = 'Estado de verificación no coincide';
+            }
+            
+            if (!$debugInfo['comparison']['eligibility_matches']) {
+                $debugInfo['comparison']['discrepancies'][] = 'Elegibilidad para pago no coincide';
+            }
+            
+            Log::info('=== DEBUG: RASTREO COMPLETADO ===', [
+                'commission_id' => $commissionId,
+                'total_queries' => count($debugInfo['database_queries']),
+                'verification_type' => $debugInfo['verification_process']['type'] ?? 'auto_verified',
+                'discrepancies_found' => count($debugInfo['comparison']['discrepancies'])
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'commission_id' => $commissionId,
+                'debug_info' => $debugInfo,
+                'summary' => [
+                    'total_database_queries' => count($debugInfo['database_queries']),
+                    'verification_required' => $commission->requires_client_payment_verification,
+                    'has_payment_schedule' => $hasPaymentSchedule,
+                    'accounts_receivable_count' => $accountsReceivable->count(),
+                    'existing_verifications_count' => $existingVerifications->count(),
+                    'discrepancies_found' => count($debugInfo['comparison']['discrepancies'])
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('=== DEBUG: ERROR EN RASTREO ===', [
+                'commission_id' => $commissionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                 'success' => false,
+                 'error' => $e->getMessage(),
+                 'commission_id' => $commissionId
+             ], 500);
+         }
+     }
+
+    /**
+     * Simula la verificación de pagos para contratos CON cronograma de pagos
+     */
+    private function simulateVerificationWithSchedule($commission, &$debugInfo)
+    {
+        // Consultar cronograma de pagos
+        $paymentSchedules = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
+            ->orderBy('installment_number', 'asc')
+            ->get();
+        
+        $debugInfo['database_queries']['payment_schedules'] = [
+            'query' => 'SELECT * FROM payment_schedules WHERE contract_id = ' . $commission->contract_id . ' ORDER BY installment_number ASC',
+            'count' => $paymentSchedules->count(),
+            'table' => 'payment_schedules',
+            'fields_checked' => ['contract_id', 'installment_number', 'due_date', 'amount'],
+            'results' => $paymentSchedules->map(function($ps) {
+                return [
+                    'installment_number' => $ps->installment_number,
+                    'due_date' => $ps->due_date,
+                    'amount' => $ps->amount
+                ];
+            })->toArray()
+        ];
+        
+        // Determinar qué cuotas verificar según payment_part
+        $installmentsToVerify = [];
+        if ($commission->payment_part === 'primera_parte') {
+            $installmentsToVerify = [1];
+        } elseif ($commission->payment_part === 'segunda_parte') {
+            $installmentsToVerify = [2];
+        } elseif ($commission->payment_part === 'pago_completo') {
+            $installmentsToVerify = [1, 2];
+        }
+        
+        $debugInfo['verification_process']['installments_to_verify'] = $installmentsToVerify;
+        $verificationResults = [];
+        
+        foreach ($installmentsToVerify as $installmentNumber) {
+            $schedule = $paymentSchedules->where('installment_number', $installmentNumber)->first();
+            if ($schedule) {
+                $result = $this->simulateInstallmentVerification($commission, $schedule, $debugInfo);
+                $verificationResults[] = $result;
+            }
+        }
+        
+        // Determinar resultado final
+        $allVerified = collect($verificationResults)->every(function($result) {
+            return $result['status'] === 'verified';
+        });
+        
+        $debugInfo['final_result'] = [
+            'status' => $allVerified ? 'fully_verified' : 'partially_verified',
+            'is_eligible' => $allVerified,
+            'verification_details' => $verificationResults
+        ];
+    }
+
+    /**
+     * Simula la verificación de pagos para contratos SIN cronograma de pagos
+     */
+    private function simulateVerificationWithoutSchedule($commission, $accountsReceivable, &$debugInfo)
+    {
+        $debugInfo['verification_process']['method'] = 'direct_accounts_receivable_check';
+        
+        // Determinar qué cuentas por cobrar verificar según payment_part
+        $arToVerify = [];
+        if ($commission->payment_part === 'primera_parte') {
+            $arToVerify = $accountsReceivable->take(1);
+        } elseif ($commission->payment_part === 'segunda_parte') {
+            $arToVerify = $accountsReceivable->skip(1)->take(1);
+        } elseif ($commission->payment_part === 'pago_completo') {
+            $arToVerify = $accountsReceivable;
+        }
+        
+        $debugInfo['verification_process']['accounts_to_verify'] = $arToVerify->map(function($ar) {
+            return [
+                'ar_id' => $ar->ar_id,
+                'due_date' => $ar->due_date,
+                'original_amount' => $ar->original_amount,
+                'paid_amount' => $ar->paid_amount
+            ];
+        })->toArray();
+        
+        $verificationResults = [];
+        
+        foreach ($arToVerify as $ar) {
+            // Consultar pagos de clientes para esta cuenta por cobrar
+            $customerPayments = \Modules\Contracts\app\Models\CustomerPayment::where('ar_id', $ar->ar_id)
+                ->where('payment_date', '<=', now())
+                ->get();
+            
+            $debugInfo['database_queries']['customer_payments_ar_' . $ar->ar_id] = [
+                'query' => 'SELECT * FROM customer_payments WHERE ar_id = ' . $ar->ar_id . ' AND payment_date <= NOW()',
+                'count' => $customerPayments->count(),
+                'table' => 'customer_payments',
+                'fields_checked' => ['ar_id', 'payment_date', 'amount', 'payment_method'],
+                'results' => $customerPayments->map(function($cp) {
+                    return [
+                        'payment_id' => $cp->payment_id ?? 'N/A',
+                        'amount' => $cp->amount,
+                        'payment_date' => $cp->payment_date,
+                        'payment_method' => $cp->payment_method ?? 'N/A'
+                    ];
+                })->toArray()
+            ];
+            
+            $totalPaid = $customerPayments->sum('amount');
+            $isFullyPaid = $totalPaid >= $ar->original_amount;
+            
+            $verificationResults[] = [
+                'ar_id' => $ar->ar_id,
+                'original_amount' => $ar->original_amount,
+                'total_paid' => $totalPaid,
+                'is_fully_paid' => $isFullyPaid,
+                'status' => $isFullyPaid ? 'verified' : 'pending'
+            ];
+        }
+        
+        // Determinar resultado final
+        $allVerified = collect($verificationResults)->every(function($result) {
+            return $result['status'] === 'verified';
+        });
+        
+        $debugInfo['final_result'] = [
+            'status' => $allVerified ? 'fully_verified' : 'partially_verified',
+            'is_eligible' => $allVerified,
+            'verification_details' => $verificationResults
+        ];
+    }
+
+    /**
+     * Simula la verificación de una cuota específica del cronograma
+     */
+    private function simulateInstallmentVerification($commission, $schedule, &$debugInfo)
+    {
+        // Buscar cuenta por cobrar correspondiente a esta cuota
+        $accountReceivable = AccountReceivable::where('contract_id', $commission->contract_id)
+            ->where('due_date', $schedule->due_date)
+            ->first();
+        
+        if (!$accountReceivable) {
+            return [
+                'installment_number' => $schedule->installment_number,
+                'status' => 'no_ar_found',
+                'message' => 'No se encontró cuenta por cobrar para esta cuota'
+            ];
+        }
+        
+        // Consultar pagos de clientes para esta cuenta por cobrar
+        $customerPayments = \Modules\Contracts\app\Models\CustomerPayment::where('ar_id', $accountReceivable->ar_id)
+            ->where('payment_date', '<=', now())
+            ->get();
+        
+        $debugInfo['database_queries']['customer_payments_installment_' . $schedule->installment_number] = [
+            'query' => 'SELECT * FROM customer_payments WHERE ar_id = ' . $accountReceivable->ar_id . ' AND payment_date <= NOW()',
+            'count' => $customerPayments->count(),
+            'table' => 'customer_payments',
+            'fields_checked' => ['ar_id', 'payment_date', 'amount', 'payment_method'],
+            'installment_number' => $schedule->installment_number,
+            'results' => $customerPayments->map(function($cp) {
+                return [
+                    'payment_id' => $cp->payment_id ?? 'N/A',
+                    'amount' => $cp->amount,
+                    'payment_date' => $cp->payment_date,
+                    'payment_method' => $cp->payment_method ?? 'N/A'
+                ];
+            })->toArray()
+        ];
+        
+        $totalPaid = $customerPayments->sum('amount');
+        $isFullyPaid = $totalPaid >= $schedule->amount;
+        
+        return [
+            'installment_number' => $schedule->installment_number,
+            'scheduled_amount' => $schedule->amount,
+            'total_paid' => $totalPaid,
+            'is_fully_paid' => $isFullyPaid,
+            'status' => $isFullyPaid ? 'verified' : 'pending',
+            'ar_id' => $accountReceivable->ar_id
+        ];
+    }
+    
+    /**
+     * Endpoint simple para buscar comisiones en estado 'generated' o 'partially_paid'
+     * que puedan ser usadas para probar el proceso de pago
+     */
+    public function debugTestPayPart($commission_id = null)
+    {
+        Log::info('=== DEBUG FIND TESTABLE COMMISSIONS ===', [
+            'commission_id' => $commission_id,
+            'timestamp' => now()->toDateTimeString()
+        ]);
+        
+        try {
+            // Si se proporciona un commission_id específico, verificar solo esa comisión
+            if ($commission_id) {
+                $commission = Commission::where('commission_id', $commission_id)->first();
+                
+                if (!$commission) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Comisión no encontrada',
+                        'commission_id' => $commission_id
+                    ]);
+                }
+                
+                return response()->json([
+                    'success' => true,
+                    'commission' => [
+                        'commission_id' => $commission->commission_id,
+                        'status' => $commission->status,
+                        'payment_part' => $commission->payment_part,
+                        'is_eligible_for_payment' => $commission->is_eligible_for_payment,
+                        'requires_client_payment_verification' => $commission->requires_client_payment_verification,
+                        'payment_verification_status' => $commission->payment_verification_status,
+                        'can_test_first_payment' => ($commission->status === 'generated' && $commission->payment_part == 1),
+                        'can_test_second_payment' => ($commission->status === 'partially_paid' && $commission->payment_part == 2)
+                    ]
+                ]);
+            }
+            
+            // Buscar comisiones que puedan ser usadas para testing
+            $testableCommissions = Commission::whereIn('status', ['generated', 'partially_paid'])
+                ->select('commission_id', 'status', 'payment_part', 'is_eligible_for_payment', 
+                        'requires_client_payment_verification', 'payment_verification_status')
+                ->limit(5)
+                ->get();
+            
+            $results = [];
+            foreach ($testableCommissions as $commission) {
+                $results[] = [
+                    'commission_id' => $commission->commission_id,
+                    'status' => $commission->status,
+                    'payment_part' => $commission->payment_part,
+                    'is_eligible_for_payment' => $commission->is_eligible_for_payment,
+                    'requires_client_payment_verification' => $commission->requires_client_payment_verification,
+                    'payment_verification_status' => $commission->payment_verification_status,
+                    'can_test_first_payment' => ($commission->status === 'generated' && $commission->payment_part == 1),
+                    'can_test_second_payment' => ($commission->status === 'partially_paid' && $commission->payment_part == 2),
+                    'recommended_for_testing' => (
+                        ($commission->status === 'generated' && $commission->payment_part == 1) ||
+                        ($commission->status === 'partially_paid' && $commission->payment_part == 2)
+                    )
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Comisiones encontradas para testing',
+                'total_found' => count($results),
+                'commissions' => $results,
+                'sql_query_executed' => "SELECT commission_id, status, payment_part, is_eligible_for_payment, requires_client_payment_verification, payment_verification_status FROM commissions WHERE status IN ('generated', 'partially_paid') LIMIT 5"
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('ERROR en debugTestPayPart', [
+                'commission_id' => $commission_id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                 'success' => false,
+                 'error' => 'Error interno: ' . $e->getMessage(),
+                 'commission_id' => $commission_id
+             ], 500);
+         }
+     }
+     
+     /**
+      * Endpoint de debugging para resetear una comisión a estado approved
+      * Permite probar el proceso de pago desde el inicio
+      */
+     public function debugResetToApproved($commission_id)
+     {
+         Log::info('=== DEBUG RESET TO APPROVED INICIADO ===', [
+             'commission_id' => $commission_id,
+             'timestamp' => now()->toDateTimeString()
+         ]);
+         
+         try {
+             // Buscar la comisión
+             $commission = Commission::where('commission_id', $commission_id)->first();
+             
+             if (!$commission) {
+                 return response()->json([
+                     'success' => false,
+                     'error' => 'Comisión no encontrada',
+                     'commission_id' => $commission_id
+                 ]);
+             }
+             
+             $previousStatus = $commission->status;
+             $previousEligibility = $commission->is_eligible_for_payment;
+             
+             // Resetear la comisión a estado approved
+             $commission->status = 'approved';
+             $commission->is_eligible_for_payment = true;
+             $commission->payment_verification_status = null;
+             $commission->save();
+             
+             Log::info('DEBUG: Comisión reseteada', [
+                 'commission_id' => $commission->commission_id,
+                 'previous_status' => $previousStatus,
+                 'new_status' => $commission->status,
+                 'previous_eligibility' => $previousEligibility,
+                 'new_eligibility' => $commission->is_eligible_for_payment
+             ]);
+             
+             return response()->json([
+                 'success' => true,
+                 'message' => 'Comisión reseteada a estado approved exitosamente',
+                 'commission_id' => $commission->commission_id,
+                 'changes' => [
+                     'previous_status' => $previousStatus,
+                     'new_status' => $commission->status,
+                     'previous_eligibility' => $previousEligibility,
+                     'new_eligibility' => $commission->is_eligible_for_payment
+                 ]
+             ]);
+             
+         } catch (\Exception $e) {
+             Log::error('ERROR en debugResetToApproved', [
+                 'commission_id' => $commission_id,
+                 'error' => $e->getMessage(),
+                 'trace' => $e->getTraceAsString()
+             ]);
+             
+             return response()->json([
+                 'success' => false,
+                 'error' => 'Error interno: ' . $e->getMessage(),
+                 'commission_id' => $commission_id
+             ], 500);
+          }
+      }
+      
+      /**
+       * Endpoint de debugging para buscar comisiones en estado approved
+       */
+      public function debugFindApprovedCommissions()
+      {
+          try {
+              $approvedCommissions = Commission::where('status', 'approved')
+                  ->select('commission_id', 'contract_id', 'payment_part', 'status', 'is_eligible_for_payment', 'payment_verification_status')
+                  ->limit(10)
+                  ->get();
+              
+              return response()->json([
+                  'success' => true,
+                  'count' => $approvedCommissions->count(),
+                  'commissions' => $approvedCommissions
+              ]);
+              
+          } catch (\Exception $e) {
+              return response()->json([
+                  'success' => false,
+                  'error' => 'Error interno: ' . $e->getMessage()
+              ], 500);
+          }
+      }
 }

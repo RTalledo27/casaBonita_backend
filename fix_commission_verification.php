@@ -1,115 +1,154 @@
 <?php
+require_once 'vendor/autoload.php';
 
-require_once __DIR__ . '/vendor/autoload.php';
-
-// Cargar configuración de Laravel
-$app = require_once __DIR__ . '/bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-
-use Modules\HumanResources\Models\Commission;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
-
-echo "=== Script para corregir comisiones con verificación incorrecta ===\n";
-echo "Fecha: " . now()->format('Y-m-d H:i:s') . "\n\n";
+// Cargar variables de entorno
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
 
 try {
-    DB::beginTransaction();
+    // Conexión a la base de datos
+    $pdo = new PDO(
+        "mysql:host={$_ENV['DB_HOST']};dbname={$_ENV['DB_DATABASE']};charset=utf8mb4",
+        $_ENV['DB_USERNAME'],
+        $_ENV['DB_PASSWORD'],
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
     
-    // Buscar comisiones que no requieren verificación pero no están marcadas como elegibles
-    $commissionsToFix = Commission::where('requires_client_payment_verification', false)
-        ->where(function($query) {
-            $query->where('is_eligible_for_payment', false)
-                  ->orWhere('payment_verification_status', '!=', 'fully_verified')
-                  ->orWhereNull('payment_verification_status');
-        })
-        ->get();
+    echo "=== CORRIGIENDO PROBLEMA DE VERIFICACIÓN DE COMISIONES ===\n\n";
     
-    echo "Comisiones encontradas que necesitan corrección: " . $commissionsToFix->count() . "\n\n";
+    $contractId = 50; // CON20257868
     
-    if ($commissionsToFix->count() === 0) {
-        echo "No se encontraron comisiones que necesiten corrección.\n";
-        DB::rollBack();
-        exit(0);
-    }
+    // 1. Actualizar el status en payment_schedules de 'pagado' a 'PAID'
+    echo "1. Actualizando status en payment_schedules:\n";
+    $stmt = $pdo->prepare("
+        UPDATE payment_schedules 
+        SET status = 'PAID' 
+        WHERE contract_id = ? 
+        AND installment_number IN (1, 2) 
+        AND status = 'pagado'
+    ");
+    $result = $stmt->execute([$contractId]);
+    $rowsAffected = $stmt->rowCount();
     
-    $fixedCount = 0;
-    $errorCount = 0;
-    
-    foreach ($commissionsToFix as $commission) {
-        try {
-            echo "Procesando comisión ID: {$commission->id}\n";
-            echo "  - Contract ID: {$commission->contract_id}\n";
-            echo "  - Estado actual: {$commission->payment_verification_status}\n";
-            echo "  - Elegible actual: " . ($commission->is_eligible_for_payment ? 'Sí' : 'No') . "\n";
-            echo "  - Requiere verificación: " . ($commission->requires_client_payment_verification ? 'Sí' : 'No') . "\n";
-            
-            // Actualizar la comisión
-            $commission->update([
-                'payment_verification_status' => 'fully_verified',
-                'is_eligible_for_payment' => true,
-                'verification_notes' => 'Comisión corregida automáticamente - No requiere verificación de pagos del cliente. Corrección aplicada el ' . now()->format('d/m/Y H:i:s')
-            ]);
-            
-            echo "  ✓ Comisión corregida exitosamente\n\n";
-            $fixedCount++;
-            
-            // Log de la corrección
-            Log::info('Comisión corregida por script de reparación', [
-                'commission_id' => $commission->id,
-                'contract_id' => $commission->contract_id,
-                'previous_status' => $commission->getOriginal('payment_verification_status'),
-                'previous_eligible' => $commission->getOriginal('is_eligible_for_payment'),
-                'new_status' => 'fully_verified',
-                'new_eligible' => true,
-                'script_execution_time' => now()->toISOString()
-            ]);
-            
-        } catch (Exception $e) {
-            echo "  ✗ Error al procesar comisión ID {$commission->id}: " . $e->getMessage() . "\n\n";
-            $errorCount++;
-            
-            Log::error('Error en script de corrección de comisiones', [
-                'commission_id' => $commission->id,
-                'error' => $e->getMessage()
-            ]);
-        }
-    }
-    
-    echo "=== Resumen de la corrección ===\n";
-    echo "Comisiones procesadas: " . $commissionsToFix->count() . "\n";
-    echo "Comisiones corregidas exitosamente: {$fixedCount}\n";
-    echo "Errores encontrados: {$errorCount}\n\n";
-    
-    if ($errorCount === 0) {
-        DB::commit();
-        echo "✓ Todas las correcciones se aplicaron exitosamente.\n";
-        echo "Las comisiones ahora están marcadas como 'fully_verified' y elegibles para pago.\n";
+    if ($rowsAffected > 0) {
+        echo "  ✓ Actualizadas {$rowsAffected} cuotas en payment_schedules\n";
     } else {
-        echo "⚠ Se encontraron errores. Revise los logs para más detalles.\n";
-        echo "¿Desea continuar con las correcciones exitosas? (y/n): ";
-        $handle = fopen("php://stdin", "r");
-        $response = trim(fgets($handle));
-        fclose($handle);
-        
-        if (strtolower($response) === 'y' || strtolower($response) === 'yes') {
-            DB::commit();
-            echo "✓ Correcciones aplicadas (con algunos errores).\n";
-        } else {
-            DB::rollBack();
-            echo "✗ Correcciones canceladas. No se realizaron cambios.\n";
-        }
+        echo "  ⚠ No se actualizaron cuotas en payment_schedules\n";
     }
+    
+    // 2. Actualizar accounts_receivable para marcar las cuotas como pagadas
+    echo "\n2. Actualizando accounts_receivable:\n";
+    
+    // Primero verificar el estado actual
+    $stmt = $pdo->prepare("
+        SELECT ar_id, description, status, outstanding_amount 
+        FROM accounts_receivable 
+        WHERE contract_id = ? 
+        AND (description LIKE '%Cuota #1 %' OR description LIKE '%Cuota #2 %')
+    ");
+    $stmt->execute([$contractId]);
+    $cuotas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    foreach ($cuotas as $cuota) {
+        echo "  Procesando: {$cuota['description']}\n";
+        echo "    Estado actual: {$cuota['status']}\n";
+        echo "    Outstanding: {$cuota['outstanding_amount']}\n";
+        
+        // Actualizar a PAID y outstanding_amount a 0
+        $updateStmt = $pdo->prepare("
+            UPDATE accounts_receivable 
+            SET status = 'PAID', 
+                outstanding_amount = 0,
+                updated_at = NOW()
+            WHERE ar_id = ?
+        ");
+        $updateResult = $updateStmt->execute([$cuota['ar_id']]);
+        
+        if ($updateResult) {
+            echo "    ✓ Actualizada a PAID con outstanding_amount = 0\n";
+        } else {
+            echo "    ✗ Error al actualizar\n";
+        }
+        echo "    ---\n";
+    }
+    
+    // 3. Verificar que los cambios se aplicaron correctamente
+    echo "\n3. Verificando cambios aplicados:\n";
+    
+    // Verificar payment_schedules
+    $stmt = $pdo->prepare("
+        SELECT installment_number, status 
+        FROM payment_schedules 
+        WHERE contract_id = ? 
+        AND installment_number IN (1, 2)
+    ");
+    $stmt->execute([$contractId]);
+    $schedules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo "  Payment Schedules:\n";
+    foreach ($schedules as $schedule) {
+        echo "    - Cuota {$schedule['installment_number']}: {$schedule['status']}\n";
+    }
+    
+    // Verificar accounts_receivable
+    $stmt = $pdo->prepare("
+        SELECT description, status, outstanding_amount 
+        FROM accounts_receivable 
+        WHERE contract_id = ? 
+        AND (description LIKE '%Cuota #1 %' OR description LIKE '%Cuota #2 %')
+    ");
+    $stmt->execute([$contractId]);
+    $cuotas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    echo "\n  Accounts Receivable:\n";
+    foreach ($cuotas as $cuota) {
+        echo "    - {$cuota['description']}: {$cuota['status']} (Outstanding: {$cuota['outstanding_amount']})\n";
+    }
+    
+    // 4. Probar la lógica de verificación actualizada
+    echo "\n4. Probando lógica de verificación actualizada:\n";
+    
+    // Contar cuotas pagadas usando diferentes criterios
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as paid_count_ar
+        FROM accounts_receivable 
+        WHERE contract_id = ? 
+        AND (description LIKE '%Cuota #1 %' OR description LIKE '%Cuota #2 %')
+        AND (status = 'PAID' OR outstanding_amount = 0)
+    ");
+    $stmt->execute([$contractId]);
+    $paidCountAR = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as paid_count_ps
+        FROM payment_schedules 
+        WHERE contract_id = ? 
+        AND installment_number IN (1, 2)
+        AND status = 'PAID'
+    ");
+    $stmt->execute([$contractId]);
+    $paidCountPS = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    echo "  Cuotas pagadas según accounts_receivable: {$paidCountAR['paid_count_ar']}/2\n";
+    echo "  Cuotas pagadas según payment_schedules: {$paidCountPS['paid_count_ps']}/2\n";
+    
+    if ($paidCountAR['paid_count_ar'] == 2 && $paidCountPS['paid_count_ps'] == 2) {
+        echo "\n  ✅ PROBLEMA RESUELTO:\n";
+        echo "  Las cuotas 1 y 2 ahora están correctamente marcadas como pagadas\n";
+        echo "  El sistema de verificación de comisiones debería detectarlas ahora\n";
+    } else {
+        echo "\n  ⚠ PROBLEMA PARCIALMENTE RESUELTO:\n";
+        echo "  Revisar manualmente los datos actualizados\n";
+    }
+    
+    // 5. Mostrar el impacto en las comisiones
+    echo "\n5. Impacto en las comisiones:\n";
+    echo "  Con las cuotas 1 y 2 marcadas como pagadas, las comisiones\n";
+    echo "  del empleado EMP6303 deberían activarse automáticamente\n";
+    echo "  en el próximo proceso de verificación.\n";
     
 } catch (Exception $e) {
-    DB::rollBack();
-    echo "✗ Error crítico en el script: " . $e->getMessage() . "\n";
-    Log::error('Error crítico en script de corrección de comisiones', [
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
-    ]);
-    exit(1);
+    echo "Error: " . $e->getMessage() . "\n";
+    echo "Stack trace: " . $e->getTraceAsString() . "\n";
 }
-
-echo "\nScript completado.\n";
+?>

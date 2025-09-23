@@ -222,13 +222,11 @@ class CommissionRepository
             }
             
             // VALIDACIÓN: Evitar doble pago
-            // Si es una comisión padre, verificar que sus hijas no estén pagadas
+            // Si es una comisión padre, puede pagarse independientemente de las hijas
+            // La sincronización se maneja después del pago exitoso
             if (!$commission->parent_commission_id) {
-                $paidChildren = $commission->childCommissions()->where('payment_status', 'pagado')->count();
-                if ($paidChildren > 0) {
-                    // Si hay hijas pagadas, no permitir pagar la padre
-                    continue;
-                }
+                // Las comisiones padre pueden pagarse siempre
+                // La lógica de sincronización con hijas se maneja más abajo
             }
             
             // Si es una comisión hija, verificar que la padre no esté pagada

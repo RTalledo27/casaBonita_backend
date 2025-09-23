@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 use Modules\Collections\Models\CustomerPayment;
 use Modules\HumanResources\Models\Commission;
 use Modules\Security\Models\User;
@@ -13,24 +14,29 @@ class CommissionPaymentVerification extends Model
 {
     use HasFactory;
 
+    protected $keyType = 'string';
+    public $incrementing = false;
+
     protected $fillable = [
+        'id',
         'commission_id',
-        'customer_payment_id',
+        'client_payment_id',
+        'account_receivable_id',
         'payment_installment',
+        'verification_date',
+        'verified_amount',
         'verification_status',
-        'verified_at',
+        'verification_method',
         'verified_by',
-        'payment_amount',
-        'payment_date',
-        'verification_notes',
-        'verification_metadata'
+        'reversed_by',
+        'reversal_reason',
+        'event_id',
+        'notes'
     ];
 
     protected $casts = [
-        'verified_at' => 'datetime',
-        'payment_date' => 'date',
-        'payment_amount' => 'decimal:2',
-        'verification_metadata' => 'array'
+        'verification_date' => 'datetime',
+        'verified_amount' => 'decimal:2'
     ];
 
     /**
@@ -60,7 +66,7 @@ class CommissionPaymentVerification extends Model
      */
     public function customerPayment(): BelongsTo
     {
-        return $this->belongsTo(CustomerPayment::class);
+        return $this->belongsTo(CustomerPayment::class, 'client_payment_id', 'payment_id');
     }
 
     /**

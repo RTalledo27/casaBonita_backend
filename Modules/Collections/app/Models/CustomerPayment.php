@@ -10,7 +10,7 @@ use Modules\Security\Models\User;
 use Illuminate\Support\Facades\Log;
 use App\Models\CommissionPaymentVerification;
 use Modules\HumanResources\Models\Commission;
-use Modules\HumanResources\Services\CommissionPaymentVerificationService;
+use Modules\HumanResources\app\Services\CommissionPaymentVerificationService;
 
 class CustomerPayment extends Model
 {

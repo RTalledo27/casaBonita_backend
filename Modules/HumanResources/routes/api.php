@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\HumanResources\Http\Controllers\BonusController;
 use Modules\HumanResources\Http\Controllers\BonusGoalController;
 use Modules\HumanResources\Http\Controllers\BonusTypeController;
-use Modules\HumanResources\Http\Controllers\CommissionController;
+use Modules\HumanResources\app\Http\Controllers\CommissionController;
 use Modules\HumanResources\Http\Controllers\CommissionPaymentVerificationController;
 use Modules\HumanResources\Http\Controllers\EmployeeController;
 use Modules\HumanResources\Http\Controllers\EmployeeImportController;
@@ -17,7 +17,26 @@ Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
 });
 
 
+// Debug routes sin autenticación
+Route::post('/debug-commission/{commission}/pay-part', [CommissionController::class, 'debugPayPart']);
+Route::post('/debug-commission/{commission}/set-approved', [CommissionController::class, 'debugSetApproved']);
+Route::get('/debug-commission/list-testable', [CommissionController::class, 'debugListTestableCommissions']);
+Route::get('/debug/commission-payment-verification/{commission}', [CommissionController::class, 'debugCommissionPaymentVerification']);
+
+// Endpoint para debugging completo del proceso de pago de primera parte
+    Route::post('debug-commission/{commission_id}/test-pay-part', [CommissionController::class, 'debugTestPayPart']);
+    
+    // Endpoint para buscar todas las comisiones disponibles para testing
+    Route::post('debug-commission/find-testable', [CommissionController::class, 'debugTestPayPart']);
+    
+    // Endpoint para resetear una comisión a estado approved (solo para debugging)
+    Route::post('debug-commission/{commission_id}/reset-to-approved', [CommissionController::class, 'debugResetToApproved']);
+    
+    // Endpoint para buscar comisiones en estado approved
+    Route::get('debug/find-approved-commissions', [CommissionController::class, 'debugFindApprovedCommissions']);
+
 Route::prefix('v1')->group(function () {
+    
     Route::middleware(['auth:sanctum', 'check.password.change'])->prefix('hr')->group(
         function () {
 
