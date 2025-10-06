@@ -12,6 +12,7 @@ use Modules\Collections\Events\InstallmentPaidEvent;
 use Modules\Collections\Models\CustomerPayment;
 use Modules\Collections\Models\AccountReceivable;
 use Modules\HumanResources\Models\Commission;
+use Modules\HumanResources\app\Services\CommissionPaymentVerificationService;
 
 class CommissionVerificationService
 {

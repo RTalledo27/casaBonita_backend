@@ -3,25 +3,28 @@
 namespace Modules\HumanResources\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\CommissionPaymentVerification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Modules\HumanResources\app\Services\SplitPaymentService;
 use Exception;
+use Modules\Collections\Models\AccountReceivable;
+use Modules\Collections\Models\CustomerPayment;
 use Modules\HumanResources\app\Services\CommissionPaymentVerificationService;
 use Modules\HumanResources\Models\Commission;
 use Modules\HumanResources\Repositories\CommissionRepository;
 use Modules\HumanResources\Services\CommissionService;
+use Modules\HumanResources\Services\CommissionVerificationService;
 use Modules\HumanResources\Transformers\CommissionResource;
-use Modules\Collections\Models\AccountReceivable;
-use App\Models\CommissionPaymentVerification;
 
 class CommissionController extends Controller
 {
     public function __construct(
         protected CommissionRepository $commissionRepo,
         protected CommissionService $commissionService,
-        protected CommissionPaymentVerificationService $paymentVerificationService
+        protected CommissionPaymentVerificationService $paymentVerificationService,
+        protected CommissionVerificationService $verificationService
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -167,6 +170,7 @@ class CommissionController extends Controller
                 'commission_id' => $commission->commission_id,
                 'contract_id' => $commission->contract_id,
                 'payment_part' => $commission->payment_part,
+                'parent_commission_id' => $commission->parent_commission_id,
                 'status' => $commission->status,
                 'payment_verification_status' => $commission->payment_verification_status,
                 'requires_client_payment_verification' => $commission->requires_client_payment_verification,
@@ -175,12 +179,70 @@ class CommissionController extends Controller
                 'second_payment_verified_at' => $commission->second_payment_verified_at
             ]);
 
-            // Verificar que la comisión corresponda al payment_part solicitado
-            if ($commission->payment_part !== $request->payment_part) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'La parte de pago no coincide con la comisión solicitada'
-                ], 400);
+            // Verificar si es una comisión padre (parent_commission_id = null)
+            if (is_null($commission->parent_commission_id)) {
+                // Es una comisión padre - verificar si necesitamos buscar una comisión hija
+                
+                // Si el payment_part solicitado no coincide con el de la comisión padre,
+                // buscar la comisión hija correspondiente
+                if ($commission->payment_part !== $request->payment_part) {
+                    Log::info('Comisión padre detectada, buscando comisión hija', [
+                        'parent_commission_id' => $commission->commission_id,
+                        'parent_payment_part' => $commission->payment_part,
+                        'requested_payment_part' => $request->payment_part
+                    ]);
+
+                    $childCommission = Commission::where('parent_commission_id', $commission->commission_id)
+                        ->where('payment_part', $request->payment_part)
+                        ->first();
+
+                    if (!$childCommission) {
+                        Log::error('Comisión hija no encontrada', [
+                            'parent_commission_id' => $commission->commission_id,
+                            'parent_payment_part' => $commission->payment_part,
+                            'requested_payment_part' => $request->payment_part
+                        ]);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'No se encontró la parte de comisión solicitada'
+                        ], 404);
+                    }
+
+                    // Usar la comisión hija para el resto del proceso
+                    $commission = $childCommission;
+                    
+                    Log::info('Comisión hija encontrada', [
+                        'child_commission_id' => $commission->commission_id,
+                        'payment_part' => $commission->payment_part,
+                        'parent_commission_id' => $commission->parent_commission_id
+                    ]);
+                } else {
+                    // El payment_part coincide, usar la comisión padre directamente
+                    Log::info('Usando comisión padre directamente', [
+                        'commission_id' => $commission->commission_id,
+                        'payment_part' => $commission->payment_part
+                    ]);
+                }
+            } else {
+                // Es una comisión hija - verificar que el payment_part coincida
+                if ($commission->payment_part !== $request->payment_part) {
+                    Log::error('Payment part no coincide - comisión hija incorrecta', [
+                        'commission_payment_part' => $commission->payment_part,
+                        'requested_payment_part' => $request->payment_part,
+                        'commission_id' => $commission->commission_id,
+                        'parent_commission_id' => $commission->parent_commission_id
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'La parte de pago no coincide con la comisión solicitada'
+                    ], 400);
+                }
+                
+                Log::info('Usando comisión hija directamente', [
+                    'commission_id' => $commission->commission_id,
+                    'payment_part' => $commission->payment_part,
+                    'parent_commission_id' => $commission->parent_commission_id
+                ]);
             }
 
             // Verificar que la comisión no esté ya pagada
@@ -746,7 +808,7 @@ class CommissionController extends Controller
             $limit = $request->get('limit', 50);
             
             // Obtener comisiones que necesitan verificación automática
-            $commissions = $this->commissionRepo->getCommissionsForAutomaticVerification($limit);
+            $commissions = $this->commissionRepo->getCommissionsRequiringVerification()->limit($limit)->get();
             
             $results = [
                 'processed' => 0,
@@ -1157,7 +1219,7 @@ class CommissionController extends Controller
         
         foreach ($arToVerify as $ar) {
             // Consultar pagos de clientes para esta cuenta por cobrar
-            $customerPayments = \Modules\Contracts\app\Models\CustomerPayment::where('ar_id', $ar->ar_id)
+            $customerPayments = CustomerPayment::where('ar_id', $ar->ar_id)
                 ->where('payment_date', '<=', now())
                 ->get();
             
@@ -1219,7 +1281,7 @@ class CommissionController extends Controller
         }
         
         // Consultar pagos de clientes para esta cuenta por cobrar
-        $customerPayments = \Modules\Contracts\app\Models\CustomerPayment::where('ar_id', $accountReceivable->ar_id)
+        $customerPayments = CustomerPayment::where('ar_id', $accountReceivable->ar_id)
             ->where('payment_date', '<=', now())
             ->get();
         

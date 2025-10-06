@@ -10,6 +10,20 @@
       "use": "@vercel/php"
     }
   ],
+   "functions": {
+    "api/index.php": {
+      "includeFiles": [
+        "Modules/**",
+        "app/**",
+        "bootstrap/**",
+        "config/**",
+        "database/**",
+        "resources/**",
+        "routes/**",
+        "storage/**"
+      ]
+    }
+  },
   "routes": [
     {
       "src": "/build/(.*)",

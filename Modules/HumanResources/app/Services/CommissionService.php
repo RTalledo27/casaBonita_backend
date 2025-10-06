@@ -5,6 +5,7 @@ namespace Modules\HumanResources\Services;
 use Exception;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Modules\HumanResources\Models\Commission;
 use Modules\HumanResources\Models\Employee;
 use Modules\HumanResources\Repositories\CommissionRepository;
@@ -849,6 +850,139 @@ class CommissionService
         ];
     }
 
+
+    /**
+     * Procesa el pago de una comisión específica
+     */
+    public function processCommissionPayment(Commission $commission, int $paymentPart): array
+    {
+        try {
+            // Validar que la comisión no esté ya pagada
+            if ($commission->payment_status === 'pagado') {
+                return [
+                    'success' => false,
+                    'message' => 'La comisión ya está marcada como pagada'
+                ];
+            }
+
+            // Validar que la comisión sea elegible para pago
+            if (!$commission->is_eligible_for_payment) {
+                return [
+                    'success' => false,
+                    'message' => 'La comisión no es elegible para pago'
+                ];
+            }
+
+            // Verificar si es una comisión hija (parte de un pago dividido)
+            if ($commission->parent_commission_id) {
+                // Es una comisión hija - actualizar solo esta comisión
+                $commission->update([
+                    'payment_status' => 'pagado',
+                    'payment_date' => now()->toDateString(),
+                    'status' => 'fully_paid'
+                ]);
+
+                // Actualizar el estado de la comisión padre basado en el estado de todas las hijas
+                $this->updateParentCommissionStatus($commission->parent_commission_id);
+
+                return [
+                    'success' => true,
+                    'message' => 'Parte de la comisión procesada exitosamente',
+                    'data' => [
+                        'commission_id' => $commission->commission_id,
+                        'payment_part' => $paymentPart,
+                        'amount' => $commission->commission_amount,
+                        'payment_date' => $commission->payment_date,
+                        'is_child_commission' => true
+                    ]
+                ];
+            } else {
+                // Es una comisión padre (sin divisiones) - actualizar normalmente
+                $commission->update([
+                    'payment_status' => 'pagado',
+                    'payment_date' => now()->toDateString(),
+                    'status' => 'fully_paid'
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => 'Comisión procesada exitosamente',
+                    'data' => [
+                        'commission_id' => $commission->commission_id,
+                        'payment_part' => $paymentPart,
+                        'amount' => $commission->commission_amount,
+                        'payment_date' => $commission->payment_date,
+                        'is_child_commission' => false
+                    ]
+                ];
+            }
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => 'Error al procesar el pago de la comisión: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Actualiza el estado de la comisión padre basado en el estado de sus comisiones hijas
+     */
+    private function updateParentCommissionStatus(int $parentCommissionId): void
+    {
+        try {
+            $parentCommission = Commission::find($parentCommissionId);
+            if (!$parentCommission) {
+                return;
+            }
+
+            // Obtener todas las comisiones hijas
+            $childCommissions = Commission::where('parent_commission_id', $parentCommissionId)->get();
+            
+            if ($childCommissions->isEmpty()) {
+                return;
+            }
+
+            // Contar cuántas están pagadas
+            $totalChildren = $childCommissions->count();
+            $paidChildren = $childCommissions->where('payment_status', 'pagado')->count();
+
+            // Determinar el nuevo estado de la comisión padre
+            if ($paidChildren === 0) {
+                // Ninguna hija pagada - mantener estado actual
+                $newStatus = 'generated';
+                $paymentStatus = 'pendiente';
+            } elseif ($paidChildren === $totalChildren) {
+                // Todas las hijas pagadas - marcar como completamente pagada
+                $newStatus = 'fully_paid';
+                $paymentStatus = 'pagado';
+            } else {
+                // Algunas hijas pagadas - marcar como parcialmente pagada
+                $newStatus = 'partially_paid';
+                $paymentStatus = 'parcial';
+            }
+
+            // Actualizar la comisión padre
+            $updateData = [
+                'status' => $newStatus,
+                'payment_status' => $paymentStatus,
+                'updated_at' => now()
+            ];
+
+            // Si todas están pagadas, establecer fecha de pago
+            if ($paidChildren === $totalChildren) {
+                $updateData['payment_date'] = now()->toDateString();
+            }
+
+            $parentCommission->update($updateData);
+
+        } catch (Exception $e) {
+            // Log del error pero no interrumpir el flujo principal
+            Log::error('Error al actualizar estado de comisión padre', [
+                'parent_commission_id' => $parentCommissionId,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
 
     private function getMonthLabel(int $month): string
     {

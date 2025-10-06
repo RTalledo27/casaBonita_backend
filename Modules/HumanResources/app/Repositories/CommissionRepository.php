@@ -113,7 +113,7 @@ class CommissionRepository
         if (isset($filters['include_split_payments'])) {
             if ($filters['include_split_payments']) {
                 // Si se incluyen split payments, mostrar todas las comisiones
-                $query = $this->model->with(['employee.user', 'contract']);
+                // NO sobrescribir la query, mantener las relaciones ya cargadas
             } else {
                 // Si NO se incluyen split payments, solo mostrar comisiones padre (no payables)
                 $query->where('is_payable', false);

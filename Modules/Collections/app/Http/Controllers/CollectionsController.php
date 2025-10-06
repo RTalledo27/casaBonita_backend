@@ -194,31 +194,141 @@ class CollectionsController extends Controller
     }
 
     /**
-     * Genera cronogramas de pagos masivamente para contratos activos
+     * Genera cronogramas de pagos masivamente para contratos específicos
      */
     public function generateBulkSchedules(Request $request): JsonResponse
     {
         try {
+            // Validar datos de entrada
+            $request->validate([
+                'contract_ids' => 'required|array|min:1',
+                'contract_ids.*' => 'integer|exists:contracts,contract_id',
+                'start_date' => 'nullable|date|after_or_equal:today',
+                'notes' => 'nullable|string|max:500'
+            ]);
+
+            $contractIds = $request->input('contract_ids');
+            $startDate = $request->input('start_date');
+            $notes = $request->input('notes');
+
             $scheduleGenerationService = app(\Modules\Collections\Services\PaymentScheduleGenerationService::class);
             
-            $options = [
-                'payment_type' => $request->input('payment_type', 'installments'),
-                'installments' => $request->input('installments', 24),
-                'start_date' => $request->input('start_date')
+            $results = [
+                'successful' => [],
+                'failed' => [],
+                'total_processed' => 0,
+                'total_successful' => 0,
+                'total_failed' => 0
             ];
 
-            $result = $scheduleGenerationService->generateBulkPaymentSchedules($options);
+            foreach ($contractIds as $contractId) {
+                try {
+                    // Verificar si el contrato existe y obtenerlo con relaciones
+                    $contract = Contract::with(['reservation.client', 'reservation.lot'])->find($contractId);
+                    
+                    if (!$contract) {
+                        $results['failed'][] = [
+                            'contract_id' => $contractId,
+                            'contract_number' => 'N/A',
+                            'error' => 'Contrato no encontrado',
+                            'success' => false
+                        ];
+                        continue;
+                    }
+
+                    // Verificar si ya tiene cronograma
+                    $existingSchedules = PaymentSchedule::where('contract_id', $contractId)->count();
+                    if ($existingSchedules > 0) {
+                        $results['failed'][] = [
+                            'contract_id' => $contractId,
+                            'contract_number' => $contract->contract_number,
+                            'error' => 'El contrato ya tiene un cronograma de pagos generado',
+                            'success' => false
+                        ];
+                        continue;
+                    }
+
+                    // Generar cronograma usando SOLO los parámetros que no interfieren con templates
+                    // NO pasar frequency para que el template financiero determine la frecuencia
+                    $options = [
+                        'start_date' => $startDate,
+                        'notes' => $notes
+                    ];
+
+                    $result = $scheduleGenerationService->generateScheduleForContract($contract, $options);
+
+                    if ($result['success']) {
+                        // Obtener información del contrato generado
+                        $contractWithSchedules = Contract::with([
+                            'reservation.client',
+                            'reservation.lot.manzana',
+                            'paymentSchedules' => function($query) {
+                                $query->orderBy('due_date', 'asc');
+                            }
+                        ])->find($contractId);
+
+                        $results['successful'][] = [
+                            'contract_id' => $contractId,
+                            'contract_number' => $contract->contract_number,
+                            'client_name' => $contract->reservation->client->full_name ?? 'N/A',
+                            'lot_name' => ($contract->reservation->lot->manzana->name ?? 'N/A') . '-' . ($contract->reservation->lot->num_lot ?? 'N/A'),
+                            'total_schedules' => $contractWithSchedules->paymentSchedules->count(),
+                            'total_amount' => $contractWithSchedules->paymentSchedules->sum('amount'),
+                            'success' => true,
+                            'template_info' => [
+                                'payment_type' => $result['payment_type'] ?? 'N/A',
+                                'installments' => $result['installments'] ?? 0,
+                                'monthly_payment' => $result['monthly_payment'] ?? 0,
+                                'financing_amount' => $result['financing_amount'] ?? 0
+                            ]
+                        ];
+                    } else {
+                        $results['failed'][] = [
+                            'contract_id' => $contractId,
+                            'contract_number' => $contract->contract_number,
+                            'error' => $result['error'] ?? 'Error generando cronograma',
+                            'success' => false
+                        ];
+                    }
+
+                } catch (\Exception $e) {
+                    $results['failed'][] = [
+                        'contract_id' => $contractId,
+                        'contract_number' => 'N/A',
+                        'error' => 'Error procesando contrato: ' . $e->getMessage(),
+                        'success' => false
+                    ];
+                }
+
+                $results['total_processed']++;
+            }
+
+            $results['total_successful'] = count($results['successful']);
+            $results['total_failed'] = count($results['failed']);
+
+            // Crear estructura de respuesta compatible con el frontend
+            $responseData = [
+                'total_contracts' => $results['total_processed'],
+                'successful' => $results['total_successful'],
+                'failed' => $results['total_failed'],
+                'results' => array_merge($results['successful'], $results['failed'])
+            ];
+
+            $message = "Generación masiva completada: {$results['total_successful']} exitosos, {$results['total_failed']} fallidos de {$results['total_processed']} contratos procesados";
 
             return response()->json([
                 'success' => true,
-                'message' => $result['message'],
-                'data' => [
-                    'processed' => $result['processed'],
-                    'errors' => $result['errors'],
-                    'results' => $result['results']
-                ]
+                'message' => $message,
+                'data' => $responseData
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Datos de entrada inválidos',
+                'errors' => $e->errors(),
+                'data' => null
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -459,13 +569,29 @@ class CollectionsController extends Controller
                 $schedules = $contract->paymentSchedules;
                 $totalSchedules = $schedules->count();
                 $paidSchedules = $schedules->where('status', 'pagado')->count();
-                $pendingSchedules = $schedules->where('status', 'pendiente')->count();
-                $overdueSchedules = $schedules->where('status', 'vencido')->count();
+                
+                // Calcular cuotas vencidas dinámicamente
+                $overdueSchedules = $schedules->filter(function($schedule) {
+                    return $schedule->due_date < now() && $schedule->status != 'pagado';
+                })->count();
+                
+                // Calcular cuotas pendientes (no pagadas y no vencidas)
+                $pendingSchedules = $schedules->filter(function($schedule) {
+                    return $schedule->status != 'pagado' && $schedule->due_date >= now();
+                })->count();
                 
                 $totalAmount = $schedules->sum('amount');
                 $paidAmount = $schedules->where('status', 'pagado')->sum('amount');
-                $pendingAmount = $schedules->where('status', 'pendiente')->sum('amount');
-                $overdueAmount = $schedules->where('status', 'vencido')->sum('amount');
+                
+                // Calcular montos vencidos dinámicamente
+                $overdueAmount = $schedules->filter(function($schedule) {
+                    return $schedule->due_date < now() && $schedule->status != 'pagado';
+                })->sum('amount');
+                
+                // Calcular montos pendientes (no pagados y no vencidos)
+                $pendingAmount = $schedules->filter(function($schedule) {
+                    return $schedule->status != 'pagado' && $schedule->due_date >= now();
+                })->sum('amount');
                 
                 $paymentRate = $totalAmount > 0 ? ($paidAmount / $totalAmount) * 100 : 0;
                 
@@ -512,15 +638,27 @@ class CollectionsController extends Controller
                     'payment_rate' => round($paymentRate, 2),
                     'next_due_date' => $nextDueSchedule ? $nextDueSchedule->due_date : null,
                     'schedules' => $schedules->map(function($schedule) {
+                        // Determinar el estado real basado en la fecha de vencimiento
+                        $actualStatus = $schedule->status;
+                        $isOverdue = $schedule->due_date < now() && $schedule->status != 'pagado';
+                        $daysOverdue = 0;
+                        
+                        if ($isOverdue) {
+                            $actualStatus = 'vencido';
+                            // Calcular días exactos sin decimales
+                            $dueDate = \Carbon\Carbon::parse($schedule->due_date)->startOfDay();
+                            $currentDate = \Carbon\Carbon::now()->startOfDay();
+                            $daysOverdue = $currentDate->diffInDays($dueDate);
+                        }
+                        
                         return [
                             'schedule_id' => $schedule->schedule_id,
                             'installment_number' => $schedule->installment_number,
                             'due_date' => $schedule->due_date,
                             'amount' => $schedule->amount,
-                            'status' => $schedule->status,
-                            'is_overdue' => $schedule->due_date < now() && $schedule->status != 'pagado',
-                            'days_overdue' => $schedule->due_date < now() && $schedule->status != 'pagado' 
-                                ? now()->diffInDays($schedule->due_date) : 0
+                            'status' => $actualStatus,
+                            'is_overdue' => $isOverdue,
+                            'days_overdue' => $daysOverdue
                         ];
                     })->values()
                 ];

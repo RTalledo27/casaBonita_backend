@@ -15,7 +15,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
         ->middleware('permission:collections.schedules.create')
         ->name('collections.generate-schedule');
         
-    Route::post('/generate-bulk-schedules', [CollectionsController::class, 'generateBulkSchedules'])
+    Route::post('/contracts/generate-bulk-schedules', [CollectionsController::class, 'generateBulkSchedules'])
         ->middleware('permission:collections.schedules.create')
         ->name('collections.generate-bulk-schedules');
     

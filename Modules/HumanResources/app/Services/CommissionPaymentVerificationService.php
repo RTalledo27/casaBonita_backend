@@ -2,15 +2,14 @@
 
 namespace Modules\HumanResources\app\Services;
 
-use Modules\HumanResources\app\Models\Commission;
-use Modules\HumanResources\app\Models\CommissionPaymentVerification;
-use Modules\Contracts\app\Models\AccountReceivable;
-use Modules\Contracts\app\Models\CustomerPayment;
-use Modules\Contracts\app\Models\PaymentSchedule;
+use App\Models\CommissionPaymentVerification;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Exception;
 use Illuminate\Support\Facades\DB;
+use Modules\Collections\Models\AccountReceivable;
+use Modules\Collections\Models\CustomerPayment;
+use Modules\HumanResources\Models\Commission;
 
 class CommissionPaymentVerificationService
 {
