@@ -37,7 +37,7 @@ use Modules\HumanResources\Models\Incentive;
 use Modules\Sales\Models\Reservation;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Models\Payment;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Sales\Models\ContractApproval;
 
 // Accounting Models

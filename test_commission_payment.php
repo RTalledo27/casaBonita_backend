@@ -8,7 +8,7 @@ $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
 use Modules\HumanResources\Models\Commission;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Collections\Models\AccountReceivable;
 use Modules\HumanResources\app\Services\CommissionPaymentVerificationService;
 

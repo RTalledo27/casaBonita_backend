@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Modules\CRM\Models\Client;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Sales\Models\Contract;
 use Carbon\Carbon;
 

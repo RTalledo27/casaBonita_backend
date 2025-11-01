@@ -5,8 +5,10 @@ require_once 'vendor/autoload.php';
 $app = require_once 'bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+use Modules\Security\Models\User;
+
 // Get first user
-$user = App\Models\User::first();
+$user = User::first();
 
 if ($user) {
     $token = $user->createToken('test-pagination-token');

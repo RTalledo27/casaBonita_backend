@@ -37,6 +37,11 @@ class UserResource extends JsonResource
                 : null,
             'created_by'   => $this->created_by,
 
+            // Password management fields
+            'must_change_password' => $this->must_change_password ?? false,
+            'password_changed_at' => $this->password_changed_at,
+            'last_login_at' => $this->last_login_at,
+
             'roles'        => $this->roles->pluck('name')->toArray(),
             'permissions'    => $this->getAllPermissions()                              // Spatie permisos
                 ->pluck('name')

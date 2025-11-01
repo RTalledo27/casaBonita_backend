@@ -3,6 +3,8 @@
 namespace Modules\Security\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
+use App\Models\UserSession;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
@@ -53,6 +55,21 @@ class AuthController extends Controller
         // Actualizamos el último login
         $user->update(['last_login_at' => now()]);
 
+        // Registrar actividad de login
+        UserActivityLog::log(
+            $user->user_id,
+            UserActivityLog::ACTION_LOGIN,
+            'Sesión iniciada desde ' . $request->userAgent()
+        );
+
+        // Iniciar sesión automática de tracking
+        $session = UserSession::startSession(
+            $user->user_id,
+            UserSession::TYPE_AUTO,
+            $request->ip(),
+            $request->userAgent()
+        );
+
         // Generamos token
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -60,6 +77,10 @@ class AuthController extends Controller
             'token' => $token,
             'user'  => new UserResource($user),
             'must_change_password' => $user->must_change_password,
+            'session' => [
+                'session_id' => $session->session_id,
+                'started_at' => $session->started_at->toIso8601String(),
+            ],
         ], 200);
     }
 
@@ -69,6 +90,21 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
+        $user = $request->user();
+        
+        // Finalizar sesión activa de tracking
+        $activeSession = UserSession::getActiveSession($user->user_id);
+        if ($activeSession) {
+            $activeSession->endSession();
+        }
+        
+        // Registrar actividad de logout
+        UserActivityLog::log(
+            $user->user_id,
+            UserActivityLog::ACTION_LOGOUT,
+            'Sesión cerrada'
+        );
+        
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Sesión cerrada correctamente.']);

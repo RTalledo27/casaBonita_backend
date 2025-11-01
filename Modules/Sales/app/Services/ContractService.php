@@ -11,7 +11,7 @@ use Modules\Inventory\Models\Lot;
 use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Models\Reservation;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Sales\Repositories\ContractRepository;
 
 class ContractService

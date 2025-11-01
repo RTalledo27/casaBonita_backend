@@ -3,6 +3,7 @@
 namespace Modules\Inventory\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -63,6 +64,19 @@ class LotController extends Controller
             DB::beginTransaction();
 
             $lot = $this->repository->create($request->validated());
+
+            // Registrar actividad
+            $manzanaName = $lot->manzana->manzana_name ?? 'N/A';
+            UserActivityLog::log(
+                $request->user()->user_id,
+                UserActivityLog::ACTION_LOT_ASSIGNED,
+                "Lote #{$lot->lot_number} creado en manzana {$manzanaName}",
+                [
+                    'lot_id' => $lot->lot_id,
+                    'lot_number' => $lot->lot_number,
+                    'manzana_id' => $lot->manzana_id,
+                ]
+            );
 
             DB::commit();
 

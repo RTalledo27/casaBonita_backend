@@ -5,7 +5,7 @@ namespace Modules\Sales\Repositories;
 use Illuminate\Support\Facades\DB;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Models\ContractApproval;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 
 class ContractRepository
 {

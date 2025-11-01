@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 use Exception;
 use Carbon\Carbon;
 use Modules\Sales\Models\Contract;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Sales\Services\PaymentScheduleService;
 use Modules\Collections\Models\AccountReceivable;
 use Modules\Inventory\Models\LotFinancialTemplate;

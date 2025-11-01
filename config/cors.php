@@ -33,6 +33,11 @@ return [
         'Content-Type',
         'X-Requested-With',
         'X-CSRF-TOKEN',
+        'Cache-Control',
+        'Pragma',
+        'Expires',
+        'If-Modified-Since',
+        'If-None-Match',
     ],
 
     'exposed_headers' => [],

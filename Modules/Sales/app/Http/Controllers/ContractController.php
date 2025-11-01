@@ -3,6 +3,7 @@
 namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,17 @@ class ContractController extends Controller
             $approvers = $request->input('approvers', []);
             $contract = $this->repository->create($request->validated(), $approvers);
 
+            // Registrar actividad
+            UserActivityLog::log(
+                $request->user()->user_id,
+                UserActivityLog::ACTION_CONTRACT_CREATED,
+                "Contrato #{$contract->contract_id} creado",
+                [
+                    'contract_id' => $contract->contract_id,
+                    'client_name' => $contract->reservation->client_name ?? 'N/A',
+                ]
+            );
+
             DB::commit();
 
             // Notify listeners a new contract was created
@@ -92,6 +104,17 @@ class ContractController extends Controller
             DB::beginTransaction();
 
             $updatedContract = $this->repository->update($contract, $request->validated());
+
+            // Registrar actividad
+            UserActivityLog::log(
+                $request->user()->user_id,
+                UserActivityLog::ACTION_CONTRACT_UPDATED,
+                "Contrato #{$updatedContract->contract_id} actualizado",
+                [
+                    'contract_id' => $updatedContract->contract_id,
+                    'changes' => $request->validated(),
+                ]
+            );
 
             DB::commit();
             
@@ -267,7 +290,7 @@ class ContractController extends Controller
             }
             
             // Insert schedules in batches
-            \Modules\Sales\Models\PaymentSchedule::insert($schedules);
+            \Modules\Collections\Models\PaymentSchedule::insert($schedules);
             
             DB::commit();
             

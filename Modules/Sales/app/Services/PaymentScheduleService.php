@@ -7,7 +7,7 @@ use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Sales\Models\Contract;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Inventory\Models\ManzanaFinancingRule;
 

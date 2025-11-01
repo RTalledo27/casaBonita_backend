@@ -44,6 +44,7 @@ class User extends Authenticatable
         'last_login_at' => 'datetime',
         'hire_date' => 'date',
         'birth_date' => 'date',
+        'preferences' => 'array',
     ];
 
 
@@ -67,7 +68,8 @@ class User extends Authenticatable
         'must_change_password',
         'password_changed_at',
         'last_login_at',
-        'created_by'
+        'created_by',
+        'preferences'
     ];
 
 
@@ -108,6 +110,11 @@ class User extends Authenticatable
     public function auditLogs()
     {
         return $this->hasMany(\Modules\Audit\Models\AuditLog::class, 'user_id');
+    }
+
+    public function activityLogs()
+    {
+        return $this->hasMany(\App\Models\UserActivityLog::class, 'user_id', 'user_id');
     }
 
 

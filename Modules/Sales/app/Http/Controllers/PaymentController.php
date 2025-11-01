@@ -3,6 +3,7 @@
 namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,19 @@ class PaymentController extends Controller
         DB::beginTransaction();
         try {
             $payment = $this->payments->create($request->validated());
+            
+            // Registrar actividad
+            UserActivityLog::log(
+                $request->user()->user_id,
+                UserActivityLog::ACTION_PAYMENT_REGISTERED,
+                "Pago registrado por $" . number_format($payment->amount_paid, 2),
+                [
+                    'payment_id' => $payment->payment_id,
+                    'amount' => $payment->amount_paid,
+                    'schedule_id' => $payment->payment_schedule_id,
+                ]
+            );
+            
             DB::commit();
 
             $this->pusher->notify('payment-channel', 'created', [

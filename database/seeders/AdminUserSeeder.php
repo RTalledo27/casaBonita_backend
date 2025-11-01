@@ -213,7 +213,20 @@ class AdminUserSeeder extends Seeder
             'collections.collectors.view',
             'collections.view',
             'collections.create',
-            'collections.reports'
+            'collections.reports',
+
+            // MODULE REPORTS
+            'reports.access',
+            'reports.view', 
+            'reports.view_dashboard',
+            'reports.view_sales',
+            'reports.view_payments', 
+            'reports.view_projections',
+            'reports.export',
+            'reports.create',
+            'reports.edit',
+            'reports.delete',
+            'reports.admin'
         ];
 
         $createdCount = 0;

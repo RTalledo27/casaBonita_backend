@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Sales\Http\Requests\PaymentScheduleRequest;
 use Modules\Sales\Http\Requests\UpdatePaymentScheduleRequest;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Sales\Models\Payment;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Repositories\PaymentScheduleRepository;
@@ -25,8 +25,8 @@ class PaymentScheduleController extends Controller
         private PaymentScheduleService $scheduleService,
         private PusherNotifier $pusher
     ) {
-        $this->middleware('auth:sanctum');
-        $this->middleware('permission:sales.schedules.index')->only(['index', 'show']);
+        $this->middleware('auth:sanctum')->except(['getReport', 'generateReport']);
+        $this->middleware('permission:sales.schedules.index')->except(['getReport', 'generateReport']);
         $this->middleware('permission:sales.schedules.store')->only(['store', 'generateIntelligentSchedule']);
         $this->middleware('permission:sales.schedules.update')->only('update');
         $this->middleware('permission:sales.schedules.destroy')->only('destroy');
@@ -352,36 +352,117 @@ class PaymentScheduleController extends Controller
     public function getReport(Request $request)
     {
         try {
-            // Basic report implementation
-            return response()->json([
-                'message' => 'Reporte generado exitosamente',
-                'data' => []
+            // Validate request parameters
+            $request->validate([
+                'due_date_from' => 'sometimes|date',
+                'due_date_to' => 'sometimes|date|after_or_equal:due_date_from',
+                'status' => 'sometimes|string|in:pendiente,pagado,vencido,anulado',
+                'contract_id' => 'sometimes|integer|exists:contracts,contract_id'
             ]);
+
+            $query = PaymentSchedule::with(['contract.reservation.client', 'contract.reservation.lot']);
+
+            // Apply filters
+            if ($request->has('due_date_from')) {
+                $query->where('due_date', '>=', $request->input('due_date_from'));
+            }
+
+            if ($request->has('due_date_to')) {
+                $query->where('due_date', '<=', $request->input('due_date_to'));
+            }
+
+            if ($request->has('status')) {
+                $query->where('status', $request->input('status'));
+            }
+
+            if ($request->has('contract_id')) {
+                $query->where('contract_id', $request->input('contract_id'));
+            }
+
+            $schedules = $query->orderBy('due_date')->get();
+
+            // Calculate summary statistics
+            $summary = [
+                'total_schedules' => $schedules->count(),
+                'total_amount' => $schedules->sum('amount'),
+                'paid_amount' => $schedules->where('status', 'pagado')->sum('amount_paid'),
+                'pending_amount' => $schedules->where('status', 'pendiente')->sum('amount'),
+                'overdue_amount' => $schedules->where('status', 'vencido')->sum('amount'),
+                'by_status' => [
+                    'pendiente' => [
+                        'count' => $schedules->where('status', 'pendiente')->count(),
+                        'amount' => $schedules->where('status', 'pendiente')->sum('amount')
+                    ],
+                    'pagado' => [
+                        'count' => $schedules->where('status', 'pagado')->count(),
+                        'amount' => $schedules->where('status', 'pagado')->sum('amount_paid')
+                    ],
+                    'vencido' => [
+                        'count' => $schedules->where('status', 'vencido')->count(),
+                        'amount' => $schedules->where('status', 'vencido')->sum('amount')
+                    ],
+                    'anulado' => [
+                        'count' => $schedules->where('status', 'anulado')->count(),
+                        'amount' => $schedules->where('status', 'anulado')->sum('amount')
+                    ]
+                ],
+                'collection_rate' => $schedules->sum('amount') > 0 
+                    ? round(($schedules->where('status', 'pagado')->sum('amount_paid') / $schedules->sum('amount')) * 100, 2)
+                    : 0
+            ];
+
+            // Format schedules data
+            $schedulesData = $schedules->map(function($schedule) {
+                return [
+                    'schedule_id' => $schedule->schedule_id,
+                    'contract_id' => $schedule->contract_id,
+                    'installment_number' => $schedule->installment_number,
+                    'due_date' => $schedule->due_date,
+                    'amount' => $schedule->amount,
+                    'amount_paid' => $schedule->amount_paid,
+                    'status' => $schedule->status,
+                    'payment_date' => $schedule->payment_date,
+                    'payment_method' => $schedule->payment_method,
+                    'notes' => $schedule->notes,
+                    'client_name' => $schedule->contract?->reservation?->client?->full_name ?? 'N/A',
+                    'lot_number' => $schedule->contract?->reservation?->lot?->lot_number ?? 'N/A',
+                    'contract_number' => $schedule->contract?->contract_number ?? 'N/A',
+                    'days_overdue' => $schedule->status === 'vencido' && $schedule->due_date 
+                        ? now()->diffInDays($schedule->due_date) 
+                        : 0
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Reporte de cronogramas generado exitosamente',
+                'data' => [
+                    'summary' => $summary,
+                    'schedules' => $schedulesData,
+                    'filters' => [
+                        'due_date_from' => $request->input('due_date_from'),
+                        'due_date_to' => $request->input('due_date_to'),
+                        'status' => $request->input('status'),
+                        'contract_id' => $request->input('contract_id')
+                    ]
+                ]
+            ]);
+
         } catch (\Exception $e) {
             return response()->json([
-                'message' => 'Error al generar reporte',
+                'success' => false,
+                'message' => 'Error al generar reporte: ' . $e->getMessage(),
                 'error' => $e->getMessage()
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
     /**
-     * Generate payment schedule report
+     * Generate payment schedule report (alias for getReport)
      */
     public function generateReport(Request $request)
     {
-        try {
-            // Report generation implementation
-            return response()->json([
-                'message' => 'Reporte generado exitosamente',
-                'data' => []
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'message' => 'Error al generar reporte',
-                'error' => $e->getMessage()
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
+        return $this->getReport($request);
     }
 
     /**

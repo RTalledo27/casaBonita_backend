@@ -7,6 +7,7 @@
     "require": {
         "php": "^8.1",
         "laravel/framework": "^11.0",
+        "laravel/reverb": "^1.6",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.9",
         "nwidart/laravel-modules": "^11.0",
@@ -36,6 +37,7 @@
             "Modules\\Accounting\\": "Modules/Accounting/app/",
             "Modules\\Integrations\\": "Modules/Integrations/app/",
             "Modules\\ServiceDesk\\": "Modules/ServiceDesk/app/",
+            "Modules\\Reports\\": "Modules/Reports/app/",
             "Modules\\Audit\\": "Modules/Audit/app/",
             "Modules\\Finance\\": "Modules/Finance/app/",
             "Modules\\Collections\\": "Modules/Collections/app/",

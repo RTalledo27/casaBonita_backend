@@ -9,6 +9,7 @@ use Exception;
 use Illuminate\Support\Facades\DB;
 use Modules\Collections\Models\AccountReceivable;
 use Modules\Collections\Models\CustomerPayment;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\HumanResources\Models\Commission;
 
 class CommissionPaymentVerificationService
@@ -78,7 +79,7 @@ class CommissionPaymentVerificationService
             ]);
 
             // Detectar si el contrato tiene cronograma de pagos (PaymentSchedule)
-            $hasPaymentSchedule = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)->exists();
+            $hasPaymentSchedule = PaymentSchedule::where('contract_id', $commission->contract_id)->exists();
             
             Log::info('DEBUG: Consultando cuentas por cobrar', [
                 'contract_id' => $commission->contract_id,
@@ -179,7 +180,7 @@ class CommissionPaymentVerificationService
                         'campos_filtro' => ['contract_id' => $commission->contract_id]
                     ]);
                     
-                    $firstSchedule = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
+                    $firstSchedule = \Modules\Collections\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
                         ->orderBy('installment_number', 'asc')
                         ->first();
                     
@@ -249,7 +250,7 @@ class CommissionPaymentVerificationService
                     ]);
                     
                     // Buscar la segunda cuota del cronograma
-                    $secondSchedule = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
+                    $secondSchedule = \Modules\Collections\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
                         ->orderBy('installment_number', 'asc')
                         ->skip(1)
                         ->first();
@@ -285,7 +286,7 @@ class CommissionPaymentVerificationService
                 }
             } else {
                 // Para comisiones no divididas con cronograma, verificar las primeras dos cuotas
-                $schedules = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
+                $schedules = \Modules\Collections\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
                     ->orderBy('installment_number', 'asc')
                     ->take(2)
                     ->get();

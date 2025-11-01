@@ -3,7 +3,7 @@
 namespace Modules\Sales\Repositories;
 
 use Illuminate\Pagination\LengthAwarePaginator;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 
 class PaymentScheduleRepository
 {

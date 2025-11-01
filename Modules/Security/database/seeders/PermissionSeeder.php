@@ -199,6 +199,15 @@ class PermissionSeeder extends Seeder
             'collections.create',                        // Crear cronogramas de pago
             'collections.reports',                       // Ver reportes de Collections
 
+            // MODULE REPORTS
+            'reports.access',                            // Acceso general al módulo Reports
+            'reports.view',                              // Ver reportes
+            'reports.view_dashboard',                    // Ver dashboard de reportes
+            'reports.view_sales',                        // Ver reportes de ventas
+            'reports.view_payments',                     // Ver cronogramas de pagos
+            'reports.view_projections',                  // Ver reportes proyectados
+            'reports.export',                            // Exportar reportes
+
         ];
 
         foreach ($permissions as $perm) {

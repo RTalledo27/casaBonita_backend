@@ -17,13 +17,15 @@ class TestClientSeeder extends Seeder
         $existingClients = Client::count();
         
         if ($existingClients === 0) {
-            // Crear algunos clientes de prueba
+            // Crear algunos clientes de prueba usando los campos correctos del modelo
             Client::create([
                 'first_name' => 'Maria',
                 'last_name' => 'González',
                 'email' => 'maria.gonzalez@example.com',
-                'phone' => '123456789',
-                'address' => 'Calle Principal 123',
+                'primary_phone' => '123456789',
+                'doc_type' => 'DNI',
+                'doc_number' => '12345678',
+                'type' => 'client',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -32,8 +34,10 @@ class TestClientSeeder extends Seeder
                 'first_name' => 'Mario',
                 'last_name' => 'López',
                 'email' => 'mario.lopez@example.com',
-                'phone' => '987654321',
-                'address' => 'Avenida Central 456',
+                'primary_phone' => '987654321',
+                'doc_type' => 'DNI',
+                'doc_number' => '87654321',
+                'type' => 'client',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -42,8 +46,10 @@ class TestClientSeeder extends Seeder
                 'first_name' => 'Ana',
                 'last_name' => 'Martínez',
                 'email' => 'ana.martinez@example.com',
-                'phone' => '555666777',
-                'address' => 'Plaza Mayor 789',
+                'primary_phone' => '555666777',
+                'doc_type' => 'DNI',
+                'doc_number' => '55566677',
+                'type' => 'client',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -52,8 +58,10 @@ class TestClientSeeder extends Seeder
                 'first_name' => 'Carlos',
                 'last_name' => 'Rodríguez',
                 'email' => 'carlos.rodriguez@example.com',
-                'phone' => '111222333',
-                'address' => 'Barrio Norte 321',
+                'primary_phone' => '111222333',
+                'doc_type' => 'DNI',
+                'doc_number' => '11122233',
+                'type' => 'client',
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

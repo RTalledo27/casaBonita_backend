@@ -1,0 +1,25 @@
+{
+  "debug": true,
+  "port": 6001,
+  "metrics": {
+    "enabled": true,
+    "port": 9601
+  },
+  "appManager": {
+    "array": {
+      "apps": [
+        {
+          "id": "casa-bonita-app",
+          "key": "casa-bonita-key",
+          "secret": "casa-bonita-secret",
+          "maxConnections": 100,
+          "enableClientMessages": true,
+          "enabled": true,
+          "maxBackendEventsPerSecond": 100,
+          "maxClientEventsPerSecond": 100,
+          "maxReadRequestsPerSecond": 100
+        }
+      ]
+    }
+  }
+}

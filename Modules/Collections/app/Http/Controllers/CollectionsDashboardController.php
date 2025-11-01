@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Modules\Sales\Models\Contract;
 use Modules\Collections\Services\PaymentScheduleGenerationService;
-use Modules\Sales\Models\PaymentSchedule;
+use Modules\Collections\Models\PaymentSchedule;
 use Modules\Collections\Models\AccountReceivable;
 use Modules\Collections\Models\CustomerPayment;
 
@@ -339,6 +339,61 @@ class CollectionsDashboardController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error obteniendo resumen de cobranzas: ' . $e->getMessage(),
+                'data' => null
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtiene tendencias de cobranza por período
+     */
+    public function getTrends(Request $request): JsonResponse
+    {
+        try {
+            $period = $request->input('period', 'monthly');
+            $months = $request->input('months', 12);
+            
+            $trends = [];
+            $currentDate = Carbon::now();
+            
+            for ($i = $months - 1; $i >= 0; $i--) {
+                $date = $currentDate->copy()->subMonths($i);
+                $startOfMonth = $date->startOfMonth()->format('Y-m-d');
+                $endOfMonth = $date->endOfMonth()->format('Y-m-d');
+                
+                $totalAmount = PaymentSchedule::whereBetween('due_date', [$startOfMonth, $endOfMonth])
+                    ->sum('amount');
+                    
+                $paidAmount = PaymentSchedule::whereBetween('due_date', [$startOfMonth, $endOfMonth])
+                    ->where('status', 'pagado')
+                    ->sum('amount');
+                    
+                $overdueAmount = PaymentSchedule::where('due_date', '<', $endOfMonth)
+                    ->where('status', 'pendiente')
+                    ->sum('amount');
+                    
+                $scheduleCount = PaymentSchedule::whereBetween('due_date', [$startOfMonth, $endOfMonth])
+                    ->count();
+                
+                $trends[] = [
+                    'month' => $date->format('M Y'),
+                    'totalAmount' => $totalAmount,
+                    'paidAmount' => $paidAmount,
+                    'overdueAmount' => $overdueAmount,
+                    'scheduleCount' => $scheduleCount
+                ];
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Tendencias obtenidas exitosamente',
+                'data' => $trends
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error obteniendo tendencias: ' . $e->getMessage(),
                 'data' => null
             ], 500);
         }

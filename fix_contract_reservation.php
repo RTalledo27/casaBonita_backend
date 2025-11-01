@@ -44,7 +44,7 @@ if ($updated) {
     
     // Test PaymentScheduleResource
     echo "\n=== TESTING PAYMENT SCHEDULE RESOURCE ===\n";
-    $schedule = \Modules\Sales\Models\PaymentSchedule::with([
+    $schedule = \Modules\Collections\Models\PaymentSchedule::with([
         'contract.reservation.client', 
         'contract.reservation.lot'
     ])->first();

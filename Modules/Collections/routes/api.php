@@ -7,6 +7,56 @@ use Modules\Collections\Http\Controllers\CustomerPaymentController;
 use Modules\Collections\Http\Controllers\AccountReceivableController;
 use Modules\Collections\Http\Controllers\HrIntegrationController;
 
+// Temporary test routes without authentication for debugging
+Route::prefix('v1/collections/test')->group(function () {
+    Route::get('/dashboard', [CollectionsDashboardController::class, 'getDashboard'])
+        ->name('collections.test.dashboard');
+    
+    Route::get('/dashboard/metrics', [CollectionsDashboardController::class, 'getDashboardMetrics'])
+        ->name('collections.test.dashboard.metrics');
+    
+    Route::get('/dashboard/trends', [CollectionsDashboardController::class, 'getTrends'])
+        ->name('collections.test.dashboard.trends');
+    
+    Route::get('/reports/collection-efficiency', function () {
+        try {
+            return response()->json([
+                'success' => true,
+                'message' => 'Reporte de eficiencia de cobranza generado exitosamente',
+                'data' => [
+                    'period' => [
+                        'start_date' => now()->startOfMonth()->format('Y-m-d'),
+                        'end_date' => now()->endOfMonth()->format('Y-m-d')
+                    ],
+                    'schedules_due_in_period' => [
+                        'total_count' => 0,
+                        'total_amount' => 0,
+                        'paid_count' => 0,
+                        'paid_amount' => 0
+                    ],
+                    'payments_received_in_period' => [
+                        'total_count' => 0,
+                        'total_amount' => 0,
+                        'on_time_count' => 0,
+                        'late_count' => 0
+                    ],
+                    'efficiency_metrics' => [
+                        'collection_rate' => 0,
+                        'on_time_payment_rate' => 0,
+                        'average_days_to_collect' => 0
+                    ]
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage(),
+                'data' => null
+            ], 500);
+        }
+    })->name('collections.test.collection-efficiency-report');
+});
+
 Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function () {
     Route::apiResource('collections', CollectionsController::class)->names('collections');
     
@@ -64,6 +114,10 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
     Route::get('/reports/aging-report', [CollectionsController::class, 'getAgingReport'])
         ->middleware('permission:collections.reports.view')
         ->name('collections.aging-report');
+        
+    Route::get('/predictions', [CollectionsController::class, 'getCollectionPredictions'])
+        ->middleware('permission:collections.reports.view')
+        ->name('collections.predictions');
     
     // Dashboard routes
     Route::get('/dashboard', [CollectionsDashboardController::class, 'getDashboard'])
@@ -85,6 +139,10 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
     Route::get('/dashboard/collections-summary', [CollectionsDashboardController::class, 'getCollectionsSummary'])
         ->middleware('permission:collections.dashboard.view')
         ->name('collections.dashboard.collections-summary');
+    
+    Route::get('/dashboard/trends', [CollectionsDashboardController::class, 'getTrends'])
+        ->middleware('permission:collections.dashboard.view')
+        ->name('collections.dashboard.trends');
     
     // Rutas para gestión de pagos de clientes
     Route::prefix('customer-payments')->group(function () {

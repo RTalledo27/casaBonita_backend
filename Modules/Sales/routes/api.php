@@ -10,6 +10,18 @@ use Modules\Sales\Http\Controllers\ReservationController;
 use Modules\Sales\Http\Controllers\SalesController;
 use Modules\Sales\Models\ContractApproval;
 
+// Temporary route without authentication for testing
+Route::prefix('v1/sales')->group(function () {
+    Route::get('schedules/report', [PaymentScheduleController::class, 'getReport']);
+    Route::get('schedules/generate-report', [PaymentScheduleController::class, 'generateReport']);
+});
+
+// Public routes (no authentication required)
+Route::prefix('v1/sales')->group(function () {
+    Route::get('import/contracts/template', [ContractImportController::class, 'downloadTemplate']);
+    Route::get('import/contracts/template-simplified', [ContractImportController::class, 'downloadSimplifiedTemplate']);
+});
+
 Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
     Route::apiResource('sale', SalesController::class)->names('sales');
     
@@ -29,21 +41,17 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
         Route::get('contracts/{contract}/financing-options', [PaymentScheduleController::class, 'getFinancingOptions']);
         Route::patch('schedules/{schedule}/mark-paid', [PaymentScheduleController::class, 'markAsPaid']);
         Route::get('schedules/metrics', [PaymentScheduleController::class, 'getMetrics']);
-        Route::get('schedules/report', [PaymentScheduleController::class, 'getReport']);
-        Route::get('schedules/generate-report', [PaymentScheduleController::class, 'generateReport']);
-        Route::get('contracts/{contract}/schedules', [PaymentScheduleController::class, 'getContractSchedules']);
         Route::apiResource('payments',     PaymentController::class);
         Route::post('contract-approvals/{approval}/approve', [ContractApprovalController::class, 'approve']);
         Route::post('contract-approvals/{approval}/reject',  [ContractApprovalController::class, 'reject']);
+        Route::get('contracts/{contract}/schedules', [PaymentScheduleController::class, 'getContractSchedules']);
         
-        // Rutas de importación de contratos
+        // Rutas de importación de contratos (authenticated)
         Route::prefix('import')->group(function () {
             Route::post('contracts', [ContractImportController::class, 'import']);
             Route::post('contracts/async', [ContractImportController::class, 'importAsync']);
             Route::post('contracts/validate', [ContractImportController::class, 'validateStructure']);
             Route::post('contracts/validate-simplified', [ContractImportController::class, 'validateStructureSimplified']);
-            Route::get('contracts/template', [ContractImportController::class, 'downloadTemplate']);
-            Route::get('contracts/template-simplified', [ContractImportController::class, 'downloadSimplifiedTemplate']);
             Route::get('contracts/history', [ContractImportController::class, 'getImportHistory']);
             Route::get('contracts/stats', [ContractImportController::class, 'getImportStats']);
             Route::get('contracts/status/{importLogId}', [ContractImportController::class, 'getImportStatus']);

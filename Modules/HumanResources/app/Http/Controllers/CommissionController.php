@@ -4,6 +4,7 @@ namespace Modules\HumanResources\app\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\CommissionPaymentVerification;
+use App\Models\UserActivityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -92,6 +93,18 @@ class CommissionController extends Controller
             $commissions = $this->commissionService->processCommissionsForPeriod(
                 $request->month,
                 $request->year
+            );
+
+            // Registrar actividad
+            UserActivityLog::log(
+                $request->user()->user_id,
+                UserActivityLog::ACTION_COMMISSION_CALCULATED,
+                "Comisiones calculadas para {$request->month}/{$request->year}",
+                [
+                    'month' => $request->month,
+                    'year' => $request->year,
+                    'count' => count($commissions),
+                ]
             );
 
             return response()->json([
@@ -1007,7 +1020,7 @@ class CommissionController extends Controller
             ];
             
             // 2. CONSULTA: Verificar si hay cronograma de pagos
-            $hasPaymentSchedule = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)->exists();
+            $hasPaymentSchedule = \Modules\Collections\Models\PaymentSchedule::where('contract_id', $commission->contract_id)->exists();
             $debugInfo['database_queries']['payment_schedules_check'] = [
                 'query' => 'SELECT EXISTS(SELECT 1 FROM payment_schedules WHERE contract_id = ' . $commission->contract_id . ')',
                 'result' => $hasPaymentSchedule,
@@ -1138,7 +1151,7 @@ class CommissionController extends Controller
     private function simulateVerificationWithSchedule($commission, &$debugInfo)
     {
         // Consultar cronograma de pagos
-        $paymentSchedules = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
+        $paymentSchedules = \Modules\Collections\Models\PaymentSchedule::where('contract_id', $commission->contract_id)
             ->orderBy('installment_number', 'asc')
             ->get();
         
