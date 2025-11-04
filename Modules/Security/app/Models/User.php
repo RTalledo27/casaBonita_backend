@@ -47,6 +47,30 @@ class User extends Authenticatable
         'preferences' => 'array',
     ];
 
+    /**
+     * Get the password attribute (alias for password_hash)
+     */
+    public function getPasswordAttribute()
+    {
+        return $this->attributes['password_hash'] ?? null;
+    }
+
+    /**
+     * Set the password attribute (saves to password_hash)
+     */
+    public function setPasswordAttribute($value)
+    {
+        $this->attributes['password_hash'] = $value;
+    }
+
+    /**
+     * Get the password for authentication
+     */
+    public function getAuthPassword()
+    {
+        return $this->password_hash;
+    }
+
 
     protected $fillable = [
         'username',

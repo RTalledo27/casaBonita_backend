@@ -208,6 +208,37 @@ class PermissionSeeder extends Seeder
             'reports.view_projections',                  // Ver reportes proyectados
             'reports.export',                            // Exportar reportes
 
+            // MODULE SERVICE DESK
+            'service-desk.access',                       // Acceso general al módulo Service Desk
+
+            // MODULE FINANCE
+            'finance.access',                            // Acceso general al módulo Finance
+            'finance.budgets.view',                      // Ver presupuestos
+            'finance.budgets.store',                     // Crear presupuestos
+            'finance.budgets.update',                    // Actualizar presupuestos
+            'finance.budgets.delete',                    // Eliminar presupuestos
+            'finance.cash-flows.view',                   // Ver flujos de caja
+            'finance.cash-flows.store',                  // Crear flujos de caja
+            'finance.cash-flows.update',                 // Actualizar flujos de caja
+            'finance.cash-flows.delete',                 // Eliminar flujos de caja
+            'finance.cost-centers.view',                 // Ver centros de costo
+            'finance.cost-centers.store',                // Crear centros de costo
+            'finance.cost-centers.update',               // Actualizar centros de costo
+            'finance.cost-centers.delete',               // Eliminar centros de costo
+
+            // MODULE ACCOUNTING
+            'accounting.access',                         // Acceso general al módulo Accounting
+            'accounting.view',                           // Ver contabilidad
+            'accounting.store',                          // Crear registros contables
+            'accounting.update',                         // Actualizar registros contables
+            'accounting.delete',                         // Eliminar registros contables
+
+            // MODULE AUDIT
+            'audit.access',                              // Acceso general al módulo Audit
+            'audit.view',                                // Ver auditorías
+            'audit.logs.view',                           // Ver logs de auditoría
+            'audit.reports.view',                        // Ver reportes de auditoría
+
         ];
 
         foreach ($permissions as $perm) {

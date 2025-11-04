@@ -78,6 +78,7 @@ class UserRepository
             'photo_profile' => $data['photo_profile'] ?? null,
             'cv_file'       => $data['cv_file']       ?? null,
             'password_hash' => bcrypt($data['password']),
+            'must_change_password' => true, // Forzar cambio de contraseña en primer login
             'created_by'    => $data['created_by'],
         ]);
 

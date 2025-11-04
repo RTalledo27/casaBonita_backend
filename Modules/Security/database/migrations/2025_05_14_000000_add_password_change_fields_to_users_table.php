@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->boolean('must_change_password')->default(false)->after('password_hash');
+            $table->boolean('must_change_password')->default(true)->after('password_hash');
             $table->timestamp('password_changed_at')->nullable()->after('must_change_password');
             $table->timestamp('last_login_at')->nullable()->after('password_changed_at');
         });

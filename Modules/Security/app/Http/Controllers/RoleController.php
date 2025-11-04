@@ -77,10 +77,19 @@ class RoleController extends Controller
         $role = Role::create(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
 
+        // Limpiar el caché de permisos después de crear
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
         //pusher:
         $pusher = $this->pusherInstance();
+        // Solo enviar información mínima para evitar exceder el límite de Pusher (10KB)
         $pusher->trigger('role-channel', 'created', [
-            'role' => (new RoleResource($role->load('permissions')))->toArray($request)
+            'role' => [
+                'role_id' => $role->role_id,
+                'name' => $role->name,
+                'permissions_count' => $role->permissions()->count(),
+                'created_at' => $role->created_at
+            ]
         ]);
 
         return response()->json([
@@ -129,9 +138,18 @@ class RoleController extends Controller
         $role->update(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
 
+        // Limpiar el caché de permisos después de actualizar
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
         $pusher = $this->pusherInstance();
+        // Solo enviar información mínima para evitar exceder el límite de Pusher (10KB)
         $pusher->trigger('role-channel', 'updated', [
-            'role' => (new RoleResource($role->load('permissions')))->toArray($request)
+            'role' => [
+                'role_id' => $role->role_id,
+                'name' => $role->name,
+                'permissions_count' => $role->permissions()->count(),
+                'updated_at' => $role->updated_at
+            ]
         ]);
         
 
@@ -164,6 +182,9 @@ class RoleController extends Controller
         ]);
 
         $role->syncPermissions($request->permissions);
+
+        // Limpiar el caché de permisos después de sincronizar
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         return response()->json([
             'message' => 'Permisos asignados correctamente',

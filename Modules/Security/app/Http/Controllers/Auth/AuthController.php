@@ -122,7 +122,11 @@ class AuthController extends Controller
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        $user->load('roles', 'permissions');
+        // Limpiar el caché de permisos de Spatie para obtener los más actuales
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        
+        // Recargar las relaciones frescas desde la base de datos
+        $user->load(['roles.permissions', 'permissions']);
         
         return response()->json([
             'user' => $user,
@@ -138,7 +142,21 @@ class AuthController extends Controller
     {
         $request->validate([
             'current_password' => 'required|string',
-            'new_password' => 'required|string|min:8|confirmed',
+            'new_password' => [
+                'required',
+                'string',
+                'confirmed',
+                \Illuminate\Validation\Rules\Password::min(8)
+                    ->mixedCase()
+                    ->numbers()
+                    ->symbols()
+            ],
+        ], [
+            'new_password.min' => 'La contraseña debe tener al menos 8 caracteres.',
+            'new_password.mixed_case' => 'La contraseña debe contener mayúsculas y minúsculas.',
+            'new_password.numbers' => 'La contraseña debe contener al menos un número.',
+            'new_password.symbols' => 'La contraseña debe contener al menos un símbolo especial.',
+            'new_password.confirmed' => 'Las contraseñas no coinciden.',
         ]);
 
         $user = $request->user();

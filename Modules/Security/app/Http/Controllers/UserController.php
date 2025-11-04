@@ -118,6 +118,8 @@ class UserController extends Controller
 
             if ($request->has('roles')) {
                 $user->syncRoles($request->input('roles'));
+                // Limpiar el caché de permisos después de asignar roles
+                app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
             }
 
             $data['created_by'] = $request->user()->user_id;
@@ -188,6 +190,8 @@ class UserController extends Controller
             
             if ($request->has('roles')) {
                 $user->syncRoles($request->input('roles'));
+                // Limpiar el caché de permisos después de actualizar roles
+                app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
             }
 
             DB::commit();
@@ -263,11 +267,27 @@ class UserController extends Controller
     public function changePassword(Request $request, User $user)
     {
         $request->validate([
-            'password' => 'required|string|min:6|confirmed',
+            'password' => [
+                'required',
+                'string',
+                'confirmed',
+                \Illuminate\Validation\Rules\Password::min(8)
+                    ->mixedCase()
+                    ->numbers()
+                    ->symbols()
+            ],
+        ], [
+            'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
+            'password.mixed_case' => 'La contraseña debe contener mayúsculas y minúsculas.',
+            'password.numbers' => 'La contraseña debe contener al menos un número.',
+            'password.symbols' => 'La contraseña debe contener al menos un símbolo especial.',
+            'password.confirmed' => 'Las contraseñas no coinciden.',
         ]);
 
         $user->update([
-            'password' => bcrypt($request->password),
+            'password_hash' => bcrypt($request->password),
+            'must_change_password' => false, // Ya cambió la contraseña
+            'password_changed_at' => now(),
         ]);
 
         return response()->json([
