@@ -742,6 +742,14 @@ class CommissionService
             return $performer->employee_id === $employeeId;
         });
 
+        // Calcular meta dinámica basada en el historial del asesor (cantidad de contratos)
+        $dynamicGoal = $this->calculateDynamicGoal($employeeId, $month, $year);
+        $totalSales = $monthlySales->sum('total_price');
+        $salesCount = $monthlySales->count();
+        
+        // El ranking solo aplica para asesores de ventas
+        $isEligibleForRanking = $employee->isSalesAdvisor();
+        
         return [
             'employee' => $employee,
             'period' => [
@@ -750,11 +758,11 @@ class CommissionService
                 'label' => $this->getMonthLabel($month) . ' ' . $year
             ],
             'sales_summary' => [
-                'count' => $monthlySales->count(),
-                'total_amount' => $monthlySales->sum('total_price'),
-                'goal' => $employee->individual_goal ?? 0,
-                'achievement_percentage' => $employee->individual_goal > 0 
-                    ? round(($monthlySales->sum('total_price') / $employee->individual_goal) * 100, 2)
+                'count' => $salesCount,
+                'total_amount' => $totalSales,
+                'goal' => $dynamicGoal, // Meta en cantidad de contratos
+                'achievement_percentage' => $dynamicGoal > 0 
+                    ? round(($salesCount / $dynamicGoal) * 100, 2)
                     : 0
             ],
             'earnings_summary' => [
@@ -766,8 +774,9 @@ class CommissionService
                     $monthlyBonuses
             ],
             'performance' => [
-                'ranking' => $ranking !== false ? $ranking + 1 : null,
-                'total_advisors' => $topPerformers->count()
+                'ranking' => $isEligibleForRanking && $ranking !== false ? $ranking + 1 : null,
+                'total_advisors' => $topPerformers->count(),
+                'is_eligible_for_ranking' => $isEligibleForRanking
             ],
             'recent_contracts' => $monthlySales->take(5)->map(function ($contract) {
                 $clientName = 'Cliente no disponible';
@@ -993,6 +1002,79 @@ class CommissionService
         ];
         
         return $months[$month] ?? 'Mes desconocido';
+    }
+
+    /**
+     * Calcula una meta dinámica para el asesor basada en su historial de ventas
+     * 
+     * IMPORTANTE: La meta es en CANTIDAD DE CONTRATOS, no en monto total
+     * 
+     * Estrategia:
+     * 1. Si tiene individual_goal definido, usa ese valor (cantidad de contratos)
+     * 2. Si no, calcula el promedio de CANTIDAD de contratos de los últimos 3 meses
+     * 3. Si es nuevo (sin historial), usa una meta base de 10 contratos
+     */
+    private function calculateDynamicGoal(int $employeeId, int $currentMonth, int $currentYear): float
+    {
+        $employee = $this->employeeRepo->findById($employeeId);
+        
+        // 1. Si el empleado tiene una meta individual definida, usarla
+        if ($employee && $employee->individual_goal > 0) {
+            return (float) $employee->individual_goal;
+        }
+
+        // 2. Calcular promedio de CANTIDAD de contratos de los últimos 3 meses (excluyendo el mes actual)
+        $historicalContractsCount = Contract::whereHas('reservation', function ($query) use ($employeeId, $currentMonth, $currentYear) {
+                $query->where('advisor_id', $employeeId)
+                    ->where(function ($q) use ($currentMonth, $currentYear) {
+                        // Últimos 3 meses antes del mes actual
+                        $q->where(function ($sq) use ($currentMonth, $currentYear) {
+                            // Mes anterior
+                            $prevMonth = $currentMonth - 1;
+                            $prevYear = $currentYear;
+                            if ($prevMonth <= 0) {
+                                $prevMonth = 12;
+                                $prevYear--;
+                            }
+                            $sq->whereMonth('reservation_date', $prevMonth)
+                               ->whereYear('reservation_date', $prevYear);
+                        })
+                        ->orWhere(function ($sq) use ($currentMonth, $currentYear) {
+                            // Hace 2 meses
+                            $prev2Month = $currentMonth - 2;
+                            $prev2Year = $currentYear;
+                            if ($prev2Month <= 0) {
+                                $prev2Month = 12 + $prev2Month;
+                                $prev2Year--;
+                            }
+                            $sq->whereMonth('reservation_date', $prev2Month)
+                               ->whereYear('reservation_date', $prev2Year);
+                        })
+                        ->orWhere(function ($sq) use ($currentMonth, $currentYear) {
+                            // Hace 3 meses
+                            $prev3Month = $currentMonth - 3;
+                            $prev3Year = $currentYear;
+                            if ($prev3Month <= 0) {
+                                $prev3Month = 12 + $prev3Month;
+                                $prev3Year--;
+                            }
+                            $sq->whereMonth('reservation_date', $prev3Month)
+                               ->whereYear('reservation_date', $prev3Year);
+                        });
+                    });
+            })
+            ->where('status', 'vigente')
+            ->count(); // Contamos contratos, no sumamos montos
+
+        // Si tiene historial, promedio + 10% de incremento como meta
+        if ($historicalContractsCount > 0) {
+            $averageMonthlyContracts = $historicalContractsCount / 3;
+            // Meta = promedio + 10% de incremento para motivar crecimiento
+            return round($averageMonthlyContracts * 1.10, 0); // Redondeamos a entero (contratos completos)
+        }
+
+        // 3. Si es nuevo (sin historial), meta base de 10 contratos para asesores nuevos
+        return 10;
     }
 
 }
