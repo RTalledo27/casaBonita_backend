@@ -23,8 +23,20 @@ class Lot extends Model
         'area_construction_m2',
         'total_price',  // Mantener precio base
         'currency',
-        'status'
-        // Campos financieros removidos: funding, BPP, BFH, initial_quota
+        'status',
+        // Campos de sincronización con API externa (LOGICWARE)
+        'external_id',
+        'external_code',
+        'external_sync_at',
+        'external_data'
+    ];
+
+    /**
+     * The attributes that should be cast.
+     */
+    protected $casts = [
+        'external_sync_at' => 'datetime',
+        'external_data' => 'array'
     ];
 
     // protected static function newFactory(): LotFactory

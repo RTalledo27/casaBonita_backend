@@ -46,40 +46,48 @@ class BonusService
     /**
      * Procesar bonos automáticos para un período
      */
-    public function processAllAutomaticBonuses(int $month, int $year): array
+    public function processAllAutomaticBonuses(int $month, int $year, array $options = []): array
     {
         $allBonuses = [];
+        $employeeId = $options['employee_id'] ?? null;
+        $bonusTypeFilter = $options['bonus_type'] ?? null;
+        $dryRun = $options['dry_run'] ?? false;
 
         // Obtener tipos de bonos automáticos activos
         $automaticBonusTypes = BonusType::active()->automatic()->get();
 
         foreach ($automaticBonusTypes as $bonusType) {
+            // Filtrar por tipo si se especifica
+            if ($bonusTypeFilter && $bonusType->type_code !== $bonusTypeFilter) {
+                continue;
+            }
+
             switch ($bonusType->type_code) {
                 case 'INDIVIDUAL_GOAL':
-                    $bonuses = $this->processIndividualGoalBonuses($month, $year);
+                    $bonuses = $this->processIndividualGoalBonuses($month, $year, $employeeId, $dryRun);
                     $allBonuses['individual'] = $bonuses;
                     break;
 
                 case 'TEAM_GOAL':
-                    $bonuses = $this->processTeamGoalBonuses($month, $year);
+                    $bonuses = $this->processTeamGoalBonuses($month, $year, $employeeId, $dryRun);
                     $allBonuses['team'] = $bonuses;
                     break;
 
                 case 'QUARTERLY':
                     if (in_array($month, [3, 6, 9, 12])) {
                         $quarter = ceil($month / 3);
-                        $bonuses = $this->processQuarterlyBonuses($quarter, $year);
+                        $bonuses = $this->processQuarterlyBonuses($quarter, $year, $employeeId, $dryRun);
                         $allBonuses['quarterly'] = $bonuses;
                     }
                     break;
 
                 case 'BIWEEKLY':
-                    $bonuses = $this->processBiweeklyBonuses($month, $year);
+                    $bonuses = $this->processBiweeklyBonuses($month, $year, $employeeId, $dryRun);
                     $allBonuses['biweekly'] = $bonuses;
                     break;
 
                 case 'COLLECTION':
-                    $bonuses = $this->processCollectionBonuses($month, $year);
+                    $bonuses = $this->processCollectionBonuses($month, $year, $employeeId, $dryRun);
                     $allBonuses['collection'] = $bonuses;
                     break;
             }

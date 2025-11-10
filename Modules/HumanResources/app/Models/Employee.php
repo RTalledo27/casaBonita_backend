@@ -119,6 +119,14 @@ class Employee extends Model
         return in_array($this->employee_type, ['asesor_inmobiliario', 'vendedor']);
     }
 
+    /**
+     * Verifica si el empleado es un asesor de ventas (elegible para ranking)
+     */
+    public function isSalesAdvisor(): bool
+    {
+        return in_array($this->employee_type, ['asesor_inmobiliario', 'vendedor']);
+    }
+
     // --- SCOPES ---
     public function scopeActive($query)
     {

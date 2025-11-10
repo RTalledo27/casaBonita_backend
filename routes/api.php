@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\UserSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\LogicwareLotImportController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -101,4 +102,20 @@ Route::middleware(['auth:sanctum', 'permission:reports.access'])->prefix('report
         Route::get('/kpis', [ProjectionsController::class, 'kpis']);
         Route::get('/trends', [ProjectionsController::class, 'trends']);
     });
+});
+
+// LogicWare Integration API Routes
+Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
+    // Stages (Etapas)
+    Route::get('/stages', [LogicwareLotImportController::class, 'getStages']);
+    
+    // Stock por Stage
+    Route::get('/stages/{stageId}/preview', [LogicwareLotImportController::class, 'previewStageStock']);
+    Route::post('/stages/{stageId}/import', [LogicwareLotImportController::class, 'importStage'])
+        ->middleware('permission:inventory.lots.store'); // Solo usuarios con permiso de crear lotes
+    
+    // Utilidades
+    Route::get('/connection-stats', [LogicwareLotImportController::class, 'getConnectionStats']);
+    Route::post('/clear-cache', [LogicwareLotImportController::class, 'clearCache'])
+        ->middleware('permission:inventory.lots.store'); // Solo usuarios con permiso de crear lotes
 });

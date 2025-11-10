@@ -116,11 +116,76 @@ class PayrollService
             return false;
         }
 
-        return $this->payrollRepo->update($payrollId, [
-            'status' => 'aprobado',
-            'approved_by' => $approvedBy,
-            'approved_at' => now()
-        ]) !== null;
+        DB::beginTransaction();
+        try {
+            // Actualizar estado de la nómina
+            $updated = $this->payrollRepo->update($payrollId, [
+                'status' => 'aprobado',
+                'approved_by' => $approvedBy,
+                'approved_at' => now()
+            ]);
+
+            if (!$updated) {
+                throw new \Exception('Error al actualizar la nómina');
+            }
+
+            // Marcar comisiones como pagadas
+            $this->markCommissionsAsPaid($payroll);
+
+            // Marcar bonos como pagados
+            $this->markBonusesAsPaid($payroll);
+
+            DB::commit();
+            return true;
+
+        } catch (\Exception $e) {
+            DB::rollback();
+            throw $e;
+        }
+    }
+
+    /**
+     * Marcar comisiones del período como pagadas
+     */
+    protected function markCommissionsAsPaid(Payroll $payroll): void
+    {
+        [$year, $month] = explode('-', $payroll->payroll_period);
+
+        $commissions = $this->commissionRepo->getAll([
+            'employee_id' => $payroll->employee_id,
+            'period_month' => (int) $month,
+            'period_year' => (int) $year,
+            'payment_status' => 'pendiente'
+        ]);
+
+        foreach ($commissions as $commission) {
+            $this->commissionRepo->update($commission->commission_id, [
+                'payment_status' => 'pagado',
+                'payment_date' => now()->toDateString()
+            ]);
+        }
+    }
+
+    /**
+     * Marcar bonos del período como pagados
+     */
+    protected function markBonusesAsPaid(Payroll $payroll): void
+    {
+        [$year, $month] = explode('-', $payroll->payroll_period);
+
+        $bonuses = $this->bonusRepo->getAll([
+            'employee_id' => $payroll->employee_id,
+            'period_month' => (int) $month,
+            'period_year' => (int) $year,
+            'payment_status' => 'pendiente'
+        ]);
+
+        foreach ($bonuses as $bonus) {
+            $this->bonusRepo->update($bonus->bonus_id, [
+                'payment_status' => 'pagado',
+                'payment_date' => now()->toDateString()
+            ]);
+        }
     }
 
     public function processPayroll(int $payrollId, int $processedBy): bool

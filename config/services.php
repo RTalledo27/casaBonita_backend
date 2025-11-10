@@ -35,4 +35,21 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | LOGICWARE CRM API Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuración para la integración con el API externa de LOGICWARE CRM.
+    | Este servicio se utiliza para importar lotes desde el sistema externo.
+    | La autenticación se realiza mediante API Key en headers (X-API-Key).
+    |
+    */
+        'logicware' => [
+        'base_url' => env('LOGICWARE_BASE_URL'),
+        'api_key' => env('LOGICWARE_API_KEY'),
+        'subdomain' => env('LOGICWARE_SUBDOMAIN', 'casabonita'),
+        'timeout' => env('LOGICWARE_TIMEOUT', 30),
+    ],
+
 ];

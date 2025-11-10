@@ -7,6 +7,7 @@ use Modules\Inventory\Http\Controllers\LotMediaController;
 use Modules\Inventory\Http\Controllers\ManzanaController;
 use Modules\Inventory\Http\Controllers\StreetTypeController;
 use Modules\Inventory\Http\Controllers\LotImportController;
+use Modules\Inventory\Http\Controllers\Api\ExternalLotImportController;
 
 Route::middleware(['auth:sanctum'])->prefix('v1/inventory')->group(function () {
     Route::apiResource('inventories', InventoryController::class)->names('inventory');
@@ -45,6 +46,20 @@ Route::middleware(['auth:sanctum'])->prefix('v1/inventory')->group(function () {
             // Rutas para importación asíncrona
             Route::post('/async', [LotImportController::class, 'asyncImport'])->name('lot-import.async');
             Route::get('/async/{id}/status', [LotImportController::class, 'getAsyncStatus'])->name('lot-import.async-status');
+        });
+
+        // Rutas para importación de lotes externos (API LOGICWARE CRM)
+        Route::prefix('external-lot-import')->group(function () {
+            Route::get('/test-connection', [ExternalLotImportController::class, 'testConnection'])->name('external-lot-import.test-connection');
+            Route::post('/sync-all', [ExternalLotImportController::class, 'syncAll'])->name('external-lot-import.sync-all');
+            Route::post('/sync-by-code', [ExternalLotImportController::class, 'syncByCode'])->name('external-lot-import.sync-by-code');
+            Route::get('/stats', [ExternalLotImportController::class, 'getStats'])->name('external-lot-import.stats');
+            Route::get('/preview', [ExternalLotImportController::class, 'preview'])->name('external-lot-import.preview');
+            Route::post('/refresh-token', [ExternalLotImportController::class, 'refreshToken'])->name('external-lot-import.refresh-token');
+            Route::post('/clear-cache', [ExternalLotImportController::class, 'clearCache'])->name('external-lot-import.clear-cache');
+            Route::get('/daily-limit-status', [ExternalLotImportController::class, 'getDailyLimitStatus'])->name('external-lot-import.daily-limit-status');
+            Route::get('/sales', [ExternalLotImportController::class, 'sales'])->name('external-lot-import.sales');
+            Route::post('/sales/import', [ExternalLotImportController::class, 'importSales'])->name('external-lot-import.sales.import');
         });
     });
 });
