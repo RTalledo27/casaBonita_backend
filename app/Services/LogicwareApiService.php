@@ -40,19 +40,33 @@ class LogicwareApiService
      * Endpoint: POST /auth/external/token
      * Headers: X-API-Key, X-Subdomain, Accept
      * 
+     * @param bool $forceRefresh Si es true, invalida el caché y genera un token nuevo
      * @return string Bearer Token
      * @throws Exception
      */
-    public function generateToken(): string
+    public function generateToken(bool $forceRefresh = false): string
     {
         try {
             $this->validateApiKey();
 
+            $cacheKey = "logicware_bearer_token_{$this->subdomain}";
+            
+            // Si no se fuerza la renovación y hay token en caché válido, usarlo
+            if (!$forceRefresh) {
+                $cachedToken = Cache::get($cacheKey);
+                if (!empty($cachedToken)) {
+                    // Token existe en caché, reutilizarlo sin hacer petición
+                    $this->bearerToken = $cachedToken;
+                    return $this->bearerToken;
+                }
+            }
+
             $url = "{$this->baseUrl}/auth/external/token";
             
-            Log::info('[LogicwareAPI] Generando Bearer Token', [
+            Log::info('[LogicwareAPI] Generando nuevo Bearer Token', [
                 'url' => $url,
-                'subdomain' => $this->subdomain
+                'subdomain' => $this->subdomain,
+                'forced_refresh' => $forceRefresh
             ]);
 
             $response = Http::timeout($this->timeout)
@@ -83,8 +97,14 @@ class LogicwareApiService
             }
 
             $this->bearerToken = $data['data']['accessToken'];
+            
+            // Guardar en caché por 23 horas (los tokens duran 24h)
+            // Se verifica cada 5 minutos pero solo se renueva si el caché expiró
+            Cache::put($cacheKey, $this->bearerToken, now()->addHours(23));
 
-            Log::info('[LogicwareAPI] Bearer Token generado exitosamente');
+            Log::info('[LogicwareAPI] Bearer Token generado y guardado en caché', [
+                'valid_until' => now()->addHours(23)->format('Y-m-d H:i:s')
+            ]);
 
             return $this->bearerToken;
 
@@ -104,23 +124,9 @@ class LogicwareApiService
      */
     protected function getAuthHeaders(): array
     {
-        // Intentar obtener token del caché primero
-        $cacheKey = "logicware_bearer_token_{$this->subdomain}";
-        $cachedToken = Cache::get($cacheKey);
-        
-        if (!empty($cachedToken)) {
-            $this->bearerToken = $cachedToken;
-            Log::info('[LogicwareAPI] 🔑 Bearer Token obtenido del caché');
-        }
-        
-        // Si no hay token, generar uno nuevo
+        // Generar token si no existe (usa caché automáticamente)
         if (empty($this->bearerToken)) {
-            Log::info('[LogicwareAPI] 🔄 Generando nuevo Bearer Token...');
             $this->generateToken();
-            
-            // Guardar en caché por 23 horas (los tokens duran 24h según documentación)
-            Cache::put($cacheKey, $this->bearerToken, now()->addHours(23));
-            Log::info('[LogicwareAPI] 💾 Bearer Token guardado en caché (23h)');
         }
 
         $headers = [
@@ -442,6 +448,201 @@ class LogicwareApiService
 
         } catch (Exception $e) {
             Log::error('[LogicwareAPI] Error en getSales', ['error' => $e->getMessage()]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Obtener cronograma de pagos de un contrato
+     * Endpoint: GET /external/payment-schedules/{correlative}
+     * Headers: Authorization Bearer, X-Subdomain
+     * 
+     * Este endpoint devuelve todas las cuotas de pago con su estado actual,
+     * permitiendo sincronizar qué cuotas ya han sido pagadas en Logicware.
+     * 
+     * @param string $correlative Número correlativo de la proforma (ej: 202511-000000596)
+     * @param bool $forceRefresh Forzar consulta sin usar caché
+     * @return array
+     * @throws Exception
+     */
+    public function getPaymentSchedule(string $correlative, bool $forceRefresh = false): array
+    {
+        try {
+            $this->validateApiKey();
+
+            $cacheKey = "logicware_payment_schedule_{$this->subdomain}_{$correlative}";
+            $cacheDuration = now()->addMinutes(30); // Caché más corto porque puede cambiar
+
+            if (!$forceRefresh && Cache::has($cacheKey)) {
+                $cachedData = Cache::get($cacheKey);
+                Log::info('[LogicwareAPI] Cronograma de pagos obtenido del CACHÉ', ['correlative' => $correlative]);
+                return $cachedData;
+            }
+
+            $url = "{$this->baseUrl}/external/payment-schedules/{$correlative}";
+
+            Log::info('[LogicwareAPI] Obteniendo cronograma de pagos', [
+                'url' => $url,
+                'correlative' => $correlative
+            ]);
+
+            // Timeout extendido para cronogramas (45 segundos)
+            $response = Http::timeout(45)
+                ->withHeaders($this->getAuthHeaders())
+                ->get($url);
+
+            if (!$response->successful()) {
+                Log::error('[LogicwareAPI] Error al obtener cronograma de pagos', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'correlative' => $correlative
+                ]);
+                throw new Exception("Error al obtener cronograma de pagos: HTTP {$response->status()} - " . $response->body());
+            }
+
+            $data = $response->json();
+            $data['cached_at'] = now()->toDateTimeString();
+            $data['cache_expires_at'] = $cacheDuration->toDateTimeString();
+
+            // Guardar en caché
+            Cache::put($cacheKey, $data, $cacheDuration);
+
+            Log::info('[LogicwareAPI] Cronograma de pagos obtenido y guardado en caché', [
+                'correlative' => $correlative,
+                'total_installments' => isset($data['data']) ? count($data['data']) : 0
+            ]);
+
+            return $data;
+
+        } catch (Exception $e) {
+            Log::error('[LogicwareAPI] Error en getPaymentSchedule', [
+                'error' => $e->getMessage(),
+                'correlative' => $correlative
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Obtener STOCK COMPLETO de todas las unidades con información detallada
+     * Endpoint: GET /external/units/stock/full
+     * Headers: Authorization Bearer, X-Subdomain
+     * 
+     * Este endpoint incluye TODOS los datos:
+     * - Información completa de la unidad (área, precio, características)
+     * - Estado actual (disponible, reservado, vendido)
+     * - Datos del vendedor/asesor asignado
+     * - Historial de reservas y ventas
+     * - Cliente asociado (si aplica)
+     * - Información financiera completa
+     * 
+     * @param bool $forceRefresh Forzar consulta real (consume 1 de 4 llamadas diarias)
+     * @return array
+     * @throws Exception
+     */
+    public function getFullStockData(bool $forceRefresh = false): array
+    {
+        try {
+            $this->validateApiKey();
+
+            $cacheKey = "logicware_full_stock_{$this->subdomain}";
+            $cacheDuration = now()->addHours(6); // 6 horas de caché
+
+            // Verificar caché primero (a menos que se fuerce refresh)
+            if (!$forceRefresh && Cache::has($cacheKey)) {
+                $cachedData = Cache::get($cacheKey);
+                Log::info('[LogicwareAPI] 📦 Stock COMPLETO obtenido del CACHÉ', [
+                    'cache_key' => $cacheKey,
+                    'total_units' => isset($cachedData['data']) ? count($cachedData['data']) : 0
+                ]);
+                return $cachedData;
+            }
+
+            // Si no hay consultas disponibles y no se fuerza, usar caché expirado si existe
+            if (!$this->hasAvailableRequests() && !$forceRefresh) {
+                Log::warning('[LogicwareAPI] ⚠️ Límite de consultas alcanzado, intentando usar caché expirado');
+                $expiredCache = Cache::get($cacheKey);
+                if ($expiredCache) {
+                    return $expiredCache;
+                }
+            }
+
+            // Incrementar contador de peticiones
+            $this->incrementDailyRequestCounter();
+
+            $url = "{$this->baseUrl}/external/units/stock/full";
+
+            Log::warning('[LogicwareAPI] ⚠️ CONSULTANDO STOCK COMPLETO (consume 1 de 4 consultas diarias)', [
+                'url' => $url,
+                'subdomain' => $this->subdomain,
+                'force_refresh' => $forceRefresh,
+                'daily_requests' => $this->getDailyRequestCount()
+            ]);
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders($this->getAuthHeaders())
+                ->get($url);
+
+            if (!$response->successful()) {
+                // Si es error 429 (rate limit), intentar usar datos en caché aunque estén expirados
+                if ($response->status() === 429) {
+                    Log::warning('[LogicwareAPI] ⚠️ Rate limit alcanzado para stock completo', [
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    
+                    $expiredCache = Cache::get($cacheKey);
+                    if ($expiredCache) {
+                        Log::info('[LogicwareAPI] Usando caché expirado debido a rate limit');
+                        return $expiredCache;
+                    }
+                    
+                    throw new Exception("Rate limit alcanzado y no hay datos en caché disponibles");
+                }
+                
+                Log::error('[LogicwareAPI] Error al obtener stock completo', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'url' => $url
+                ]);
+                throw new Exception("Error al obtener stock completo: HTTP {$response->status()} - " . $response->body());
+            }
+
+            $data = $response->json();
+            
+            // Agregar metadata
+            $data['cached_at'] = now()->toDateTimeString();
+            $data['cache_expires_at'] = $cacheDuration->toDateTimeString();
+            $data['daily_requests_used'] = $this->getDailyRequestCount();
+
+            // Guardar en caché con manejo de tamaño
+            $dataSize = strlen(json_encode($data));
+            $maxCacheSize = 2097152; // 2MB para stock completo (más grande que otros endpoints)
+            
+            if ($dataSize < $maxCacheSize) {
+                Cache::put($cacheKey, $data, $cacheDuration);
+                Log::info('[LogicwareAPI] ✅ Stock COMPLETO obtenido y guardado en caché', [
+                    'total_units' => isset($data['data']) ? count($data['data']) : 0,
+                    'cache_duration' => '6 horas',
+                    'data_size' => number_format($dataSize / 1024, 2) . ' KB',
+                    'daily_requests_used' => $this->getDailyRequestCount()
+                ]);
+            } else {
+                Log::warning('[LogicwareAPI] ⚠️ Respuesta de stock completo demasiado grande para cachear', [
+                    'total_units' => isset($data['data']) ? count($data['data']) : 0,
+                    'data_size' => number_format($dataSize / 1024 / 1024, 2) . ' MB',
+                    'max_cache_size' => '2 MB',
+                    'note' => 'Los datos NO se guardaron en caché para evitar errores'
+                ]);
+            }
+
+            return $data;
+
+        } catch (Exception $e) {
+            Log::error('[LogicwareAPI] Error al obtener stock completo', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             throw $e;
         }
     }

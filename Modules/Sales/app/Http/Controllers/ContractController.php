@@ -91,7 +91,7 @@ class ContractController extends Controller
     public function show(Contract $contract)
     {
         return new ContractResource(
-            $contract->load(['reservation', 'advisor', 'schedules', 'invoices', 'approvals', 'previousContract'])
+            $contract->load(['reservation', 'advisor', 'schedules', 'invoices', 'approvals', 'previousContract', 'lot.manzana', 'client', 'advisor.user', 'lot'])
         );
     }
 

@@ -38,3 +38,19 @@ Schedule::command('bonuses:calculate --type=QUARTERLY')
     ->timezone('America/Lima')
     ->description('Cálculo automático de bonos trimestrales');
 
+// =======================================================================================
+// LOGICWARE TOKEN RENEWAL SCHEDULE
+// =======================================================================================
+
+// Renovar Bearer Token de Logicware cada 5 minutos según recomendación oficial
+// Tokens duran 24h pero la renovación frecuente evita problemas de expiración
+Schedule::command('logicware:renew-token')
+    ->everyFiveMinutes()
+    ->timezone('America/Lima')
+    ->description('Renovación automática del Bearer Token de Logicware (cada 5 minutos)')
+    ->onFailure(function () {
+        \Log::error('[LogicwareScheduler] Error al renovar token automáticamente');
+    })
+    ->onSuccess(function () {
+        \Log::info('[LogicwareScheduler] Token de Logicware verificado/renovado');
+    });

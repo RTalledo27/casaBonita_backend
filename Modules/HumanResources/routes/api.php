@@ -11,6 +11,7 @@ use Modules\HumanResources\Http\Controllers\EmployeeImportController;
 use Modules\HumanResources\Http\Controllers\HumanResourcesController;
 use Modules\HumanResources\Http\Controllers\PayrollController;
 use Modules\HumanResources\Http\Controllers\TeamController;
+use Modules\HumanResources\Http\Controllers\TaxParameterController;
 
 Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
     Route::apiResource('humanresources', HumanResourcesController::class)->names('humanresources');
@@ -141,6 +142,17 @@ Route::prefix('v1')->group(function () {
                 Route::get('/{id}/members', [TeamController::class, 'members'])->name('hr.teams.members');
                 Route::patch('/{id}/assign-leader', [TeamController::class, 'assignLeader'])->name('hr.teams.assign-leader');
                 Route::patch('/{id}/toggle-status', [TeamController::class, 'toggleStatus'])->name('hr.teams.toggle-status');
+            });
+            
+            // Rutas de Parámetros Tributarios (Tax Parameters)
+            Route::prefix('tax-parameters')->group(function () {
+                Route::get('/', [TaxParameterController::class, 'index'])->name('hr.tax-parameters.index');
+                Route::get('/current', [TaxParameterController::class, 'getCurrent'])->name('hr.tax-parameters.current');
+                Route::get('/{year}', [TaxParameterController::class, 'getByYear'])->name('hr.tax-parameters.by-year');
+                Route::post('/', [TaxParameterController::class, 'store'])->name('hr.tax-parameters.store');
+                Route::put('/{year}', [TaxParameterController::class, 'update'])->name('hr.tax-parameters.update');
+                Route::post('/copy-year', [TaxParameterController::class, 'copyYear'])->name('hr.tax-parameters.copy');
+                Route::post('/calculate-family-allowance', [TaxParameterController::class, 'calculateFamilyAllowance'])->name('hr.tax-parameters.calc-family');
             });
         }
     );

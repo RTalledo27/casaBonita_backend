@@ -5,6 +5,9 @@ namespace Modules\Sales\Transformers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Modules\HumanResources\Transformers\EmployeeResource;
+use Modules\CRM\Transformers\ClientResource;
+use Modules\Inventory\Transformers\LotResource;
+
 
 class ContractResource extends JsonResource
 {
@@ -44,6 +47,8 @@ class ContractResource extends JsonResource
             'lot_name'       => $this->getLotName() ?? 'N/A',
 
             // Relaciones
+            'lot'            => new LotResource($this->whenLoaded('lot')),
+            'client'         => new ClientResource($this->whenLoaded('client')),
             'reservation'    => new ReservationResource($this->whenLoaded('reservation')),
             'advisor'        => new EmployeeResource($this->whenLoaded('advisor')),
             'schedules'      => PaymentScheduleResource::collection($this->whenLoaded('schedules')),

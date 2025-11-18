@@ -103,9 +103,7 @@ class PaymentScheduleService
             'installment_number' => 1,
             'due_date' => $dueDate->format('Y-m-d'),
             'amount' => $template->precio_contado,
-            'status' => 'pendiente',
-            'payment_type' => 'contado',
-            'description' => 'Pago único al contado'
+            'status' => 'pendiente'
         ];
 
         return $schedules;
@@ -130,7 +128,23 @@ class PaymentScheduleService
         }
 
         $schedules = [];
-        $startDate = Carbon::parse($contract->sign_date ?? now());
+        
+        // USAR start_date de options si está disponible (para imports desde Logicware)
+        // De lo contrario, usar sign_date del contrato o fecha actual
+        if (isset($options['start_date'])) {
+            $startDate = Carbon::parse($options['start_date']);
+            Log::info('[PaymentScheduleService] 📅 Usando start_date desde options', [
+                'start_date' => $options['start_date'],
+                'parsed' => $startDate->format('Y-m-d')
+            ]);
+        } else {
+            $startDate = Carbon::parse($contract->sign_date ?? now());
+            Log::info('[PaymentScheduleService] 📅 Usando fecha desde contrato/actual', [
+                'sign_date' => $contract->sign_date,
+                'parsed' => $startDate->format('Y-m-d')
+            ]);
+        }
+        
         $installmentNumber = 1;
 
         // Cuota inicial si existe
@@ -140,9 +154,7 @@ class PaymentScheduleService
                 'installment_number' => $installmentNumber++,
                 'due_date' => $startDate->copy()->addDays(15)->format('Y-m-d'),
                 'amount' => $template->cuota_inicial,
-                'status' => 'pendiente',
-                'payment_type' => 'cuota_inicial',
-                'description' => 'Cuota inicial'
+                'status' => 'pendiente'
             ];
         }
 
@@ -155,9 +167,7 @@ class PaymentScheduleService
                 'installment_number' => $installmentNumber++,
                 'due_date' => $dueDate->format('Y-m-d'),
                 'amount' => $monthlyAmount,
-                'status' => 'pendiente',
-                'payment_type' => 'cuota_mensual',
-                'description' => "Cuota {$i} de {$installments}"
+                'status' => 'pendiente'
             ];
         }
 
@@ -170,9 +180,7 @@ class PaymentScheduleService
                 'installment_number' => $installmentNumber++,
                 'due_date' => $balloonDate->format('Y-m-d'),
                 'amount' => $template->cuota_balon,
-                'status' => 'pendiente',
-                'payment_type' => 'cuota_balon',
-                'description' => 'Cuota balón final'
+                'status' => 'pendiente'
             ];
         }
 
@@ -188,7 +196,11 @@ class PaymentScheduleService
 
         DB::transaction(function () use ($schedules, &$savedSchedules) {
             foreach ($schedules as $scheduleData) {
-                $schedule = PaymentSchedule::create($scheduleData);
+                // Insertar directamente sin timestamps (tabla no tiene updated_at/created_at)
+                $scheduleId = DB::table('payment_schedules')->insertGetId($scheduleData);
+                
+                // Cargar el modelo creado
+                $schedule = PaymentSchedule::find($scheduleId);
                 $savedSchedules[] = $schedule;
             }
         });

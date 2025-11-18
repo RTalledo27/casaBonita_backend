@@ -15,7 +15,8 @@ class PayrollService
     public function __construct(
         protected PayrollRepository $payrollRepo,
         protected CommissionRepository $commissionRepo,
-        protected BonusRepository $bonusRepo
+        protected BonusRepository $bonusRepo,
+        protected PayrollCalculationService $calculationService
     ) {}
 
     public function generatePayrollForEmployee(int $employeeId, int $month, int $year): Payroll
@@ -53,38 +54,58 @@ class PayrollService
         // Calcular totales
         $commissionsAmount = $commissions->sum('commission_amount');
         $bonusesAmount = $bonuses->sum('bonus_amount');
-        $overtimeAmount = $this->calculateOvertimeAmount($employeeId, $month, $year);
+        $overtimeAmount = $this->calculationService->calculateOvertimeAmount($employee, $month, $year);
 
-        // Calcular salario bruto
-        $grossSalary = $employee->base_salary + $commissionsAmount + $bonusesAmount + $overtimeAmount;
+        // ===== USAR NUEVO SERVICIO DE CÁLCULO =====
+        $calculation = $this->calculationService->calculatePayroll(
+            employee: $employee,
+            baseSalary: $employee->base_salary,
+            commissionsAmount: $commissionsAmount,
+            bonusesAmount: $bonusesAmount,
+            overtimeAmount: $overtimeAmount,
+            year: $year
+        );
 
-        // Calcular descuentos
-        $incomeTax = $this->calculateIncomeTax($grossSalary);
-        $socialSecurity = $this->calculateSocialSecurity($grossSalary, $employee);
-        $healthInsurance = $this->calculateHealthInsurance($grossSalary, $employee);
-        $totalDeductions = $incomeTax + $socialSecurity + $healthInsurance;
-
-        // Calcular salario neto
-        $netSalary = $grossSalary - $totalDeductions;
-
+        // Crear nómina con datos calculados
         return $this->payrollRepo->create([
             'employee_id' => $employeeId,
             'payroll_period' => $period,
             'pay_period_start' => $payPeriodStart,
             'pay_period_end' => $payPeriodEnd,
             'pay_date' => $payDate,
-            'base_salary' => $employee->base_salary,
-            'commissions_amount' => $commissionsAmount,
-            'bonuses_amount' => $bonusesAmount,
-            'overtime_amount' => $overtimeAmount,
+            
+            // Ingresos
+            'base_salary' => $calculation['base_salary'],
+            'commissions_amount' => $calculation['commissions_amount'],
+            'bonuses_amount' => $calculation['bonuses_amount'],
+            'overtime_amount' => $calculation['overtime_amount'],
+            'family_allowance' => $calculation['family_allowance'],
             'other_income' => 0,
-            'gross_salary' => $grossSalary,
-            'income_tax' => $incomeTax,
-            'social_security' => $socialSecurity,
-            'health_insurance' => $healthInsurance,
+            'gross_salary' => $calculation['gross_salary'],
+            
+            // Sistema de Pensiones
+            'pension_system' => $calculation['pension_system'],
+            'afp_provider' => $calculation['afp_provider'],
+            'afp_contribution' => $calculation['afp_contribution'],
+            'afp_commission' => $calculation['afp_commission'],
+            'afp_insurance' => $calculation['afp_insurance'],
+            'onp_contribution' => $calculation['onp_contribution'],
+            'total_pension' => $calculation['total_pension'],
+            
+            // Impuestos
+            'rent_tax_5th' => $calculation['rent_tax_5th'],
+            
+            // Deducciones
             'other_deductions' => 0,
-            'total_deductions' => $totalDeductions,
-            'net_salary' => $netSalary,
+            'total_deductions' => $calculation['total_deductions'],
+            
+            // Totales
+            'net_salary' => $calculation['net_salary'],
+            
+            // Empleador (informativo)
+            'employer_essalud' => $calculation['employer_essalud'],
+            
+            // Estado
             'status' => 'borrador'
         ]);
     }
@@ -107,6 +128,164 @@ class PayrollService
         }
 
         return $payrolls;
+    }
+
+    /**
+     * Generar nóminas para múltiples empleados en batch (UNA SOLA LLAMADA)
+     * 
+     * @param array $employeeIds Array de IDs de empleados
+     * @param int $month Mes del período
+     * @param int $year Año del período
+     * @param string $payDate Fecha de pago
+     * @param bool $includeCommissions Si incluye comisiones
+     * @param bool $includeBonuses Si incluye bonificaciones
+     * @param bool $includeOvertime Si incluye horas extra
+     * @return array ['success' => [...], 'failed' => [...], 'successful_count' => X, 'failed_count' => Y]
+     */
+    public function generatePayrollBatch(
+        array $employeeIds,
+        int $month,
+        int $year,
+        string $payDate,
+        bool $includeCommissions = true,
+        bool $includeBonuses = true,
+        bool $includeOvertime = true
+    ): array {
+        $successfulPayrolls = [];
+        $failedPayrolls = [];
+
+        $period = sprintf('%04d-%02d', $year, $month);
+        $payPeriodStart = Carbon::create($year, $month, 1);
+        $payPeriodEnd = $payPeriodStart->copy()->endOfMonth();
+        $payDateCarbon = Carbon::parse($payDate);
+
+        // Procesar cada empleado
+        foreach ($employeeIds as $employeeId) {
+            try {
+                // Buscar empleado
+                $employee = Employee::find($employeeId);
+                if (!$employee) {
+                    $failedPayrolls[] = [
+                        'employee_id' => $employeeId,
+                        'error' => 'Empleado no encontrado'
+                    ];
+                    continue;
+                }
+
+                // Verificar si ya existe nómina
+                $existingPayroll = $this->payrollRepo->getByEmployeeAndPeriod($employeeId, $period);
+                if ($existingPayroll) {
+                    $failedPayrolls[] = [
+                        'employee_id' => $employeeId,
+                        'employee_name' => $employee->user->name ?? 'N/A',
+                        'error' => 'Ya existe una nómina para este período'
+                    ];
+                    continue;
+                }
+
+                // Obtener comisiones si está habilitado
+                $commissionsAmount = 0;
+                if ($includeCommissions) {
+                    $commissions = $this->commissionRepo->getAll([
+                        'employee_id' => $employeeId,
+                        'period_month' => $month,
+                        'period_year' => $year,
+                        'payment_status' => 'pendiente'
+                    ]);
+                    $commissionsAmount = $commissions->sum('commission_amount');
+                }
+
+                // Obtener bonos si está habilitado
+                $bonusesAmount = 0;
+                if ($includeBonuses) {
+                    $bonuses = $this->bonusRepo->getAll([
+                        'employee_id' => $employeeId,
+                        'period_month' => $month,
+                        'period_year' => $year,
+                        'payment_status' => 'pendiente'
+                    ]);
+                    $bonusesAmount = $bonuses->sum('bonus_amount');
+                }
+
+                // Calcular horas extra si está habilitado
+                $overtimeAmount = 0;
+                if ($includeOvertime) {
+                    $overtimeAmount = $this->calculationService->calculateOvertimeAmount($employee, $month, $year);
+                }
+
+                // Calcular nómina usando el servicio de cálculo
+                $calculation = $this->calculationService->calculatePayroll(
+                    employee: $employee,
+                    baseSalary: $employee->base_salary,
+                    commissionsAmount: $commissionsAmount,
+                    bonusesAmount: $bonusesAmount,
+                    overtimeAmount: $overtimeAmount,
+                    year: $year
+                );
+
+                // Crear nómina con los campos REALES de la BD
+                $payroll = $this->payrollRepo->create([
+                    'employee_id' => $employeeId,
+                    'payroll_period' => $period,
+                    'pay_period_start' => $payPeriodStart,
+                    'pay_period_end' => $payPeriodEnd,
+                    'pay_date' => $payDateCarbon,
+                    
+                    // Ingresos
+                    'base_salary' => $calculation['base_salary'],
+                    'family_allowance' => $calculation['family_allowance'] ?? 0,
+                    'commissions_amount' => $calculation['commissions_amount'],
+                    'bonuses_amount' => $calculation['bonuses_amount'],
+                    'overtime_amount' => $calculation['overtime_amount'],
+                    'other_income' => 0,
+                    'gross_salary' => $calculation['gross_salary'],
+                    
+                    // Sistema de Pensiones (campos detallados)
+                    'pension_system' => $calculation['pension_system'],
+                    'afp_provider' => $calculation['afp_provider'] ?? null,
+                    'afp_contribution' => $calculation['afp_contribution'] ?? 0,
+                    'afp_commission' => $calculation['afp_commission'] ?? 0,
+                    'afp_insurance' => $calculation['afp_insurance'] ?? 0,
+                    'onp_contribution' => $calculation['onp_contribution'] ?? 0,
+                    'total_pension' => $calculation['total_pension'],
+                    
+                    // Empleador (informativo)
+                    'employer_essalud' => $calculation['employer_essalud'] ?? 0,
+                    
+                    // Seguros y descuentos
+                    'employee_essalud' => $calculation['employee_essalud'] ?? 0,
+                    
+                    // Impuestos
+                    'rent_tax_5th' => $calculation['rent_tax_5th'],
+                    'other_deductions' => 0,
+                    
+                    // Totales
+                    'total_deductions' => $calculation['total_deductions'],
+                    'net_salary' => $calculation['net_salary'],
+                    
+                    // Estado y metadata
+                    'status' => 'borrador',
+                    'currency' => 'PEN',
+                    'notes' => 'Generada automáticamente desde selección múltiple'
+                ]);
+
+                $successfulPayrolls[] = $payroll;
+
+            } catch (\Exception $e) {
+                $failedPayrolls[] = [
+                    'employee_id' => $employeeId,
+                    'employee_name' => $employee->user->name ?? 'N/A',
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+
+        return [
+            'success' => $successfulPayrolls,
+            'failed' => $failedPayrolls,
+            'successful_count' => count($successfulPayrolls),
+            'failed_count' => count($failedPayrolls)
+        ];
     }
 
     public function approvePayroll(int $payrollId, int $approvedBy): bool
@@ -242,48 +421,5 @@ class PayrollService
             DB::rollback();
             throw $e;
         }
-    }
-
-    protected function calculateOvertimeAmount(int $employeeId, int $month, int $year): float
-    {
-        $employee = Employee::find($employeeId);
-        $overtimeHours = $employee->attendances()
-            ->whereMonth('attendance_date', $month)
-            ->whereYear('attendance_date', $year)
-            ->sum('overtime_hours');
-
-        // Calcular tarifa por hora extra (1.25x la tarifa normal)
-        $hourlyRate = $employee->base_salary / 160; // Asumiendo 160 horas mensuales
-        return $overtimeHours * $hourlyRate * 1.25;
-    }
-
-    protected function calculateIncomeTax(float $grossSalary): float
-    {
-        // Tabla de impuesto a la renta de quinta categoría (Perú 2024)
-        if ($grossSalary <= 2083.33) return 0; // Hasta 7 UIT anuales
-        if ($grossSalary <= 3333.33) return ($grossSalary - 2083.33) * 0.08;
-        if ($grossSalary <= 4166.67) return 100 + ($grossSalary - 3333.33) * 0.14;
-        if ($grossSalary <= 5833.33) return 216.67 + ($grossSalary - 4166.67) * 0.17;
-        if ($grossSalary <= 12500) return 500 + ($grossSalary - 5833.33) * 0.20;
-        return 1833.33 + ($grossSalary - 12500) * 0.30;
-    }
-
-    protected function calculateSocialSecurity(float $grossSalary, Employee $employee): float
-    {
-        // ONP: 13% o AFP: ~10-13% (variable por AFP)
-        if ($employee->afp_code) {
-            return $grossSalary * 0.10; // Promedio AFP
-        }
-        return $grossSalary * 0.13; // ONP
-    }
-
-    protected function calculateHealthInsurance(float $grossSalary, Employee $employee): float
-    {
-        // EsSalud: 9% (pagado por empleador, no se descuenta al empleado)
-        // EPS: Si tiene seguro privado, puede ser un descuento adicional
-        if ($employee->health_insurance && $employee->health_insurance !== 'essalud') {
-            return $grossSalary * 0.02; // Asumiendo 2% para EPS
-        }
-        return 0;
     }
 }

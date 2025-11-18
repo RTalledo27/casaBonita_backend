@@ -30,6 +30,7 @@ class Contract extends Model
         'contract_date', // Fecha del contrato
         'sign_date',
         'total_price',
+        'discount', // 🔥 Descuento aplicado a la venta
         'down_payment',
         'financing_amount',
         'interest_rate',
@@ -44,7 +45,10 @@ class Contract extends Model
         'funding',
         'bpp',
         'bfh',
-        'initial_quota'
+        'initial_quota',
+        // Campos de trazabilidad
+        'source',
+        'logicware_data'
     ];
 
 
@@ -55,6 +59,7 @@ class Contract extends Model
         'contract_date' => 'date',
         'sign_date' => 'date',
         'total_price' => 'decimal:2',
+        'discount' => 'decimal:2',
         'down_payment' => 'decimal:2',
         'financing_amount' => 'decimal:2',
         'interest_rate' => 'decimal:4',
@@ -234,7 +239,32 @@ class Contract extends Model
     {
         $lot = $this->getLot();
         if ($lot) {
-            return $lot->lot_number ?? 'N/A';
+            // Usar external_code (ej: "I-76") o construir desde manzana + num_lot
+            return $lot->external_code ?? ($lot->manzana ? $lot->manzana->name . '-' . $lot->num_lot : 'Lote ' . $lot->num_lot);
+        }
+        return null;
+    }
+
+    /**
+     * Obtiene el nombre de la manzana
+     */
+    public function getManzanaName(): ?string
+    {
+        $lot = $this->getLot();
+        if ($lot && $lot->manzana) {
+            return $lot->manzana->name;
+        }
+        return null;
+    }
+
+    /**
+     * Obtiene el área del lote en m²
+     */
+    public function getArea(): ?float
+    {
+        $lot = $this->getLot();
+        if ($lot) {
+            return $lot->area_m2;
         }
         return null;
     }

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\UserSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\LogicwareLotImportController;
+use App\Http\Controllers\Api\LogicwareImportController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -106,6 +107,19 @@ Route::middleware(['auth:sanctum', 'permission:reports.access'])->prefix('report
 
 // LogicWare Integration API Routes
 Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
+    // Importación de Contratos desde Logicware
+    Route::post('/import-contracts', [LogicwareImportController::class, 'importContracts'])
+        ->middleware('permission:sales.contracts.store'); // Solo usuarios con permiso de crear contratos
+    
+    Route::get('/status', [LogicwareImportController::class, 'getStatus']);
+    
+    // Stock Completo con TODOS los datos
+    Route::get('/full-stock', [LogicwareImportController::class, 'getFullStock']);
+    
+    // Token Management
+    Route::post('/renew-token', [LogicwareImportController::class, 'renewToken']);
+    Route::get('/token-info', [LogicwareImportController::class, 'getTokenInfo']);
+    
     // Stages (Etapas)
     Route::get('/stages', [LogicwareLotImportController::class, 'getStages']);
     

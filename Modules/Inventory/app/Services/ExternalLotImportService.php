@@ -575,6 +575,9 @@ class ExternalLotImportService
                         ->first();
 
             if (!$client) {
+                // Preparar datos completos del cliente
+                $birthDate = isset($doc['birthDate']) ? substr($doc['birthDate'],0,10) : null;
+                
                 $client = \Modules\CRM\Models\Client::create([
                     'first_name' => $firstName ?: ($doc['fullName'] ?? 'N/D'),
                     'last_name' => trim(($paternal ?? '') . ' ' . ($maternal ?? '')),
@@ -582,7 +585,9 @@ class ExternalLotImportService
                     'doc_number' => $docNumber,
                     'email' => $email,
                     'primary_phone' => $phone,
-                    'date' => isset($doc['birthDate']) ? substr($doc['birthDate'],0,10) : null
+                    'date' => $birthDate,
+                    'type' => 'client',
+                    'source' => 'logicware'
                 ]);
 
                 // Crear dirección si existe
@@ -590,11 +595,18 @@ class ExternalLotImportService
                     \Modules\CRM\Models\Address::create([
                         'client_id' => $client->client_id,
                         'line1' => $doc['address'],
+                        'line2' => $doc['district'] ?? null,
                         'city' => $doc['province'] ?? null,
                         'state' => $doc['department'] ?? null,
                         'country' => 'PER'
                     ]);
                 }
+
+                Log::info('[ExternalLotImport] Cliente creado desde Logicware', [
+                    'client_id' => $client->client_id,
+                    'doc_number' => $docNumber,
+                    'full_name' => $doc['fullName'] ?? 'N/D'
+                ]);
 
                 $this->stats['created']++;
             } else {
@@ -623,19 +635,21 @@ class ExternalLotImportService
     protected function processSaleDocumentItem($client, array $document): void
     {
         try {
-            // Buscar asesor por nombre
+            // Buscar asesor por nombre usando score-based matching
             $sellerName = $document['seller'] ?? null;
             $advisorId = null;
             if ($sellerName) {
-                $advisor = \Modules\HumanResources\Models\Employee::whereHas('user', function ($q) use ($sellerName) {
-                    $q->whereRaw("CONCAT(first_name, ' ', last_name) = ?", [$sellerName]);
-                })->first();
+                $advisor = $this->findAdvisorByName($sellerName);
 
                 if ($advisor) {
                     $advisorId = $advisor->employee_id;
+                    Log::info('[ExternalLotImport] ✅ Asesor encontrado', [
+                        'seller_name' => $sellerName,
+                        'advisor_id' => $advisorId,
+                        'advisor_name' => ($advisor->user->first_name ?? '') . ' ' . ($advisor->user->last_name ?? '')
+                    ]);
                 } else {
-                    Log::warning('[ExternalLotImport] Asesor no encontrado', ['seller_name' => $sellerName]);
-                    // Podríamos crear el asesor aquí, pero por ahora solo advertimos
+                    Log::warning('[ExternalLotImport] ❌ Asesor no encontrado', ['seller_name' => $sellerName]);
                 }
             }
 
@@ -659,6 +673,7 @@ class ExternalLotImportService
                         $lotData = [
                             'manzana_id' => $manzana->manzana_id,
                             'num_lot' => (int)$parsed['lote'],
+                            'external_code' => $unitNumber, // 🔥 Guardar el código completo (ej: "I-41")
                             'area_m2' => $this->parseNumericValue($unit['unitArea'] ?? 0),
                             'total_price' => $this->parseNumericValue($unit['total'] ?? 0),
                             'currency' => strtoupper($unit['currency'] ?? 'PEN'),
@@ -678,15 +693,26 @@ class ExternalLotImportService
             }
 
             // Construir datos del contrato
-            $total = $unit['total'] ?? ($document['financing']['totalPending'] ?? 0);
-            $downPayment = $document['financing']['downPayment'] ?? 0;
-            $financingAmount = $document['financing']['amountToFinance'] ?? 0;
-            $currency = $document['financing']['currency'] ?? ($unit['currency'] ?? 'PEN');
+            $unit = $document['units'][0] ?? [];
+            $financing = $document['financing'] ?? [];
+            
+            // Extraer datos financieros completos
+            $listPrice = $this->parseNumericValue($unit['listPrice'] ?? $unit['basePrice'] ?? $unit['total'] ?? 0);
+            $discount = $this->parseNumericValue($unit['discount'] ?? $financing['discount'] ?? 0);
+            $total = $this->parseNumericValue($unit['total'] ?? $financing['totalPending'] ?? 0);
+            $downPayment = $this->parseNumericValue($financing['downPayment'] ?? 0);
+            $financingAmount = $this->parseNumericValue($financing['amountToFinance'] ?? 0);
+            $balloonPayment = $this->parseNumericValue($financing['balloonPayment'] ?? $financing['balloon'] ?? 0);
+            $bppBonus = $this->parseNumericValue($financing['bppBonus'] ?? $financing['bpp'] ?? 0);
+            $bfhBonus = $this->parseNumericValue($financing['bfhBonus'] ?? $financing['bfh'] ?? 0);
+            $funding = $this->parseNumericValue($financing['funding'] ?? 0);
+            
+            $currency = strtoupper($financing['currency'] ?? $unit['currency'] ?? 'PEN');
             $saleDate = $document['saleStartDate'] ?? $document['proformaStartDate'] ?? now()->toDateString();
-            $termMonths = (int)($document['financing']['financingInstallments'] ?? 12);
+            $termMonths = (int)($financing['financingInstallments'] ?? 12);
             $monthlyPayment = $financingAmount > 0 && $termMonths > 0 ? ($financingAmount / $termMonths) : 0;
 
-            // Crear contrato directo
+            // Crear contrato directo con TODOS los campos financieros
             $contractData = [
                 'client_id' => $client->client_id,
                 'lot_id' => $lotId,
@@ -694,27 +720,73 @@ class ExternalLotImportService
                 'contract_number' => $document['correlative'] ?? null,
                 'contract_date' => substr($saleDate,0,10),
                 'sign_date' => substr($saleDate,0,10),
-                'total_price' => $this->parseNumericValue($total) ?? 0,
-                'down_payment' => $this->parseNumericValue($downPayment) ?? 0,
-                'financing_amount' => $this->parseNumericValue($financingAmount) ?? 0,
-                'funding' => 0,
-                'bpp' => 0,
-                'bfh' => 0,
-                'initial_quota' => $this->parseNumericValue($downPayment) ?? 0,
+                'total_price' => $listPrice, // 🔥 Precio lista (antes del descuento)
+                'discount' => $discount, // 🔥 Descuento aplicado
+                'down_payment' => $downPayment,
+                'financing_amount' => $financingAmount,
+                'balloon_payment' => $balloonPayment, // 🔥 Cuota balón
+                'funding' => $funding,
+                'bpp' => $bppBonus, // 🔥 Bono buen pagador
+                'bfh' => $bfhBonus,
+                'initial_quota' => $downPayment,
                 'interest_rate' => 0,
                 'term_months' => $termMonths,
                 'monthly_payment' => $this->parseNumericValue($monthlyPayment) ?? 0,
-                'currency' => strtoupper($currency ?? 'PEN'),
-                'status' => 'vigente'
+                'currency' => $currency,
+                'status' => 'vigente',
+                'source' => 'logicware', // 🔥 Identificar fuente
+                'logicware_data' => json_encode($document) // 🔥 Guardar datos completos para re-linkeo futuro
             ];
 
             $contract = \Modules\Sales\Models\Contract::create($contractData);
             $this->stats['created']++;
 
-            // Generar cuotas automáticamente si hay financiamiento
-            $financing = $document['financing'] ?? [];
-            if (!empty($financing['totalInstallments']) && $contract) {
-                $this->generatePaymentSchedule($contract, $financing, substr($saleDate,0,10));
+            Log::info('[ExternalLotImport] 💰 Contrato creado con datos financieros completos', [
+                'contract_id' => $contract->contract_id,
+                'total_price' => $listPrice,
+                'discount' => $discount,
+                'net_price' => $total,
+                'balloon_payment' => $balloonPayment,
+                'bpp' => $bppBonus
+            ]);
+
+            // 🔄 SINCRONIZAR CRONOGRAMA DESDE LOGICWARE (incluye estado de pagos)
+            $correlative = $document['correlative'] ?? null;
+            
+            if ($correlative) {
+                try {
+                    Log::info('[ExternalLotImport] Intentando sincronización de cronograma', [
+                        'contract_id' => $contract->contract_id,
+                        'correlative' => $correlative
+                    ]);
+                    
+                    $this->syncPaymentScheduleFromLogicware($contract, $correlative);
+                    
+                    Log::info('[ExternalLotImport] ✅ Cronograma sincronizado desde Logicware', [
+                        'contract_id' => $contract->contract_id,
+                        'correlative' => $correlative
+                    ]);
+                } catch (Exception $scheduleError) {
+                    Log::warning('[ExternalLotImport] ⚠️ No se pudo sincronizar cronograma desde Logicware, usando fallback', [
+                        'contract_id' => $contract->contract_id,
+                        'correlative' => $correlative,
+                        'error' => $scheduleError->getMessage()
+                    ]);
+                    
+                    // Fallback: generar cronograma tradicional
+                    $financing = $document['financing'] ?? [];
+                    if (!empty($financing['totalInstallments'])) {
+                        $this->generatePaymentSchedule($contract, $financing, substr($saleDate,0,10));
+                        Log::info('[ExternalLotImport] Cronograma generado con método tradicional (fallback)');
+                    }
+                }
+            } else {
+                // Si no hay correlativo, usar método tradicional
+                Log::info('[ExternalLotImport] No hay correlativo, usando cronograma tradicional');
+                $financing = $document['financing'] ?? [];
+                if (!empty($financing['totalInstallments'])) {
+                    $this->generatePaymentSchedule($contract, $financing, substr($saleDate,0,10));
+                }
             }
 
         } catch (Exception $e) {
@@ -726,6 +798,7 @@ class ExternalLotImportService
 
     /**
      * Generar cronograma de pagos (cuotas) para un contrato
+     * Incluye: Cuotas iniciales, financiamiento, cuota balón y bono BPP
      * 
      * @param \Modules\Sales\Models\Contract $contract
      * @param array $financing Datos de financiamiento desde LOGICWARE
@@ -740,6 +813,8 @@ class ExternalLotImportService
             $financingInstallments = (int)($financing['financingInstallments'] ?? 0);
             $downPayment = $this->parseNumericValue($financing['downPayment'] ?? 0);
             $amountToFinance = $this->parseNumericValue($financing['amountToFinance'] ?? 0);
+            $balloonPayment = $this->parseNumericValue($financing['balloonPayment'] ?? $financing['balloon'] ?? 0);
+            $bppBonus = $this->parseNumericValue($financing['bppBonus'] ?? $financing['bpp'] ?? 0);
             
             if ($totalInstallments <= 0) {
                 Log::warning('[ExternalLotImport] No se generan cuotas, totalInstallments es 0', [
@@ -784,12 +859,53 @@ class ExternalLotImportService
                     ]);
                 }
             }
+            
+            // 3. 🔥 Crear cuota BALÓN (si existe)
+            if ($balloonPayment > 0) {
+                \Modules\Sales\Models\PaymentSchedule::create([
+                    'contract_id' => $contract->contract_id,
+                    'installment_number' => $installmentNumber++,
+                    'due_date' => $baseDate->copy()->addMonths($initialInstallments + $financingInstallments)->toDateString(),
+                    'amount' => $balloonPayment,
+                    'status' => 'pendiente',
+                    'type' => 'balon',
+                    'currency' => $contract->currency,
+                    'notes' => 'Cuota Balón'
+                ]);
+                
+                Log::info('[ExternalLotImport] 🎈 Cuota balón agregada', [
+                    'contract_id' => $contract->contract_id,
+                    'amount' => $balloonPayment
+                ]);
+            }
+            
+            // 4. 🔥 Crear cuota BONO BPP / Buen Pagador (si existe)
+            if ($bppBonus > 0) {
+                \Modules\Sales\Models\PaymentSchedule::create([
+                    'contract_id' => $contract->contract_id,
+                    'installment_number' => $installmentNumber++,
+                    'due_date' => $baseDate->copy()->addMonths($initialInstallments + $financingInstallments + 1)->toDateString(),
+                    'amount' => $bppBonus,
+                    'status' => 'pendiente',
+                    'type' => 'bono_bpp',
+                    'currency' => $contract->currency,
+                    'notes' => 'Bono Buen Pagador'
+                ]);
+                
+                Log::info('[ExternalLotImport] 🎁 Cuota BPP agregada', [
+                    'contract_id' => $contract->contract_id,
+                    'amount' => $bppBonus
+                ]);
+            }
 
-            Log::info('[ExternalLotImport] Cuotas generadas automáticamente', [
+            Log::info('[ExternalLotImport] ✅ Cuotas generadas completas', [
                 'contract_id' => $contract->contract_id,
                 'total_installments' => $totalInstallments,
                 'initial_installments' => $initialInstallments,
-                'financing_installments' => $financingInstallments
+                'financing_installments' => $financingInstallments,
+                'balloon_payment' => $balloonPayment > 0 ? 'Sí' : 'No',
+                'bpp_bonus' => $bppBonus > 0 ? 'Sí' : 'No',
+                'total_cuotas_generadas' => $installmentNumber - 1
             ]);
 
         } catch (Exception $e) {
@@ -798,5 +914,213 @@ class ExternalLotImportService
                 'error' => $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Buscar asesor por nombre usando algoritmo de score-based matching
+     * Mismo algoritmo que LogicwareContractImporter
+     * 
+     * @param string|null $sellerName Nombre del vendedor desde Logicware (ej: "PAOLA CANDELA")
+     * @return \Modules\HumanResources\Models\Employee|null
+     */
+    protected function findAdvisorByName(?string $sellerName)
+    {
+        if (!$sellerName) {
+            return null;
+        }
+
+        // Limpiar y separar nombre
+        $sellerName = trim($sellerName);
+        $sellerParts = array_filter(explode(' ', strtoupper($sellerName)));
+
+        Log::debug('[ExternalLotImport] 🔍 Buscando asesor', [
+            'seller_from_api' => $sellerName,
+            'seller_parts' => $sellerParts
+        ]);
+
+        // Obtener todos los empleados con usuario
+        $allAdvisors = \Modules\HumanResources\Models\Employee::whereHas('user')->with('user')->get();
+        $bestMatch = null;
+        $bestScore = 0;
+
+        foreach ($allAdvisors as $advisor) {
+            $firstName = strtoupper($advisor->user->first_name ?? '');
+            $lastName = strtoupper($advisor->user->last_name ?? '');
+            $advisorFullName = trim($firstName . ' ' . $lastName);
+            $advisorParts = array_filter(explode(' ', $advisorFullName));
+            
+            $score = 0;
+            $matchedParts = 0;
+            
+            // Calcular score: buscar cada parte del seller en el advisor
+            foreach ($sellerParts as $sellerPart) {
+                $foundExactMatch = false;
+                $foundPartialMatch = false;
+                
+                foreach ($advisorParts as $advisorPart) {
+                    // Coincidencia exacta de palabra completa (mayor peso)
+                    if ($advisorPart === $sellerPart) {
+                        $score += 100;
+                        $foundExactMatch = true;
+                        $matchedParts++;
+                        break;
+                    }
+                    // Coincidencia como substring (menor peso)
+                    elseif (stripos($advisorPart, $sellerPart) !== false) {
+                        $score += 50;
+                        $foundPartialMatch = true;
+                        $matchedParts++;
+                        break;
+                    }
+                }
+                
+                // Si es parte del first_name o last_name directamente
+                if (!$foundExactMatch && !$foundPartialMatch) {
+                    if (stripos($firstName, $sellerPart) !== false) {
+                        $score += 30;
+                        $matchedParts++;
+                    } elseif (stripos($lastName, $sellerPart) !== false) {
+                        $score += 30;
+                        $matchedParts++;
+                    }
+                }
+            }
+            
+            // BONUS CRÍTICO: Si todas las partes del seller coinciden
+            if ($matchedParts === count($sellerParts)) {
+                $score += 500;
+            }
+            
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestMatch = $advisor;
+            }
+        }
+
+        // Requerir score mínimo
+        if (!$bestMatch || $bestScore < 100) {
+            Log::warning('[ExternalLotImport] ❌ Asesor NO encontrado (score insuficiente)', [
+                'seller_name' => $sellerName,
+                'best_score' => $bestScore,
+                'required_score' => 100
+            ]);
+            return null;
+        }
+
+        Log::info('[ExternalLotImport] ✅ Asesor vinculado con score-based matching', [
+            'employee_id' => $bestMatch->employee_id,
+            'user_name' => ($bestMatch->user->first_name ?? '') . ' ' . ($bestMatch->user->last_name ?? ''),
+            'seller_from_api' => $sellerName,
+            'match_score' => $bestScore
+        ]);
+
+        return $bestMatch;
+    }
+
+    /**
+     * Sincronizar cronograma de pagos desde Logicware usando el endpoint /external/payment-schedules/{correlative}
+     * Este método reemplaza generatePaymentSchedule() para obtener los datos reales de Logicware
+     * 
+     * @param \Modules\Sales\Models\Contract $contract
+     * @param string $correlative Número de correlativo del contrato en Logicware
+     * @return void
+     * @throws Exception
+     */
+    protected function syncPaymentScheduleFromLogicware($contract, string $correlative): void
+    {
+        Log::info('[ExternalLotImport] 🔄 Sincronizando cronograma desde Logicware', [
+            'contract_id' => $contract->contract_id,
+            'correlative' => $correlative
+        ]);
+
+        try {
+            // Obtener cronograma completo desde Logicware con timeout extendido
+            $scheduleData = $this->apiService->getPaymentSchedule($correlative, false);
+            
+            if (!isset($scheduleData['data']['installments']) || !is_array($scheduleData['data']['installments'])) {
+                Log::warning('[ExternalLotImport] No se recibieron installments desde Logicware', [
+                    'response_keys' => array_keys($scheduleData['data'] ?? [])
+                ]);
+                throw new Exception('No se recibieron installments desde Logicware');
+            }
+        } catch (\Exception $e) {
+            Log::error('[ExternalLotImport] Error obteniendo cronograma desde Logicware', [
+                'correlative' => $correlative,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+
+        $installments = $scheduleData['data']['installments'];
+        $totalInstallments = count($installments);
+        $createdCount = 0;
+        $paidCount = 0;
+
+        Log::info('[ExternalLotImport] Cuotas recibidas desde Logicware', [
+            'total' => $totalInstallments
+        ]);
+
+        foreach ($installments as $inst) {
+            // 🎯 DETECCIÓN INTELIGENTE DE TIPO POR ETIQUETA
+            $label = strtolower($inst['label'] ?? '');
+            $type = 'otro';
+
+            if (strpos($label, 'inicial') !== false || 
+                strpos($label, 'separación') !== false || 
+                strpos($label, 'reserva') !== false) {
+                $type = 'inicial';
+            } elseif (strpos($label, 'balon') !== false || 
+                      strpos($label, 'balón') !== false) {
+                $type = 'balon';  // 🎈 CUOTA BALÓN
+            } elseif (strpos($label, 'pagador') !== false || 
+                      strpos($label, 'bpp') !== false || 
+                      strpos($label, 'buen pagador') !== false) {
+                $type = 'bono_bpp';  // 🎁 BONO BPP
+            } elseif (strpos($label, 'financiar') !== false || 
+                      strpos($label, 'cuota') !== false) {
+                $type = 'financiamiento';
+            }
+
+            // 💰 DETECCIÓN DE ESTADO DE PAGO
+            $totalPaid = $this->parseNumericValue($inst['totalPaidAmount'] ?? 0);
+            $payment = $this->parseNumericValue($inst['payment'] ?? 0);
+            $remainingBalance = $this->parseNumericValue($inst['remainingBalance'] ?? $payment);
+            
+            $isPaid = $totalPaid >= $payment || 
+                      $remainingBalance == 0 || 
+                      strtoupper($inst['status'] ?? '') === 'PAID';
+            
+            $status = $isPaid ? 'pagado' : 'pendiente';
+
+            if ($isPaid) {
+                $paidCount++;
+            }
+
+            // 📝 CREAR REGISTRO DE CUOTA
+            \Modules\Sales\Models\PaymentSchedule::create([
+                'contract_id' => $contract->contract_id,
+                'installment_number' => (int)($inst['installmentNumber'] ?? 0),
+                'due_date' => $inst['dueDate'] ? \Carbon\Carbon::parse($inst['dueDate'])->toDateString() : null,
+                'amount' => $payment,
+                'status' => $status,
+                'type' => $type,
+                'currency' => $contract->currency ?? 'PEN',
+                'notes' => $inst['label'] ?? null,
+                'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
+                'logicware_paid_amount' => $totalPaid > 0 ? $totalPaid : null,
+                'paid_date' => ($isPaid && isset($inst['paymentDate'])) 
+                    ? \Carbon\Carbon::parse($inst['paymentDate'])->toDateString() 
+                    : null
+            ]);
+
+            $createdCount++;
+        }
+
+        Log::info('[ExternalLotImport] ✅ Cronograma sincronizado desde Logicware', [
+            'contract_id' => $contract->contract_id,
+            'total_cuotas' => $createdCount,
+            'cuotas_pagadas' => $paidCount,
+            'cuotas_pendientes' => $createdCount - $paidCount
+        ]);
     }
 }

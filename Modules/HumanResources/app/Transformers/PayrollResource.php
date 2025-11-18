@@ -18,18 +18,39 @@ class PayrollResource extends JsonResource
             'pay_period_start' => $this->pay_period_start?->format('Y-m-d'),
             'pay_period_end' => $this->pay_period_end?->format('Y-m-d'),
             'pay_date' => $this->pay_date?->format('Y-m-d'),
+            
+            // Ingresos
             'base_salary' => $this->base_salary,
+            'family_allowance' => $this->family_allowance,
             'commissions_amount' => $this->commissions_amount,
             'bonuses_amount' => $this->bonuses_amount,
             'overtime_amount' => $this->overtime_amount,
             'other_income' => $this->other_income,
             'gross_salary' => $this->gross_salary,
-            'income_tax' => $this->income_tax,
-            'social_security' => $this->social_security,
-            'health_insurance' => $this->health_insurance,
+            
+            // Sistema Pensionario
+            'pension_system' => $this->pension_system,
+            'afp_provider' => $this->afp_provider,
+            'afp_contribution' => $this->afp_contribution,
+            'afp_commission' => $this->afp_commission,
+            'afp_insurance' => $this->afp_insurance,
+            'onp_contribution' => $this->onp_contribution,
+            'total_pension' => $this->total_pension,
+            
+            // Impuesto a la Renta
+            'rent_tax_5th' => $this->rent_tax_5th,
+            
+            // Seguro de Salud
+            'employee_essalud' => $this->employee_essalud,
+            
+            // Aportaciones del Empleador (informativo)
+            'employer_essalud' => $this->employer_essalud,
+            
+            // Deducciones y Neto
             'other_deductions' => $this->other_deductions,
             'total_deductions' => $this->total_deductions,
             'net_salary' => $this->net_salary,
+            
             'currency' => $this->currency,
             'status' => $this->status,
             'approved_at' => $this->approved_at?->format('Y-m-d H:i:s'),

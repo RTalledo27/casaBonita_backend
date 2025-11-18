@@ -5,10 +5,12 @@ namespace Modules\HumanResources\Services;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Modules\HumanResources\Models\Employee;
 use Carbon\Carbon;
 use Exception;
 use Modules\Security\Models\User;
+use App\Mail\NewUserCredentialsMail;
 
 class EmployeeImportService
 {
@@ -21,7 +23,9 @@ class EmployeeImportService
             'success' => 0,
             'errors' => [],
             'created_users' => [],
-            'created_employees' => []
+            'created_employees' => [],
+            'emails_sent' => 0,
+            'emails_failed' => []
         ];
 
         DB::beginTransaction();
@@ -41,6 +45,9 @@ class EmployeeImportService
                     // Procesar datos del empleado
                     $processedData = $this->processRowData($row);
                     
+                    // Guardar la contraseña temporal antes de hashearla
+                    $temporaryPassword = '123456'; // Contraseña por defecto
+                    
                     // Crear usuario
                     $user = $this->createUser($processedData['user_data']);
                     $results['created_users'][] = $user->user_id;
@@ -48,6 +55,20 @@ class EmployeeImportService
                     // Crear empleado
                     $employee = $this->createEmployee($processedData['employee_data'], $user->user_id);
                     $results['created_employees'][] = $employee->employee_id;
+                    
+                    // Enviar correo con credenciales
+                    try {
+                        $this->sendWelcomeEmail($user, $temporaryPassword);
+                        $results['emails_sent']++;
+                        Log::info("Email enviado exitosamente a: {$user->email}");
+                    } catch (Exception $emailError) {
+                        $results['emails_failed'][] = "Fila {$rowNumber}: Error al enviar email a {$user->email} - {$emailError->getMessage()}";
+                        Log::error("Error enviando email de bienvenida", [
+                            'user_id' => $user->user_id,
+                            'email' => $user->email,
+                            'error' => $emailError->getMessage()
+                        ]);
+                    }
                     
                     $results['success']++;
                     
@@ -469,5 +490,17 @@ class EmployeeImportService
         }
         
         return ['valid' => true];
+    }
+
+    /**
+     * Enviar email de bienvenida con credenciales
+     */
+    private function sendWelcomeEmail(User $user, string $temporaryPassword): void
+    {
+        $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
+        
+        Mail::to($user->email)->send(
+            new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl)
+        );
     }
 }

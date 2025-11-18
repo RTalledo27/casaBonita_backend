@@ -67,25 +67,47 @@ class PayrollController extends Controller
     public function generate(Request $request): JsonResponse
     {
         $request->validate([
-            'employee_id' => 'nullable|integer|exists:employees,employee_id',
+            'employee_ids' => 'nullable|array',
+            'employee_ids.*' => 'integer|exists:employees,employee_id',
+            'employee_id' => 'nullable|integer|exists:employees,employee_id', // Backward compatibility
             'month' => 'required|integer|min:1|max:12',
-            'year' => 'required|integer|min:2020|max:2030'
+            'year' => 'required|integer|min:2020|max:2030',
+            'pay_date' => 'required|date',
+            'include_commissions' => 'boolean',
+            'include_bonuses' => 'boolean',
+            'include_overtime' => 'boolean'
         ]);
 
         try {
-            if ($request->employee_id) {
-                $payroll = $this->payrollService->generatePayrollForEmployee(
-                    $request->employee_id,
+            // Determinar los IDs de empleados a procesar
+            $employeeIds = $request->employee_ids ?? ($request->employee_id ? [$request->employee_id] : null);
+
+            if ($employeeIds) {
+                // Generar nóminas para empleados específicos (BATCH)
+                $result = $this->payrollService->generatePayrollBatch(
+                    $employeeIds,
                     $request->month,
-                    $request->year
+                    $request->year,
+                    $request->pay_date,
+                    $request->boolean('include_commissions', true),
+                    $request->boolean('include_bonuses', true),
+                    $request->boolean('include_overtime', true)
                 );
 
                 return response()->json([
                     'success' => true,
-                    'data' => new PayrollResource($payroll->load(['employee.user'])),
-                    'message' => 'Nómina generada exitosamente'
-                ]);
+                    'data' => [
+                        'payrolls' => PayrollResource::collection(collect($result['success'])->map(fn($p) => $p->load(['employee.user']))),
+                        'successful' => count($result['success']),
+                        'failed' => count($result['failed']),
+                        'errors' => $result['failed']
+                    ],
+                    'message' => count($result['success']) > 0 
+                        ? "Se generaron {$result['successful_count']} nóminas exitosamente" 
+                        : 'No se pudieron generar las nóminas'
+                ], count($result['success']) > 0 ? 200 : 400);
             } else {
+                // Generar para TODOS los empleados
                 $payrolls = $this->payrollService->generatePayrollForAllEmployees(
                     $request->month,
                     $request->year

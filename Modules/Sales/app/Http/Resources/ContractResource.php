@@ -45,6 +45,24 @@ class ContractResource extends JsonResource
             'reservation' => new ReservationResource($this->whenLoaded('reservation')),
             'advisor' => new EmployeeResource($this->whenLoaded('advisor')),
             'previous_contract' => new ContractResource($this->whenLoaded('previousContract')),
+            'client' => $this->whenLoaded('client', function() {
+                return [
+                    'client_id' => $this->client->client_id,
+                    'first_name' => $this->client->first_name,
+                    'last_name' => $this->client->last_name,
+                    'doc_type' => $this->client->doc_type,
+                    'doc_number' => $this->client->doc_number,
+                    'email' => $this->client->email,
+                    'primary_phone' => $this->client->primary_phone,
+                ];
+            }),
+            
+            // Información del lote (usando métodos del modelo)
+            'lot_name' => $this->getLotName() ?? 'N/A',
+            'manzana_name' => $this->getManzanaName() ?? 'No especificado',
+            'area_m2' => $this->getArea() ?? null,
+            'client_name' => $this->getClientName(),
+            'advisor_name' => $this->getAdvisor() ? ($this->getAdvisor()->user->first_name ?? '') . ' ' . ($this->getAdvisor()->user->last_name ?? '') : 'Sin asesor',
         ];
     }
 }

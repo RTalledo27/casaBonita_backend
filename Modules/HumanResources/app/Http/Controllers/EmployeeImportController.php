@@ -177,7 +177,9 @@ class EmployeeImportController
                     'imported' => $result['success'],
                     'errors' => $result['errors'],
                     'created_users' => $result['created_users'],
-                    'created_employees' => $result['created_employees']
+                    'created_employees' => $result['created_employees'],
+                    'emails_sent' => $result['emails_sent'] ?? 0,
+                    'emails_failed' => $result['emails_failed'] ?? []
                 ]
             ], $statusCode);
 
@@ -196,14 +198,29 @@ class EmployeeImportController
     {
         $imported = $result['success'];
         $errors = count($result['errors']);
+        $emailsSent = $result['emails_sent'] ?? 0;
+        $emailsFailed = count($result['emails_failed'] ?? []);
+        
+        $message = '';
         
         if ($imported > 0 && $errors === 0) {
-            return "Se importaron exitosamente {$imported} empleados.";
+            $message = "Se importaron exitosamente {$imported} empleados.";
         } elseif ($imported > 0 && $errors > 0) {
-            return "Se importaron {$imported} empleados con {$errors} errores.";
+            $message = "Se importaron {$imported} empleados con {$errors} errores.";
         } else {
-            return "No se pudo importar ningún empleado. Revisa los errores.";
+            $message = "No se pudo importar ningún empleado. Revisa los errores.";
         }
+        
+        // Agregar información sobre emails
+        if ($emailsSent > 0) {
+            $message .= " Se enviaron {$emailsSent} correos de bienvenida.";
+        }
+        
+        if ($emailsFailed > 0) {
+            $message .= " {$emailsFailed} correos no pudieron ser enviados.";
+        }
+        
+        return $message;
     }
 
     /**

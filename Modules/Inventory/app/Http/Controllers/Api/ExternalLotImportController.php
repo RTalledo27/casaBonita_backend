@@ -285,11 +285,19 @@ class ExternalLotImportController extends Controller
     public function importSales(Request $request): JsonResponse
     {
         try {
+            // Aumentar tiempo de ejecución para importaciones grandes
+            set_time_limit(300); // 5 minutos
+            ini_set('max_execution_time', '300');
+            
             $startDate = $request->input('startDate');
             $endDate = $request->input('endDate');
             $forceRefresh = $request->boolean('force_refresh', false);
 
-            Log::info('[ExternalLotImportController] Importando ventas', ['start' => $startDate, 'end' => $endDate, 'force' => $forceRefresh]);
+            Log::info('[ExternalLotImportController] Importando ventas (timeout extendido a 300s)', [
+                'start' => $startDate, 
+                'end' => $endDate, 
+                'force' => $forceRefresh
+            ]);
 
             $result = $this->importService->importSales($startDate, $endDate, $forceRefresh);
 

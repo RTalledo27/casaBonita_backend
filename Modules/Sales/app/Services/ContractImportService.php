@@ -2127,8 +2127,10 @@ class ContractImportService
     private function findLotWithFinancialTemplate(array $data): ?Lot
     {
         try {
-            // Convertir nombre de manzana a ID con mapeo
+            $lotNumber = $data['lot_number'];
             $manzanaName = $data['lot_manzana'];
+            
+            // Convertir nombre de manzana a ID con mapeo
             $mappedManzanaName = $this->mapManzanaName($manzanaName);
             
             $manzana = \Modules\Inventory\Models\Manzana::where('name', $mappedManzanaName)->first();
@@ -2142,15 +2144,40 @@ class ContractImportService
                 return null;
             }
             
-            $lot = Lot::where('num_lot', $data['lot_number'])
+            // 1. Búsqueda exacta por num_lot y manzana_id
+            $lot = Lot::where('num_lot', $lotNumber)
                      ->where('manzana_id', $manzana->manzana_id)
                      ->first();
             
+            // 2. Si no se encuentra, buscar por external_code (para lotes de Logicware)
             if (!$lot) {
-                Log::warning('Lote no encontrado', [
-                    'numero' => $data['lot_number'],
-                    'manzana_name' => $manzanaName,
+                Log::info('Lote no encontrado por num_lot, buscando por external_code', [
+                    'num_lot' => $lotNumber,
                     'manzana_id' => $manzana->manzana_id
+                ]);
+                
+                $lot = Lot::where('external_code', $lotNumber)
+                         ->where('manzana_id', $manzana->manzana_id)
+                         ->first();
+            }
+            
+            // 3. Si aún no se encuentra, buscar SIN filtrar por manzana (solo num_lot o external_code)
+            if (!$lot) {
+                Log::info('Lote no encontrado con manzana específica, buscando sin filtro de manzana', [
+                    'num_lot' => $lotNumber
+                ]);
+                
+                $lot = Lot::where('num_lot', $lotNumber)
+                         ->orWhere('external_code', $lotNumber)
+                         ->first();
+            }
+            
+            if (!$lot) {
+                Log::warning('Lote no encontrado por ningún método', [
+                    'numero' => $lotNumber,
+                    'manzana_name' => $manzanaName,
+                    'manzana_id' => $manzana->manzana_id,
+                    'searched_by' => ['num_lot', 'external_code']
                 ]);
                 return null;
             }
@@ -2160,10 +2187,18 @@ class ContractImportService
                 Log::warning('Lote sin template financiero', [
                     'lot_id' => $lot->lot_id,
                     'numero' => $lot->num_lot,
-                    'manzana' => $lot->manzana
+                    'external_code' => $lot->external_code,
+                    'manzana' => $lot->manzana ? $lot->manzana->name : 'N/A'
                 ]);
                 return null;
             }
+            
+            Log::info('Lote encontrado exitosamente', [
+                'lot_id' => $lot->lot_id,
+                'num_lot' => $lot->num_lot,
+                'external_code' => $lot->external_code,
+                'manzana' => $lot->manzana ? $lot->manzana->name : 'N/A'
+            ]);
             
             return $lot;
             
@@ -2336,19 +2371,46 @@ class ContractImportService
             }
         }
         
-        // Buscar por nombre del usuario asociado usando CONCAT
+        // Buscar por nombre del usuario asociado - BÚSQUEDA MEJORADA Y FLEXIBLE
         if (!empty($data['asesor_nombre'])) {
-            $advisor = Employee::with('user')->whereHas('user', function($q) use ($data) {
-                $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ['%' . $data['asesor_nombre'] . '%'])
-                  ->orWhere('first_name', 'LIKE', '%' . $data['asesor_nombre'] . '%')
-                  ->orWhere('last_name', 'LIKE', '%' . $data['asesor_nombre'] . '%');
+            $searchName = trim($data['asesor_nombre']);
+            
+            // 1. Búsqueda exacta por nombre completo
+            $advisor = Employee::with('user')->whereHas('user', function($q) use ($searchName) {
+                $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$searchName}%"]);
             })->first();
+            
             if ($advisor) {
-                Log::info('findAdvisorSimplified - Asesor encontrado por nombre', [
-                    'asesor_nombre' => $data['asesor_nombre'],
-                    'advisor_id' => $advisor->employee_id
+                Log::info('findAdvisorSimplified - Asesor encontrado por nombre completo', [
+                    'asesor_nombre' => $searchName,
+                    'advisor_id' => $advisor->employee_id,
+                    'advisor_full_name' => $advisor->user->first_name . ' ' . $advisor->user->last_name
                 ]);
                 return $advisor;
+            }
+            
+            // 2. Búsqueda parcial: dividir nombre y buscar coincidencias
+            $nameParts = array_filter(explode(' ', $searchName));
+            
+            if (count($nameParts) >= 2) {
+                // Buscar donde CUALQUIER parte del nombre coincida
+                $advisor = Employee::with('user')->whereHas('user', function($q) use ($nameParts) {
+                    $q->where(function($query) use ($nameParts) {
+                        foreach ($nameParts as $part) {
+                            $query->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$part}%"]);
+                        }
+                    });
+                })->first();
+                
+                if ($advisor) {
+                    Log::info('findAdvisorSimplified - Asesor encontrado por coincidencia parcial', [
+                        'asesor_nombre' => $searchName,
+                        'searched_parts' => $nameParts,
+                        'advisor_id' => $advisor->employee_id,
+                        'advisor_full_name' => $advisor->user->first_name . ' ' . $advisor->user->last_name
+                    ]);
+                    return $advisor;
+                }
             }
         }
         

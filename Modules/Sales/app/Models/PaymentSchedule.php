@@ -23,7 +23,12 @@ class PaymentSchedule extends Model
         'due_date',
         'amount',
         'status',
-        'notes'
+        'notes',
+        'type',
+        'currency',
+        'paid_date',
+        'logicware_schedule_det_id',
+        'logicware_paid_amount'
     ];
 
     // protected static function newFactory(): PaymentSheduleFactory
