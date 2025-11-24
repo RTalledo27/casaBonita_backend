@@ -17,7 +17,8 @@ class CommissionService
 {
     public function __construct(
         protected CommissionRepository $commissionRepo,
-        protected EmployeeRepository $employeeRepo
+        protected EmployeeRepository $employeeRepo,
+        protected CommissionEvaluator $commissionEvaluator
     ) {}
 
     public function processCommissionsForPeriod(int $month, int $year): array
@@ -38,16 +39,19 @@ class CommissionService
                 try {
                     $commissionData = $this->calculateCommissionFromTemplate($contract);
                 } catch (Exception $e) {
-                    // Fallback a datos del contrato si no hay template
+                        // Fallback a datos del contrato si no hay template
                     // Usar la misma lógica de tabla de rangos que calculateCommissionFromTemplate
-                    $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
-                    $commissionRatePercent = $this->getCommissionRate($salesCount, $contract->term_months);
+                        $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
+                        $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
+                        $contractDate = $contract->sign_date ? $contract->sign_date->toDateString() : null;
+                        $commissionRatePercent = $this->getCommissionRate($salesCount, $contract->term_months, $saleType, $contractDate);
                     $commissionRate = $commissionRatePercent / 100; // Convertir a decimal para consistencia
                     
+                    $baseAmount = $contract->total_price ?? $contract->financing_amount;
                     $commissionData = [
-                        'commission_amount' => $contract->financing_amount * $commissionRate,
+                        'commission_amount' => $baseAmount * $commissionRate,
                         'commission_rate' => $commissionRate,
-                        'financing_amount' => $contract->financing_amount,
+                        'financing_amount' => $baseAmount,
                         'term_months' => $contract->term_months,
                         'template_id' => null,
                         'template_version' => null,
@@ -109,14 +113,18 @@ class CommissionService
             return 0;
         }
 
-        $baseAmount = $contract->financing_amount;
+        $baseAmount = $contract->total_price ?? $contract->financing_amount;
         $termMonths = $contract->term_months;
         
         // Contar ventas financiadas del asesor en el mismo período
         $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
         
-        // Determinar el porcentaje según la tabla de comisiones
-        $commissionRate = $this->getCommissionRate($salesCount, $termMonths);
+        // Determinar tipo de venta (derivado del contrato)
+        $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
+
+        // Determinar el porcentaje según la tabla de comisiones (pasando la fecha del contrato)
+        $contractDate = $contract->sign_date ? $contract->sign_date->toDateString() : null;
+        $commissionRate = $this->getCommissionRate($salesCount, $termMonths, $saleType, $contractDate);
         
         return $baseAmount * ($commissionRate / 100);
     }
@@ -152,21 +160,24 @@ class CommissionService
         $template = $lot->lotFinancialTemplate;
         
         // Usar datos del template como fuente única de verdad
-        $financingAmount = $template->financing_amount;
+        // 🔥 CAMBIO: Usar precio_venta (precio total) como base para la comisión, no solo el financiado
+        $baseAmount = $template->precio_venta ?? $template->financing_amount;
         $termMonths = $template->term_months;
         
         // Contar ventas financiadas del asesor para determinar la tasa correcta
         $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
-        
-        // Usar la tabla de rangos por número de ventas (NO el método de porcentajes fijos por plazo)
-        $commissionRatePercent = $this->getCommissionRate($salesCount, $termMonths); // Mantener como porcentaje
+        $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
+        $contractDate = $contract->sign_date ? $contract->sign_date->toDateString() : null;
+
+        // Usar la tabla de rangos por número de ventas (pasando la fecha del contrato)
+        $commissionRatePercent = $this->getCommissionRate($salesCount, $termMonths, $saleType, $contractDate);
         $commissionRateDecimal = $commissionRatePercent / 100; // Convertir a decimal para cálculo
-        $commissionAmount = $financingAmount * $commissionRateDecimal;
+        $commissionAmount = $baseAmount * $commissionRateDecimal;
         
         return [
             'commission_amount' => $commissionAmount,
             'commission_rate' => $commissionRatePercent, // Guardar como porcentaje
-            'financing_amount' => $financingAmount,
+            'financing_amount' => $baseAmount, // Usamos el monto base (total) para referencia
             'term_months' => $termMonths,
             'sales_count' => $salesCount,
             'template_id' => $template->id,
@@ -177,12 +188,28 @@ class CommissionService
 
     /**
       * Determina el porcentaje de comisión según la tabla de rangos
+      * 
+      * @param int $salesCount Número de ventas del asesor en el período
+      * @param int $termMonths Plazo en meses del financiamiento
+      * @param string|null $saleType Tipo de venta: 'cash', 'financed', o null
+      * @param string|null $asOfDate Fecha del contrato (YYYY-MM-DD) para selección temporal de esquemas
+      * @return float Porcentaje de comisión
       */
-    private function getCommissionRate(int $salesCount, int $termMonths): float
+    private function getCommissionRate(int $salesCount, int $termMonths, ?string $saleType = null, ?string $asOfDate = null): float
     {
-        // Determinar si es plazo corto (12/24/36) o largo (48/60)
+        // Intentar usar el evaluador dinámico si está disponible
+        try {
+            $evaluated = $this->commissionEvaluator->evaluate($salesCount, $termMonths, $asOfDate, $saleType);
+            if (is_array($evaluated) && isset($evaluated['percentage'])) {
+                return (float)$evaluated['percentage'];
+            }
+        } catch (\Throwable $e) {
+            // No interrumpir: caemos al fallback hardcoded
+        }
+
+        // Fallback: Determinar si es plazo corto (12/24/36) o largo (48/60)
         $isShortTerm = in_array($termMonths, [12, 24, 36]);
-        
+
         if ($salesCount >= 10) {
             return $isShortTerm ? 4.20 : 3.00;
         } elseif ($salesCount >= 8) {
@@ -226,6 +253,18 @@ class CommissionService
         string $calculationDate = null
     ): array {
         $commissions = [];
+        $schemeId = null;
+        $ruleId = null;
+        try {
+            $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
+            $evaluated = $this->commissionEvaluator->evaluate($salesCount, $contract->term_months, $calculationDate, $saleType);
+            if (is_array($evaluated)) {
+                $schemeId = $evaluated['scheme_id'] ?? null;
+                $ruleId = $evaluated['rule_id'] ?? null;
+            }
+        } catch (\Throwable $e) {
+            // ignore and fallback
+        }
         
         // Validación adicional: verificar que no exista una comisión PADRE para este contrato/empleado/período
         $existingParentCount = Commission::where('contract_id', $contract->contract_id)
@@ -281,7 +320,7 @@ class CommissionService
                 'employee_id' => $contract->advisor_id,
                 'contract_id' => $contract->contract_id,
                 'commission_type' => 'venta_financiada',
-                'sale_amount' => $contract->financing_amount,
+                'sale_amount' => $contract->total_price,  // 🔥 PRECIO FINAL pagado por el cliente (después de descuento)
                 'installment_plan' => $contract->term_months,
                 'commission_percentage' => $commissionRate,
                 'commission_amount' => $totalAmount,
@@ -300,6 +339,9 @@ class CommissionService
                 'financial_source' => $financialSource,
                 'template_version_id' => $templateVersionId,
                 'calculation_date' => $calculationDate,
+                'commission_scheme_id' => $schemeId,
+                'commission_rule_id' => $ruleId,
+                'applied_at' => $calculationDate,
                 'notes' => "Comisión por venta financiada - {$salesCount} ventas - Total: $" . number_format($totalAmount, 2)
             ]);
             
@@ -325,7 +367,7 @@ class CommissionService
                 'employee_id' => $contract->advisor_id,
                 'contract_id' => $contract->contract_id,
                 'commission_type' => 'venta_financiada',
-                'sale_amount' => $contract->financing_amount,
+                'sale_amount' => $contract->total_price,  // 🔥 PRECIO FINAL pagado por el cliente (después de descuento)
                 'installment_plan' => $contract->term_months,
                 'commission_percentage' => $commissionRate,
                 'commission_amount' => round($firstAmount, 2),
@@ -344,6 +386,9 @@ class CommissionService
                 'financial_source' => $financialSource,
                 'template_version_id' => $templateVersionId,
                 'calculation_date' => $calculationDate,
+                'commission_scheme_id' => $schemeId,
+                'commission_rule_id' => $ruleId,
+                'applied_at' => $calculationDate,
                 'notes' => "Pago dividido 1/2 - {$firstPaymentPercentage}% - Período: {$firstPaymentPeriod}"
             ]);
             
@@ -366,7 +411,7 @@ class CommissionService
                 'employee_id' => $contract->advisor_id,
                 'contract_id' => $contract->contract_id,
                 'commission_type' => 'venta_financiada',
-                'sale_amount' => $contract->financing_amount,
+                'sale_amount' => $contract->total_price,  // 🔥 PRECIO FINAL pagado por el cliente (después de descuento)
                 'installment_plan' => $contract->term_months,
                 'commission_percentage' => $commissionRate,
                 'commission_amount' => round($secondAmount, 2),
@@ -385,6 +430,9 @@ class CommissionService
                 'financial_source' => $financialSource,
                 'template_version_id' => $templateVersionId,
                 'calculation_date' => $calculationDate,
+                'commission_scheme_id' => $schemeId,
+                'commission_rule_id' => $ruleId,
+                'applied_at' => $calculationDate,
                 'notes' => "Pago dividido 2/2 - {$secondPaymentPercentage}% - Período: {$secondPaymentPeriod}"
             ]);
             
