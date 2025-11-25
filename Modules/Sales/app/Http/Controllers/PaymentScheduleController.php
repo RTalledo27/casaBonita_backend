@@ -360,7 +360,7 @@ class PaymentScheduleController extends Controller
                 'contract_id' => 'sometimes|integer|exists:contracts,contract_id'
             ]);
 
-            $query = PaymentSchedule::with(['contract.reservation.client', 'contract.reservation.lot']);
+            $query = PaymentSchedule::with(['contract.reservation.client', 'contract.reservation.lot', 'contract.client']);
 
             // Apply filters
             if ($request->has('due_date_from')) {
@@ -379,34 +379,32 @@ class PaymentScheduleController extends Controller
                 $query->where('contract_id', $request->input('contract_id'));
             }
 
-            $schedules = $query->orderBy('due_date')->get();
+            $schedules = $query->get();
 
-            // Calculate summary statistics
-            // Note: amount_paid is often NULL, so we use amount for paid schedules
+            // Calculate amounts dynamically based on due_date
+            $today = Carbon::now()->startOfDay();
+
+            // Schedules that are paid
             $paidSchedules = $schedules->where('status', 'pagado');
             $paidAmount = $paidSchedules->sum(function($schedule) {
                 return $schedule->amount_paid ?? $schedule->amount;
             });
 
-            $today = now()->startOfDay();
-            
-            // Calculate overdue: pendiente/vencido with due_date < today
+            //  Overdue: pending/overdue status AND due_date is before today
             $overdueSchedules = $schedules->filter(function($schedule) use ($today) {
                 return in_array($schedule->status, ['pendiente', 'vencido']) 
                     && $schedule->due_date 
-                    && \Carbon\Carbon::parse($schedule->due_date)->lt($today);
+                    && Carbon::parse($schedule->due_date)->lt($today);
             });
-            
             $overdueAmount = $overdueSchedules->sum('amount');
             $overdueCount = $overdueSchedules->count();
 
-            // Pending: pendiente with due_date >= today
+            // Pending: pending status AND due_date is today or future
             $pendingSchedules = $schedules->filter(function($schedule) use ($today) {
                 return $schedule->status === 'pendiente' 
                     && $schedule->due_date 
-                    && \Carbon\Carbon::parse($schedule->due_date)->gte($today);
+                    && Carbon::parse($schedule->due_date)->gte($today);
             });
-            
             $pendingAmount = $pendingSchedules->sum('amount');
             $pendingCount = $pendingSchedules->count();
 
@@ -441,14 +439,14 @@ class PaymentScheduleController extends Controller
 
             // Format schedules data
             $schedulesData = $schedules->map(function($schedule) {
-                // Get client - try from contract first, then reservation
+                // Get client - try multiple paths
                 $clientName = 'N/A';
                 if ($schedule->contract) {
-                    // If contract has direct client relationship
-                    if ($schedule->contract->client_name) {
-                        $clientName = $schedule->contract->client_name;
-                    } 
-                    // Otherwise try reservation
+                    // Try direct client relationship first (for Logicware contracts)
+                    if ($schedule->contract->client) {
+                        $clientName = $schedule->contract->client->full_name;
+                    }
+                    // Fallback to reservation->client
                     elseif ($schedule->contract->reservation && $schedule->contract->reservation->client) {
                         $clientName = $schedule->contract->reservation->client->full_name;
                     }
