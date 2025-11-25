@@ -382,24 +382,52 @@ class PaymentScheduleController extends Controller
             $schedules = $query->orderBy('due_date')->get();
 
             // Calculate summary statistics
+            // Note: amount_paid is often NULL, so we use amount for paid schedules
+            $paidSchedules = $schedules->where('status', 'pagado');
+            $paidAmount = $paidSchedules->sum(function($schedule) {
+                return $schedule->amount_paid ?? $schedule->amount;
+            });
+
+            $today = now()->startOfDay();
+            
+            // Calculate overdue: pendiente/vencido with due_date < today
+            $overdueSchedules = $schedules->filter(function($schedule) use ($today) {
+                return in_array($schedule->status, ['pendiente', 'vencido']) 
+                    && $schedule->due_date 
+                    && \Carbon\Carbon::parse($schedule->due_date)->lt($today);
+            });
+            
+            $overdueAmount = $overdueSchedules->sum('amount');
+            $overdueCount = $overdueSchedules->count();
+
+            // Pending: pendiente with due_date >= today
+            $pendingSchedules = $schedules->filter(function($schedule) use ($today) {
+                return $schedule->status === 'pendiente' 
+                    && $schedule->due_date 
+                    && \Carbon\Carbon::parse($schedule->due_date)->gte($today);
+            });
+            
+            $pendingAmount = $pendingSchedules->sum('amount');
+            $pendingCount = $pendingSchedules->count();
+
             $summary = [
                 'total_schedules' => $schedules->count(),
                 'total_amount' => $schedules->sum('amount'),
-                'paid_amount' => $schedules->where('status', 'pagado')->sum('amount_paid'),
-                'pending_amount' => $schedules->where('status', 'pendiente')->sum('amount'),
-                'overdue_amount' => $schedules->where('status', 'vencido')->sum('amount'),
+                'paid_amount' => $paidAmount,
+                'pending_amount' => $pendingAmount,
+                'overdue_amount' => $overdueAmount,
                 'by_status' => [
                     'pendiente' => [
-                        'count' => $schedules->where('status', 'pendiente')->count(),
-                        'amount' => $schedules->where('status', 'pendiente')->sum('amount')
+                        'count' => $pendingCount,
+                        'amount' => $pendingAmount
                     ],
                     'pagado' => [
-                        'count' => $schedules->where('status', 'pagado')->count(),
-                        'amount' => $schedules->where('status', 'pagado')->sum('amount_paid')
+                        'count' => $paidSchedules->count(),
+                        'amount' => $paidAmount
                     ],
                     'vencido' => [
-                        'count' => $schedules->where('status', 'vencido')->count(),
-                        'amount' => $schedules->where('status', 'vencido')->sum('amount')
+                        'count' => $overdueCount,
+                        'amount' => $overdueAmount
                     ],
                     'anulado' => [
                         'count' => $schedules->where('status', 'anulado')->count(),
@@ -407,25 +435,49 @@ class PaymentScheduleController extends Controller
                     ]
                 ],
                 'collection_rate' => $schedules->sum('amount') > 0 
-                    ? round(($schedules->where('status', 'pagado')->sum('amount_paid') / $schedules->sum('amount')) * 100, 2)
+                    ? round(($paidAmount / $schedules->sum('amount')) * 100, 2)
                     : 0
             ];
 
             // Format schedules data
             $schedulesData = $schedules->map(function($schedule) {
+                // Get client - try from contract first, then reservation
+                $clientName = 'N/A';
+                if ($schedule->contract) {
+                    // If contract has direct client relationship
+                    if ($schedule->contract->client_name) {
+                        $clientName = $schedule->contract->client_name;
+                    } 
+                    // Otherwise try reservation
+                    elseif ($schedule->contract->reservation && $schedule->contract->reservation->client) {
+                        $clientName = $schedule->contract->reservation->client->full_name;
+                    }
+                }
+                
+                // Get lot number
+                $lotNumber = 'N/A';
+                if ($schedule->contract) {
+                    if ($schedule->contract->lot_number) {
+                        $lotNumber = $schedule->contract->lot_number;
+                    } 
+                    elseif ($schedule->contract->reservation && $schedule->contract->reservation->lot) {
+                        $lotNumber = $schedule->contract->reservation->lot->lot_number;
+                    }
+                }
+                
                 return [
                     'schedule_id' => $schedule->schedule_id,
                     'contract_id' => $schedule->contract_id,
                     'installment_number' => $schedule->installment_number,
                     'due_date' => $schedule->due_date,
                     'amount' => $schedule->amount,
-                    'amount_paid' => $schedule->amount_paid,
+                    'amount_paid' => $schedule->amount_paid ?? $schedule->amount, // Use amount if amount_paid is null
                     'status' => $schedule->status,
                     'payment_date' => $schedule->payment_date,
                     'payment_method' => $schedule->payment_method,
                     'notes' => $schedule->notes,
-                    'client_name' => $schedule->contract?->reservation?->client?->full_name ?? 'N/A',
-                    'lot_number' => $schedule->contract?->reservation?->lot?->lot_number ?? 'N/A',
+                    'client_name' => $clientName,
+                    'lot_number' => $lotNumber,
                     'contract_number' => $schedule->contract?->contract_number ?? 'N/A',
                     'days_overdue' => $schedule->status === 'vencido' && $schedule->due_date 
                         ? now()->diffInDays($schedule->due_date) 
