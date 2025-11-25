@@ -1,0 +1,46 @@
+﻿
+   Illuminate\Database\QueryException 
+
+  SQLSTATE[42S22]: Column not found: 1054 Unknown column 'e.first_name' in 'field list' (Connection: mysql, SQL: 
+    SELECT 
+        c.advisor_id,
+        CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as full_name,
+        COUNT(*) as total_contracts,
+        SUM(CASE WHEN c.status = 'vigente' AND c.financing_amount > 0 THEN 1 ELSE 0 END) as counted_sales
+    FROM contracts c
+    LEFT JOIN employees e ON c.advisor_id = e.employee_id
+    WHERE MONTH(c.sign_date) = 10
+    AND YEAR(c.sign_date) = 2025
+    GROUP BY c.advisor_id, e.first_name, e.last_name
+    ORDER BY counted_sales DESC
+)
+
+  at vendor\laravel\framework\src\Illuminate\Database\Connection.php:825
+    821Ôûò                     $this->getName(), $query, $this->prepareBindings($bindings), $e
+    822Ôûò                 );
+    823Ôûò             }
+    824Ôûò 
+  Ô×£ 825Ôûò             throw new QueryException(
+    826Ôûò                 $this->getName(), $query, $this->prepareBindings($bindings), $e
+    827Ôûò             );
+    828Ôûò         }
+    829Ôûò     }
+
+  1   vendor\laravel\framework\src\Illuminate\Database\Connection.php:407
+      PDOException::("SQLSTATE[42S22]: Column not found: 1054 Unknown column 'e.first_name' in 'field list'")
+
+  2   vendor\laravel\framework\src\Illuminate\Database\Connection.php:407
+      PDO::prepare("
+    SELECT 
+        c.advisor_id,
+        CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as full_name,
+        COUNT(*) as total_contracts,
+        SUM(CASE WHEN c.status = 'vigente' AND c.financing_amount > 0 THEN 1 ELSE 0 END) as counted_sales
+    FROM contracts c
+    LEFT JOIN employees e ON c.advisor_id = e.employee_id
+    WHERE MONTH(c.sign_date) = 10
+    AND YEAR(c.sign_date) = 2025
+    GROUP BY c.advisor_id, e.first_name, e.last_name
+    ORDER BY counted_sales DESC
+")
+

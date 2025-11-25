@@ -44,7 +44,9 @@ class CommissionResource extends JsonResource
                     'contract_number' => $this->contract->contract_number,
                     'total_price' => $this->contract->total_price,
                     'sign_date' => $this->contract->sign_date?->format('Y-m-d'),
-                    'status' => $this->contract->status
+                    'status' => $this->contract->status,
+                    'lot_number' => $this->contract->getLotName(),
+                    'block_number' => $this->contract->getManzanaName()
                 ];
             }),
 

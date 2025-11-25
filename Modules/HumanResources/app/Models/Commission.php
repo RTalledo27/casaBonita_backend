@@ -52,6 +52,10 @@ class Commission extends Model
         'verified_at',
         'verified_amount',
         'eligible_date'
+            ,
+        'commission_scheme_id',
+        'commission_rule_id',
+        'applied_at'
     ];
 
     protected $casts = [
@@ -73,7 +77,13 @@ class Commission extends Model
         'period_end' => 'date',
         'verified_at' => 'datetime',
         'verified_amount' => 'decimal:2'
+            ,
+        'applied_at' => 'datetime'
     ];
+
+        protected $dates = [
+            'applied_at'
+        ];
 
     public function employee()
     {

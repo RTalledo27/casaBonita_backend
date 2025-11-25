@@ -1,0 +1,23 @@
+﻿=== B├ÜSQUEDA POR EMPLOYEE_ID ===
+
+Por favor, identifica el employee_id de Luis Tavara:
+
+
+   ErrorException 
+
+  Undefined property: stdClass::$name
+
+  at list_advisors_oct.php:30
+     26Ôûò     // Buscar el nombre
+     27Ôûò     $employee = DB::table('employees')->where('employee_id', $row->advisor_id)->first();
+     28Ôûò     
+     29Ôûò     if ($employee) {
+  Ô×£  30Ôûò         echo sprintf("ID: %3d | %s (%d contratos)\n", $row->advisor_id, $employee->name, $row->total);
+     31Ôûò     } else {
+     32Ôûò         echo sprintf("ID: %3d | (nombre no encontrado) (%d contratos)\n", $row->advisor_id, $row->total);
+     33Ôûò     }
+     34Ôûò }
+
+  1   list_advisors_oct.php:30
+      Illuminate\Foundation\Bootstrap\HandleExceptions::Illuminate\Foundation\Bootstrap\{closure}("Undefined property: stdClass::$name", "C:\Users\rogit\OneDrive\Documents\Casa Bonita\casaBonita_api\list_advisors_oct.php")
+

@@ -29,6 +29,8 @@ class Contract extends Model
         'contract_number',
         'contract_date', // Fecha del contrato
         'sign_date',
+        'base_price', // Precio lista / base
+        'unit_price', // Precio unitario (venta antes de descuento)
         'total_price',
         'discount', // 🔥 Descuento aplicado a la venta
         'down_payment',
@@ -39,6 +41,7 @@ class Contract extends Model
         'balloon_payment',
         'currency',
         'status',
+        'sale_type', // 🔥 Tipo de venta: 'cash' o 'financed'
         'notes', // Notas del contrato
         'transferred_amount_from_previous_contract',
         // Nuevos campos financieros migrados desde Lot:
@@ -58,6 +61,8 @@ class Contract extends Model
     protected $casts = [
         'contract_date' => 'date',
         'sign_date' => 'date',
+        'base_price' => 'decimal:2',
+        'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',
         'discount' => 'decimal:2',
         'down_payment' => 'decimal:2',
@@ -71,6 +76,7 @@ class Contract extends Model
         'bpp' => 'decimal:2',
         'bfh' => 'decimal:2',
         'initial_quota' => 'decimal:2',
+        'logicware_data' => 'array' // Agregar casting para JSON
     ];
 
 

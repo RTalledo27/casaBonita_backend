@@ -251,15 +251,24 @@ class ExternalLotImportService
         $externalStatus = $property['status'] ?? 'Disponible';
         $status = $statusMap[$externalStatus] ?? 'disponible';
 
+        // Extraer precios según estructura de Logicware
+        $basePrice = $this->parseNumericValue($property['basePrice'] ?? $property['price'] ?? 0);
+        $unitPrice = $this->parseNumericValue($property['unitPrice'] ?? $property['price'] ?? 0);
+        $discount = $this->parseNumericValue($property['discount'] ?? 0);
+        
+        // 🔥 CORRECCIÓN: total_price = unitPrice - discount (igual que en contratos)
+        // Este es el valor de venta real después del descuento
+        $totalPrice = $unitPrice - $discount;
+        
         return [
             'manzana_id' => $manzana->manzana_id,
-            'num_lot' => (int) $parsed['lote'], // tinyInteger según tu migración
+            'num_lot' => (int) $parsed['lote'],
             'area_m2' => $this->parseNumericValue($property['area'] ?? 0),
             'area_construction_m2' => $this->parseNumericValue($property['construction_area'] ?? null),
-            'total_price' => $this->parseNumericValue($property['price'] ?? 0),
+            'total_price' => $totalPrice, // 🔥 Precio final = unitPrice - descuento
             'currency' => strtoupper($property['currency'] ?? 'PEN'),
             'status' => $status,
-            'street_type_id' => $this->getDefaultStreetTypeId(), // Requerido según tu migración
+            'street_type_id' => $this->getDefaultStreetTypeId(),
             
             // Campos de sincronización con API externa
             'external_id' => $property['id'] ?? null,
@@ -269,7 +278,10 @@ class ExternalLotImportService
                 'name' => $property['name'] ?? null,
                 'block' => $property['block'] ?? null,
                 'project' => $property['project'] ?? null,
-                'raw_data' => $property // Guardar todos los datos originales
+                'base_price' => $basePrice, // Guardar en metadata
+                'unit_price' => $unitPrice, // Guardar en metadata
+                'discount' => $discount,    // Guardar en metadata
+                'raw_data' => $property
             ]
         ];
     }
@@ -669,13 +681,17 @@ class ExternalLotImportService
                     if ($lot) {
                         $lotId = $lot->lot_id;
                     } else {
-                        // Crear el lote si no existe
+                        // Crear el lote si no existe - usando la misma lógica que los contratos
+                        $unitPrice = $this->parseNumericValue($unit['unitPrice'] ?? $unit['basePrice'] ?? 0);
+                        $discount = $this->parseNumericValue($unit['discount'] ?? 0);
+                        $totalPrice = $unitPrice - $discount; // 🔥 Precio final = unitPrice - descuento
+                        
                         $lotData = [
                             'manzana_id' => $manzana->manzana_id,
                             'num_lot' => (int)$parsed['lote'],
                             'external_code' => $unitNumber, // 🔥 Guardar el código completo (ej: "I-41")
                             'area_m2' => $this->parseNumericValue($unit['unitArea'] ?? 0),
-                            'total_price' => $this->parseNumericValue($unit['total'] ?? 0),
+                            'total_price' => $totalPrice, // 🔥 CORREGIDO: unitPrice - descuento
                             'currency' => strtoupper($unit['currency'] ?? 'PEN'),
                             'status' => 'vendido', // Ya está vendido
                             'street_type_id' => $this->getDefaultStreetTypeId()
@@ -697,9 +713,10 @@ class ExternalLotImportService
             $financing = $document['financing'] ?? [];
             
             // Extraer datos financieros completos
-            $listPrice = $this->parseNumericValue($unit['listPrice'] ?? $unit['basePrice'] ?? $unit['total'] ?? 0);
-            $discount = $this->parseNumericValue($unit['discount'] ?? $financing['discount'] ?? 0);
-            $total = $this->parseNumericValue($unit['total'] ?? $financing['totalPending'] ?? 0);
+            $basePrice = $this->parseNumericValue($unit['basePrice'] ?? 0); // 🔥 Precio Base
+            $unitPrice = $this->parseNumericValue($unit['unitPrice'] ?? $unit['price'] ?? 0); // 🔥 Precio Unitario (Venta)
+            $discount = $this->parseNumericValue($unit['discount'] ?? $financing['discount'] ?? 0); // 🔥 Descuento
+            $totalPrice = $this->parseNumericValue($unit['total'] ?? 0); // 🔥 Precio Final (total desde Logicware)
             $downPayment = $this->parseNumericValue($financing['downPayment'] ?? 0);
             $financingAmount = $this->parseNumericValue($financing['amountToFinance'] ?? 0);
             $balloonPayment = $this->parseNumericValue($financing['balloonPayment'] ?? $financing['balloon'] ?? 0);
@@ -720,8 +737,10 @@ class ExternalLotImportService
                 'contract_number' => $document['correlative'] ?? null,
                 'contract_date' => substr($saleDate,0,10),
                 'sign_date' => substr($saleDate,0,10),
-                'total_price' => $listPrice, // 🔥 Precio lista (antes del descuento)
+                'base_price' => $basePrice, // 🔥 NUEVO: Precio base de lista
+                'unit_price' => $unitPrice, // 🔥 NUEVO: Precio unitario antes de descuento
                 'discount' => $discount, // 🔥 Descuento aplicado
+                'total_price' => $totalPrice, // 🔥 Precio final (unit total desde Logicware)
                 'down_payment' => $downPayment,
                 'financing_amount' => $financingAmount,
                 'balloon_payment' => $balloonPayment, // 🔥 Cuota balón
@@ -743,9 +762,10 @@ class ExternalLotImportService
 
             Log::info('[ExternalLotImport] 💰 Contrato creado con datos financieros completos', [
                 'contract_id' => $contract->contract_id,
-                'total_price' => $listPrice,
+                'base_price' => $basePrice,
+                'unit_price' => $unitPrice,
                 'discount' => $discount,
-                'net_price' => $total,
+                'total_price' => $totalPrice,
                 'balloon_payment' => $balloonPayment,
                 'bpp' => $bppBonus
             ]);

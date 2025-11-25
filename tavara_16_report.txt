@@ -1,0 +1,27 @@
+LISTA DE 16 CONTRATOS EN EL SISTEMA (LUIS TAVARA - OCT 2025)
+============================================================
+
+#   CONTRATO             FECHA        ESTADO     ACTUALIZADO    
+-----------------------------------------------------------------
+1   202510-000000167     2025-10-13   vigente                    ⚠️  (Antiguo)
+2   202510-000000168     2025-10-13   vigente                    ⚠️  (Antiguo)
+3   202510-000000150     2025-10-13   vigente                    ⚠️  (Antiguo)
+4   202510-000000178     2025-10-13   vigente                    ⚠️  (Antiguo)
+5   202510-000000166     2025-10-14   vigente                    ⚠️  (Antiguo)
+6   202510-000000185     2025-10-14   vigente                    ⚠️  (Antiguo)
+7   202510-000000184     2025-10-15   vigente                    ⚠️  (Antiguo)
+8   202510-000000214     2025-10-18   vigente                    ⚠️  (Antiguo)
+9   202510-000000323     2025-10-25   vigente                    ⚠️  (Antiguo)
+10  202510-000000316     2025-10-25   vigente                    ⚠️  (Antiguo)
+11  202510-000000312     2025-10-27   vigente                    ⚠️  (Antiguo)
+12  202510-000000389     2025-10-30   vigente                    ⚠️  (Antiguo)
+13  202510-000000377     2025-10-30   vigente                    ⚠️  (Antiguo)
+14  202510-000000436     2025-10-31   vigente                    ⚠️  (Antiguo)
+15  202510-000000443     2025-10-31   vigente                    ⚠️  (Antiguo)
+16  202510-000000440     2025-10-31   vigente                    ⚠️  (Antiguo)
+
+=================================================================
+INSTRUCCIONES:
+1. Compara esta lista con tu Excel (que tiene 14).
+2. Identifica los 2 que sobran.
+3. Fíjate si tienen alertas ⚠️ (no actualizados o reserva cancelada).

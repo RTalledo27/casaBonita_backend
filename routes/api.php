@@ -133,3 +133,18 @@ Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
     Route::post('/clear-cache', [LogicwareLotImportController::class, 'clearCache'])
         ->middleware('permission:inventory.lots.store'); // Solo usuarios con permiso de crear lotes
 });
+
+// Commission schemes & rules - HumanResources admin APIs
+Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
+    Route::get('/commission-schemes', [\Modules\HumanResources\Http\Controllers\CommissionSchemeController::class, 'index']);
+    Route::get('/commission-schemes/{id}', [\Modules\HumanResources\Http\Controllers\CommissionSchemeController::class, 'show']);
+    Route::post('/commission-schemes', [\Modules\HumanResources\Http\Controllers\CommissionSchemeController::class, 'store']);
+    Route::put('/commission-schemes/{id}', [\Modules\HumanResources\Http\Controllers\CommissionSchemeController::class, 'update']);
+    Route::delete('/commission-schemes/{id}', [\Modules\HumanResources\Http\Controllers\CommissionSchemeController::class, 'destroy']);
+
+    Route::get('/commission-rules', [\Modules\HumanResources\Http\Controllers\CommissionRuleController::class, 'index']);
+    Route::get('/commission-rules/{id}', [\Modules\HumanResources\Http\Controllers\CommissionRuleController::class, 'show']);
+    Route::post('/commission-rules', [\Modules\HumanResources\Http\Controllers\CommissionRuleController::class, 'store']);
+    Route::put('/commission-rules/{id}', [\Modules\HumanResources\Http\Controllers\CommissionRuleController::class, 'update']);
+    Route::delete('/commission-rules/{id}', [\Modules\HumanResources\Http\Controllers\CommissionRuleController::class, 'destroy']);
+});

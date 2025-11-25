@@ -1,0 +1,9 @@
+INICIO DE PRUEBA
+Contratos eliminados: 0
+Importando desde 2025-09-25 hasta 2025-11-24...
+RESULTADO IMPORTACION:
+Procesados: 0
+Creados: 0
+Errores: []
+Contratos en BD: 0
+⚠️ ALERTA: No se importaron contratos (¿quizás no hay ventas en Logicware?).

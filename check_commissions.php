@@ -1,53 +1,44 @@
 <?php
 
-require_once __DIR__ . '/vendor/autoload.php';
+use Modules\HumanResources\Models\Commission;
+use Illuminate\Support\Facades\DB;
+
+require __DIR__ . '/vendor/autoload.php';
 
 $app = require_once __DIR__ . '/bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+$kernel->bootstrap();
 
-use Modules\HumanResources\Models\Commission;
+echo "=== COMISIONES RECIENTES ===\n\n";
 
-echo "📋 VERIFICANDO COMISIONES PARA CON20257868\n";
-echo "==========================================\n\n";
+$commissions = Commission::with(['contract', 'employee'])
+    ->orderBy('created_at', 'desc')
+    ->limit(10)
+    ->get();
 
-$contractId = 'CON20257868';
-$commissions = Commission::where('contract_id', $contractId)->get();
+echo "Total comisiones: " . Commission::count() . "\n\n";
 
-echo "Comisiones encontradas: {$commissions->count()}\n\n";
+foreach ($commissions as $comm) {
+    $contract = $comm->contract;
+    echo "Contract: {$contract->contract_number}\n";
+    echo "  Asesor: " . ($comm->employee ? $comm->employee->name : 'N/A') . "\n";
+    echo "  Monto Comisión: {$comm->commission_amount}\n";
+    echo "  Porcentaje: {$comm->commission_percentage}%\n";
+    echo "  Sales Count: {$comm->sales_count}\n";
+    echo "  Meses: " . ($contract ? $contract->term_months : 'N/A') . "\n";
+    echo "  Precio Total: " . ($contract ? $contract->total_price : 'N/A') . "\n";
+    echo "  Scheme ID: {$comm->commission_scheme_id}\n";
+    echo "  Rule ID: {$comm->commission_rule_id}\n";
+    echo "  ---\n";
+}
 
-if ($commissions->count() > 0) {
-    foreach ($commissions as $commission) {
-        echo "ID: {$commission->commission_id}\n";
-        echo "Parte: {$commission->payment_part}\n";
-        echo "Estado: {$commission->status}\n";
-        echo "Estado de pago: {$commission->payment_status}\n";
-        echo "Monto: {$commission->commission_amount}\n";
-        echo "Requiere verificación: " . ($commission->requires_client_payment_verification ? 'SÍ' : 'NO') . "\n";
-        echo "Estado de verificación: {$commission->payment_verification_status}\n";
-        echo "Elegible para pago: " . ($commission->is_eligible_for_payment ? 'SÍ' : 'NO') . "\n";
-        echo "---\n";
-    }
-} else {
-    echo "❌ No se encontraron comisiones para el contrato $contractId\n";
-    echo "Creando comisión de prueba...\n\n";
-    
-    // Crear una comisión de prueba
-    $commission = Commission::create([
-        'employee_id' => 1, // Asumiendo que existe un empleado con ID 1
-        'contract_id' => $contractId,
-        'commission_type' => 'venta',
-        'sale_amount' => 100000,
-        'commission_percentage' => 3.0,
-        'commission_amount' => 3000,
-        'payment_status' => 'pendiente',
-        'status' => 'generated',
-        'payment_part' => 1,
-        'requires_client_payment_verification' => true,
-        'payment_verification_status' => 'pending_verification',
-        'is_eligible_for_payment' => false,
-        'period_month' => date('n'),
-        'period_year' => date('Y')
-    ]);
-    
-    echo "✅ Comisión creada: ID {$commission->commission_id}\n";
+// Mostrar distribución de porcentajes
+echo "\n=== DISTRIBUCIÓN DE PORCENTAJES ===\n";
+$distribution = DB::table('commissions')
+    ->select('commission_percentage', DB::raw('count(*) as count'))
+    ->groupBy('commission_percentage')
+    ->get();
+
+foreach ($distribution as $dist) {
+    echo "{$dist->commission_percentage}%: {$dist->count} comisiones\n";
 }

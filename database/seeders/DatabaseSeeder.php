@@ -16,6 +16,8 @@ class DatabaseSeeder extends Seeder
         // Seeder simplificado que crea únicamente un usuario administrador
         // con todos los permisos necesarios para el sistema
         $this->call(AdminUserSeeder::class);
+        // Seed default commission scheme and rules
+        $this->call(\Database\Seeders\CommissionDefaultSeeder::class);
         
         $this->command->info('');
         $this->command->info('🎯 Sistema listo con usuario administrador!');

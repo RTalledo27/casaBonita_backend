@@ -45,12 +45,12 @@ class CommissionService
                         $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
                         $contractDate = $contract->sign_date ? $contract->sign_date->toDateString() : null;
                         $commissionRatePercent = $this->getCommissionRate($salesCount, $contract->term_months, $saleType, $contractDate);
-                    $commissionRate = $commissionRatePercent / 100; // Convertir a decimal para consistencia
+                    $commissionRate = $commissionRatePercent / 100; // Convertir a decimal para cálculo
                     
                     $baseAmount = $contract->total_price ?? $contract->financing_amount;
                     $commissionData = [
                         'commission_amount' => $baseAmount * $commissionRate,
-                        'commission_rate' => $commissionRate,
+                        'commission_rate' => $commissionRatePercent, // Guardar como porcentaje (3.0), no decimal (0.03)
                         'financing_amount' => $baseAmount,
                         'term_months' => $contract->term_months,
                         'template_id' => null,
@@ -137,9 +137,11 @@ class CommissionService
         $month = date('n', strtotime($signDate));
         $year = date('Y', strtotime($signDate));
         
+        // Usar contract_date en lugar de sign_date para contar ventas
+        // Esto alinea el conteo con los registros de administración
         return Contract::where('advisor_id', $advisorId)
-            ->whereMonth('sign_date', $month)
-            ->whereYear('sign_date', $year)
+            ->whereMonth('contract_date', $month)
+            ->whereYear('contract_date', $year)
             ->where('status', 'vigente')
             ->whereNotNull('financing_amount')
             ->where('financing_amount', '>', 0)
@@ -199,7 +201,7 @@ class CommissionService
     {
         // Intentar usar el evaluador dinámico si está disponible
         try {
-            $evaluated = $this->commissionEvaluator->evaluate($salesCount, $termMonths, $asOfDate, $saleType);
+            $evaluated = $this->commissionEvaluator->evaluate($salesCount, $termMonths, $saleType, $asOfDate);
             if (is_array($evaluated) && isset($evaluated['percentage'])) {
                 return (float)$evaluated['percentage'];
             }

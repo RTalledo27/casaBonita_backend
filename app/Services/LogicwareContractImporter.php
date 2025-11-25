@@ -233,10 +233,18 @@ class LogicwareContractImporter
                 
                 // 7. Sincronizar cronograma de pagos desde Logicware (incluye estado de pagos)
                 $correlative = $document['correlative'] ?? null;
+                $scheduleCreated = false;
                 
                 if ($correlative) {
                     try {
+                        Log::info('[LogicwareImporter] Intentando sincronizar cronograma desde Logicware', [
+                            'contract_id' => $contract->contract_id,
+                            'correlative' => $correlative
+                        ]);
+                        
                         $this->syncPaymentScheduleFromLogicware($contract, $correlative);
+                        $scheduleCreated = true;
+                        
                         Log::info('[LogicwareImporter] ✅ Cronograma sincronizado desde Logicware', [
                             'contract_id' => $contract->contract_id,
                             'correlative' => $correlative
@@ -245,17 +253,31 @@ class LogicwareContractImporter
                         Log::warning('[LogicwareImporter] ⚠️ No se pudo sincronizar cronograma desde Logicware', [
                             'contract_id' => $contract->contract_id,
                             'correlative' => $correlative,
-                            'error' => $scheduleError->getMessage()
+                            'error' => $scheduleError->getMessage(),
+                            'trace' => $scheduleError->getTraceAsString()
                         ]);
-                        
-                        // Fallback: generar cronograma tradicional
-                        Log::info('[LogicwareImporter] Generando cronograma tradicional como fallback');
-                        $this->generatePaymentSchedules($contract, $document);
+                        $scheduleCreated = false;
                     }
-                } else {
-                    // Si no hay correlativo, usar método tradicional
-                    Log::warning('[LogicwareImporter] No hay correlativo, usando cronograma tradicional');
-                    $this->generatePaymentSchedules($contract, $document);
+                }
+                
+                // Fallback: Si no se sincronizó desde Logicware, generar cronograma tradicional
+                if (!$scheduleCreated) {
+                    Log::info('[LogicwareImporter] 📅 Generando cronograma tradicional como fallback', [
+                        'contract_id' => $contract->contract_id,
+                        'has_correlative' => !empty($correlative)
+                    ]);
+                    
+                    try {
+                        $this->generatePaymentSchedules($contract, $document);
+                        Log::info('[LogicwareImporter] ✅ Cronograma tradicional generado', [
+                            'contract_id' => $contract->contract_id
+                        ]);
+                    } catch (Exception $e) {
+                        Log::error('[LogicwareImporter] ❌ Error generando cronograma tradicional', [
+                            'contract_id' => $contract->contract_id,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
                 }
                 
                 $contractsCreated++;
@@ -467,55 +489,65 @@ class LogicwareContractImporter
         
         $financing = $document['financing'] ?? [];
         
+        // 🔍 DEBUG: Ver qué está llegando en el array unit
+        Log::info('[LogicwareImporter] 🔍 DEBUG - Datos del unit', [
+            'unit_complete' => $unit,
+            'basePrice' => $unit['basePrice'] ?? 'NO EXISTE',
+            'unitPrice' => $unit['unitPrice'] ?? 'NO EXISTE',
+            'discount' => $unit['discount'] ?? 'NO EXISTE',
+            'total' => $unit['total'] ?? 'NO EXISTE'
+        ]);
+        
         // Extraer TODOS los datos financieros completos
-        $listPrice = $this->parseNumericValue($unit['listPrice'] ?? $unit['basePrice'] ?? $unit['total'] ?? 0);
-        $discount = $this->parseNumericValue($unit['discount'] ?? $financing['discount'] ?? 0);
-        $totalPrice = $this->parseNumericValue($unit['total'] ?? 0);
+        $listPrice = $this->parseNumericValue($unit['listPrice'] ?? $unit['basePrice'] ?? 0); // Precio Base
+        $unitPrice = $this->parseNumericValue($unit['unitPrice'] ?? $unit['price'] ?? 0); // Precio Unitario (Venta)
+        $discount = $this->parseNumericValue($unit['discount'] ?? 0); // Descuento aplicado
+        $totalPrice = $this->parseNumericValue($unit['total'] ?? $unit['totalPrice'] ?? 0); // Precio Total Final
+        
+        // Datos de financiamiento
         $downPayment = $this->parseNumericValue($financing['downPayment'] ?? 0);
         $amountToFinance = $this->parseNumericValue($financing['amountToFinance'] ?? 0);
         $totalInstallments = (int)($financing['totalInstallments'] ?? 0);
-        $monthlyPayment = $totalInstallments > 0 ? ($amountToFinance / $totalInstallments) : 0;
-        
-        // Campos adicionales: balón, bonos, funding
         $balloonPayment = $this->parseNumericValue($financing['balloonPayment'] ?? $financing['balloon'] ?? 0);
         $bppBonus = $this->parseNumericValue($financing['bppBonus'] ?? $financing['bpp'] ?? 0);
-        $bfhBonus = $this->parseNumericValue($financing['bfhBonus'] ?? $financing['bfh'] ?? 0);
-        $funding = $this->parseNumericValue($financing['funding'] ?? 0);
-
+        
+        // Si no tenemos total_price, calcularlo desde listPrice - discount
+        if (!$totalPrice && $listPrice) {
+            $totalPrice = $listPrice - ($discount ?? 0);
+        }
+        
         $contract = Contract::create([
             'client_id' => $client->client_id,
             'lot_id' => $lot->lot_id,
             'advisor_id' => $advisor->employee_id,
             'contract_number' => $document['correlative'] ?? $this->generateContractNumber(),
-            'contract_date' => $contractDate,
-            'sign_date' => $contractDate,
-            'total_price' => $listPrice, // 🔥 Precio lista (antes del descuento)
-            'discount' => $discount, // 🔥 Descuento aplicado
+            'sign_date' => $contractDate,  // ← CORREGIDO: era 'contract_date'
+            'base_price' => $listPrice,  // Precio base del lote
+            'unit_price' => $unitPrice,  // Precio unitario de venta
+            'discount' => $discount,     // Descuento aplicado
+            'total_price' => $totalPrice, // Precio total final
             'down_payment' => $downPayment,
             'financing_amount' => $amountToFinance,
-            'balloon_payment' => $balloonPayment, // 🔥 Cuota balón
             'term_months' => $totalInstallments,
-            'monthly_payment' => $monthlyPayment,
-            'interest_rate' => 0,
-            'funding' => $funding,
-            'bpp' => $bppBonus, // 🔥 Bono buen pagador
-            'bfh' => $bfhBonus,
-            'initial_quota' => $downPayment,
+            'balloon_payment' => $balloonPayment,
+            'bpp' => $bppBonus,
             'currency' => $financing['currency'] ?? 'PEN',
-            'status' => 'vigente', // Valores permitidos: pendiente_aprobacion, vigente, resuelto, cancelado
-            'source' => 'logicware', // 🔥 Identificar fuente
-            'logicware_data' => json_encode($document) // 🔥 Guardar datos completos para re-linkeo futuro
+            'status' => 'vigente',
+            'interest_rate' => 0,
+            'monthly_payment' => 0,
+            'notes' => 'Importado desde Logicware el ' . now()->format('Y-m-d H:i:s')
         ]);
-
-        Log::info('[LogicwareImporter] ✅ Contrato creado con datos financieros completos', [
+        
+        Log::info('[LogicwareImporter] ✅ Contrato creado', [
             'contract_id' => $contract->contract_id,
             'contract_number' => $contract->contract_number,
             'client_id' => $client->client_id,
             'lot_id' => $lot->lot_id,
             'advisor_id' => $advisor->employee_id,
-            'total_price' => $listPrice,
+            'total_price' => $totalPrice,
             'discount' => $discount,
-            'net_price' => $totalPrice,
+            'base_price' => $listPrice,
+            'unit_price' => $unitPrice,
             'balloon_payment' => $balloonPayment,
             'bpp' => $bppBonus
         ]);
@@ -652,7 +684,8 @@ class LogicwareContractImporter
             'term_months' => $item['installments'] ?? 0,
             'monthly_payment' => $item['monthlyPayment'] ?? 0,
             'currency' => $item['currency'] ?? 'PEN',
-            'status' => 'activo',
+            'status' => 'vigente',
+            'interest_rate' => 0,
             'notes' => 'Importado desde Logicware'
         ]);
 

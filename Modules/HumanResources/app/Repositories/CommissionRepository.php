@@ -45,7 +45,7 @@ class CommissionRepository
 
     public function getAll(array $filters = []): Collection
     {
-        $query = $this->model->with(['employee.user', 'contract', 'childCommissions', 'parentCommission']);
+        $query = $this->model->with(['employee.user', 'contract.lot.manzana', 'contract.reservation.lot.manzana', 'childCommissions', 'parentCommission']);
 
         // Mostrar todas las comisiones por defecto
         // Solo aplicar filtro payable si se especifica explícitamente
@@ -101,7 +101,7 @@ class CommissionRepository
 
     public function getPaginated(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = $this->model->with(['employee.user', 'contract', 'childCommissions', 'parentCommission']);
+        $query = $this->model->with(['employee.user', 'contract.lot.manzana', 'contract.reservation.lot.manzana', 'childCommissions', 'parentCommission']);
 
         // Mostrar todas las comisiones por defecto
         // Solo aplicar filtro payable si se especifica explícitamente
@@ -157,7 +157,7 @@ class CommissionRepository
 
     public function findById(int $id): ?Commission
     {
-        return $this->model->with(['employee.user', 'contract'])->find($id);
+        return $this->model->with(['employee.user', 'contract.lot.manzana', 'contract.reservation.lot.manzana'])->find($id);
     }
 
     public function create(array $data): Commission
@@ -200,7 +200,7 @@ class CommissionRepository
 
     public function getByEmployee(int $employeeId, int $month = null, int $year = null): Collection
     {
-        $query = $this->model->with(['contract'])
+        $query = $this->model->with(['contract.lot.manzana', 'contract.reservation.lot.manzana'])
             ->byEmployee($employeeId);
 
         if ($month && $year) {
