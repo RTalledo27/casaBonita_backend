@@ -1,55 +1,34 @@
 <?php
-
+// config/cors.php
 return [
+    'paths' => [
+        'api/*',
+        'sanctum/csrf-cookie',
+    ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cross-Origin Resource Sharing (CORS) Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Here you may configure your settings for cross-origin resource sharing
-    | or "CORS". This determines what cross-origin operations may execute
-    | in web browsers. You are free to adjust these settings as needed.
-    |
-    | To learn more: https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
-    |
-    */
+    // Métodos permitidos
+    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
-
-    'allowed_methods' => ['*'],
-
+    // ORÍGENES: NO uses "*" si hay credenciales
     'allowed_origins' => [
         'https://app.casabonita.pe',
-        'https://api.casabonita.pe',
         'http://localhost:4200',
         'http://127.0.0.1:4200',
-        '*'
     ],
 
-    'allowed_origins_patterns' => [],
-
-
-
-    'allowed_origins_patterns' => ['#^https://.*\.casabonita\.pe$#'],
-
-    'allowed_headers' => [
-        'Accept',
-        'Authorization',
-        'Content-Type',
-        'X-Requested-With',
-        'X-CSRF-TOKEN',
-        'Cache-Control',
-        'Pragma',
-        'Expires',
-        'If-Modified-Since',
-        'If-None-Match',
+    // Si quieres permitir cualquier subdominio *.casabonita.pe, usa el patrón (sin duplicarlo)
+    'allowed_origins_patterns' => [
+        '#^https://.*\.casabonita\.pe$#'
     ],
+
+    // Encabezados: permite todos para simplificar
+    'allowed_headers' => ['*'],
 
     'exposed_headers' => [],
 
     'max_age' => 0,
 
+    // SOLO pon true si usas cookies/Sanctum (SPA con sesión).
+    // Si usas Bearer token en Authorization, déjalo en false.
     'supports_credentials' => true,
-
 ];

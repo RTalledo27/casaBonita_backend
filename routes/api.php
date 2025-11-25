@@ -77,6 +77,15 @@ Route::middleware(['auth:sanctum', 'permission:reports.access'])->prefix('report
     Route::delete('/templates/{id}', [ReportsController::class, 'deleteTemplate'])->middleware('permission:reports.view');
     Route::get('/history', [ReportsController::class, 'history'])->middleware('permission:reports.view');
 
+    // New consolidated and export routes
+    Route::get('/sales/consolidated', [ReportsController::class, 'getSalesConsolidated'])->middleware('permission:reports.view_sales');
+    Route::get('/projections/monthly', [ReportsController::class, 'getProjectionsMonthly'])->middleware('permission:reports.view_projections');
+    
+    // Excel Export Routes (specific formats from user images)
+    Route::get('/export/monthly-income', [ReportsController::class, 'exportMonthlyIncome'])->middleware('permission:reports.export');
+    Route::get('/export/detailed-sales', [ReportsController::class, 'exportDetailedSales'])->middleware('permission:reports.export');
+    Route::get('/export/client-details', [ReportsController::class, 'exportClientDetails'])->middleware('permission:reports.export');
+
     // Sales Reports
     Route::prefix('sales')->middleware('permission:reports.view_sales')->group(function () {
         Route::get('/', [SalesReportsController::class, 'index']);
