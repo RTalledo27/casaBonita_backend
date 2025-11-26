@@ -16,7 +16,7 @@ use Modules\Sales\Models\Contract;
 use Modules\Sales\Repositories\PaymentScheduleRepository;
 use Modules\Sales\Services\PaymentScheduleService;
 use Modules\Sales\Transformers\PaymentScheduleResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class PaymentScheduleController extends Controller
 {
