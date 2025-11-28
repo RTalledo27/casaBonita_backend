@@ -26,6 +26,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/status/{reportId}', [ReportsController::class, 'getReportStatus']);
         Route::get('/download/{reportId}', [ReportsController::class, 'download']);
         Route::get('/history', [ReportsController::class, 'getReportsHistory']);
+        
+        // Specific Excel Export Routes (Sales)
+        Route::get('/export/monthly-income', [SalesReportsController::class, 'exportMonthlyIncome']);
+        Route::get('/export/detailed-sales', [SalesReportsController::class, 'exportDetailedSales']);
+        Route::get('/export/client-details', [SalesReportsController::class, 'exportClientDetails']);
     });
 
     // Sales Reports

@@ -99,6 +99,19 @@ class ExcelReportService
             $row++;
         }
 
+        // Apply borders to the data range (excluding headers)
+        $lastRow = $row - 1;
+        if ($lastRow >= 4) { // Data starts at row 4
+            $sheet->getStyle('A4:Q' . $lastRow)->applyFromArray([
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'color' => ['argb' => 'FF000000']
+                    ]
+                ]
+            ]);
+        }
+
         // Auto-size columns
         foreach (range('A', 'Q') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
@@ -115,77 +128,166 @@ class ExcelReportService
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Ventas Detalladas');
+        $period = null;
+        if (!empty($filters['year']) && !empty($filters['month'])) {
+            $period = sprintf('%04d-%02d', (int)$filters['year'], (int)$filters['month']);
+        } elseif (!empty($filters['year'])) {
+            $period = (string) $filters['year'];
+        }
+        $sheet->setTitle('Ventas Detalladas' . ($period ? ' ' . $period : ''));
 
-        // Headers
+        // Grouped headers
+        $sheet->setCellValue('K1', 'REEMBOLSO');
+        $sheet->mergeCells('K1:P1');
+        $this->styleSectionHeader($sheet, 'K1');
+
+        $sheet->setCellValue('Q1', 'CUOTA INICIAL');
+        $sheet->mergeCells('Q1:V1');
+        $this->styleSectionHeader($sheet, 'Q1');
+
+        // Column headers row 2
         $headers = [
-            'MES', 'DEDICA', 'ASESOR(A)', '% VENTA', 'CREADO', 'CREDARE', 'NOMBRE DE CLIENTE',
-            'RANGOS DE CLIENTE B', 'V/', 'CUOTAS', 'PAGO DE CUOTA', 'S/ CUOTAS', 
-            '01-ENE-25', '01-FEB-25', '01-MAR-25', '01-ABR-25', '01-MAY-25', 'SALDO POR COBRAR',
-            '01-JUN-25', '01-JUL-25', '01-AGO-25', '01-SEP-25', '01-OCT-25', '01-NOV-25', '01-DIC-25', 'SALDO'
+            'MES', 'OFICINA', 'ASESOR(A)', 'N° CONTRATO', 'FECHA', 'CELULAR1', 'CELULAR2',
+            'NOMBRE DE CLIENTE', 'MZ', 'N° DE LOTE', 'S/.', 'CUOTA INICIAL', 'SEPARACION',
+            'CONTADO', 'FINANCIADO', 'N° DE CUOTAS',
+            'T. DE INICIAL 1', 'T. DE INICIAL 2', 'T. DE INICIAL 3', 'T. DE INICIAL 4', 'T. DE INICIAL 5',
+            'P.INICIAL', 'C. BALLOON', 'PLAZO (MESES)', 'COMENTARIOS', 'EDAD', 'INGRESOS',
+            'OCUPACIÓN', 'RESIDENCIA', 'COMO LLEGÓ A NOSOTROS'
         ];
 
         $col = 'A';
         foreach ($headers as $header) {
-            $sheet->setCellValue($col . '1', $header);
-            $this->styleHeaderCell($sheet, $col . '1');
+            $sheet->setCellValue($col . '2', $header);
+            $this->styleHeaderCell($sheet, $col . '2');
             $col++;
         }
 
         // Get sales data
         $salesData = $this->getDetailedSalesData($filters);
         
-        $row = 2;
+        $row = 3;
         $currentMonth = null;
+        $monthStartRow = null;
 
         foreach ($salesData as $sale) {
-            // Add month separator
+            // Month block
             if ($currentMonth !== $sale['month']) {
-                if ($currentMonth !== null) {
-                    $this->applySeparatorStyle($sheet, $row);
-                    $row++;
+                if ($currentMonth !== null && $monthStartRow !== null) {
+                    $sheet->mergeCells('A' . $monthStartRow . ':A' . ($row - 1));
+                    $sheet->setCellValue('A' . $monthStartRow, $sale['month_name_full']);
+                    $style = $sheet->getStyle('A' . $monthStartRow . ':A' . ($row - 1));
+                    $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFFF00');
+                    $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                    $style->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+                    $style->getAlignment()->setTextRotation(90);
                 }
-                $sheet->setCellValue('A' . $row, strtoupper($sale['month']));
-                $sheet->mergeCells('A' . $row . ':Z' . $row);
-                $this->styleSectionHeader($sheet, 'A' . $row);
-                $row++;
                 $currentMonth = $sale['month'];
+                $monthStartRow = $row;
             }
 
-            // Sale data
-            $col = 'A';
-            foreach ($sale as $key => $value) {
-                if ($key !== 'is_separator' && $key !== 'month') {
-                    $sheet->setCellValue($col . $row, $value);
-                    
-                    // Format currency columns
-                    if (in_array($key, ['sale_value', 'quota_value', 'balance'])) {
-                        $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('S/ #,##0.00');
-                    }
-                    
-                    // Format date columns
-                    if (strpos($key, '_date') !== false) {
-                        $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('DD/MM/YYYY');
-                    }
-                    
-                    $col++;
-                }
+            $sheet->setCellValue('A' . $row, $sale['month_code']);
+            $sheet->setCellValue('B' . $row, $sale['office']);
+            $sheet->setCellValue('C' . $row, $sale['advisor']);
+            $sheet->setCellValue('D' . $row, $sale['sale_number']);
+            $sheet->setCellValue('E' . $row, $sale['date']);
+            $sheet->setCellValue('F' . $row, $sale['phone1']);
+            $sheet->setCellValue('G' . $row, $sale['phone2']);
+            $sheet->setCellValue('H' . $row, $sale['client_name']);
+            $sheet->setCellValue('I' . $row, $sale['mz']);
+            $sheet->setCellValue('J' . $row, $sale['lot']);
+            $sheet->setCellValue('K' . $row, $sale['total_amount']);
+            $sheet->setCellValue('L' . $row, $sale['down_payment']);
+            $sheet->setCellValue('M' . $row, $sale['separation_amount']);
+            $sheet->setCellValue('N' . $row, $sale['cash_amount']);
+            $sheet->setCellValue('O' . $row, $sale['financed_amount']);
+            $sheet->setCellValue('P' . $row, $sale['num_installments']);
+            $sheet->setCellValue('Q' . $row, $sale['initials'][0] ?? 0);
+            $sheet->setCellValue('R' . $row, $sale['initials'][1] ?? 0);
+            $sheet->setCellValue('S' . $row, $sale['initials'][2] ?? 0);
+            $sheet->setCellValue('T' . $row, $sale['initials'][3] ?? 0);
+            $sheet->setCellValue('U' . $row, $sale['initials'][4] ?? 0);
+            $sheet->setCellValue('V' . $row, $sale['initial_sum']);
+            $sheet->setCellValue('W' . $row, $sale['balloon']);
+            $sheet->setCellValue('X' . $row, $sale['term']);
+            $sheet->setCellValue('Y' . $row, $sale['comments']);
+            $sheet->setCellValue('Z' . $row, $sale['age']);
+            $sheet->setCellValue('AA' . $row, $sale['income']);
+            $sheet->setCellValue('AB' . $row, $sale['occupation']);
+            $sheet->setCellValue('AC' . $row, $sale['residence']);
+            $sheet->setCellValue('AD' . $row, $sale['source']);
+
+            // Format currency columns
+            foreach (['K','L','M','N','O','Q','R','S','T','U','V','W','AA'] as $currencyCol) {
+                $sheet->getStyle($currencyCol . $row)->getNumberFormat()->setFormatCode('"S/ " #,##0.00');
             }
 
-            // Apply separator styling if needed
-            if ($sale['is_separator']) {
-                $this->applySeparatorStyle($sheet, $row);
-            }
+            // No percentage formatting; reserva es monto en S/
 
             $row++;
         }
 
-        // Auto-size columns
-        foreach (range('A', 'Z') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
+        // Close last month block
+        if ($currentMonth !== null && $monthStartRow !== null) {
+            $sheet->mergeCells('A' . $monthStartRow . ':A' . ($row - 1));
+            $sheet->setCellValue('A' . $monthStartRow, $salesData[count($salesData)-1]['month_name_full']);
+            $style = $sheet->getStyle('A' . $monthStartRow . ':A' . ($row - 1));
+            $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FFFF00');
+            $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            $style->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+            $style->getAlignment()->setTextRotation(90);
         }
 
-        return $this->saveSpreadsheet($spreadsheet, 'Ventas_Detalladas_' . date('Y-m-d'));
+        // Apply borders to the data range (excluding headers)
+        $lastRow = $row - 1;
+        if ($lastRow >= 3) {
+            $sheet->getStyle('A3:AD' . $lastRow)->applyFromArray([
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'color' => ['argb' => 'FF000000']
+                    ]
+                ]
+            ]);
+        }
+
+        // Auto-size columns
+        foreach (range('A', 'AD') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        // Explicit widths for readability
+        $sheet->getColumnDimension('A')->setWidth(8);
+        $sheet->getColumnDimension('B')->setWidth(18);
+        $sheet->getColumnDimension('C')->setWidth(26);
+        $sheet->getColumnDimension('D')->setWidth(18);
+        $sheet->getColumnDimension('E')->setWidth(12);
+        $sheet->getColumnDimension('F')->setWidth(18);
+        $sheet->getColumnDimension('G')->setWidth(18);
+        $sheet->getColumnDimension('H')->setWidth(34);
+        $sheet->getColumnDimension('I')->setWidth(10);
+        $sheet->getColumnDimension('J')->setWidth(12);
+        $sheet->getColumnDimension('K')->setWidth(16);
+        $sheet->getColumnDimension('L')->setWidth(16);
+        $sheet->getColumnDimension('M')->setWidth(16);
+        $sheet->getColumnDimension('N')->setWidth(16);
+        $sheet->getColumnDimension('O')->setWidth(16);
+        $sheet->getColumnDimension('P')->setWidth(12);
+        $sheet->getColumnDimension('Q')->setWidth(14);
+        $sheet->getColumnDimension('R')->setWidth(14);
+        $sheet->getColumnDimension('S')->setWidth(14);
+        $sheet->getColumnDimension('T')->setWidth(14);
+        $sheet->getColumnDimension('U')->setWidth(14);
+        $sheet->getColumnDimension('V')->setWidth(14);
+        $sheet->getColumnDimension('W')->setWidth(14);
+        $sheet->getColumnDimension('X')->setWidth(14);
+        $sheet->getColumnDimension('Y')->setWidth(12);
+        $sheet->getColumnDimension('Z')->setWidth(36);
+        $sheet->getColumnDimension('AA')->setWidth(10);
+        $sheet->getColumnDimension('AB')->setWidth(16);
+        $sheet->getColumnDimension('AC')->setWidth(18);
+        $sheet->getColumnDimension('AD')->setWidth(24);
+
+        $filename = 'Ventas_Detalladas_' . ($period ?? date('Y-m-d'));
+        return $this->saveSpreadsheet($spreadsheet, $filename);
     }
 
     /**
@@ -240,6 +342,19 @@ class ExcelReportService
             $row++;
         }
 
+        // Apply borders to the data range (excluding headers)
+        $lastRow = $row - 1;
+        if ($lastRow >= 2) {
+            $sheet->getStyle('A2:J' . $lastRow)->applyFromArray([
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+                        'color' => ['argb' => 'FF000000']
+                    ]
+                ]
+            ]);
+        }
+
         // Auto-size columns
         foreach (range('A', 'J') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
@@ -253,39 +368,43 @@ class ExcelReportService
      */
     private function getMonthlyIncomeByAdvisor(int $year, array $filters = [])
     {
-        // Query to get contracts grouped by advisor and month
-        $query = DB::table('sales as s')
-            ->join('contracts as c', 's.contract_id', '=', 'c.contract_id')
-            ->join('users as u', 's.advisor_id', '=', 'u.id')
-            ->whereYear('s.sale_date', $year)
+        // Query contracts (no sales table exists)
+        $query = DB::table('contracts as c')
+            ->leftJoin('users as u', 'c.advisor_id', '=', 'u.user_id')
+            ->leftJoin('clients as cl', 'c.client_id', '=', 'cl.client_id')
+            ->whereYear('c.sign_date', $year)
             ->select(
-                's.sale_id',
-                'u.id as advisor_id',
+                'c.contract_id',
+                'u.user_id as advisor_id',
                 'u.first_name',
                 'u.last_name',
-                's.sale_date',
+                'c.sign_date',
                 'c.contract_number',
-                'c.client_name',
-                's.total_amount',
-                DB::raw('MONTH(s.sale_date) as sale_month')
+                'cl.first_name as client_first_name',
+                'cl.last_name as client_last_name',
+                'c.total_price as total_amount',
+                DB::raw('MONTH(c.sign_date) as sale_month')
             );
 
         // Apply filters
         if (!empty($filters['advisor_id'])) {
-            $query->where('s.advisor_id', $filters['advisor_id']);
+            $query->where('c.advisor_id', $filters['advisor_id']);
         }
 
-        if (!empty($filters['office_id'])) {
-            $query->where('s.office_id', $filters['office_id']);
+        // Note: team_id filter removed - contracts table doesn't have team_id
+        // Team relationship would need to come through advisor->team if needed
+
+        if (!empty($filters['startDate'])) {
+            $query->whereDate('c.sign_date', '>=', $filters['startDate']);
         }
 
-        if (!empty($filters['team_id'])) {
-            $query->where('s.team_id', $filters['team_id']);
+        if (!empty($filters['endDate'])) {
+            $query->whereDate('c.sign_date', '<=', $filters['endDate']);
         }
 
         $results = $query->orderBy('u.last_name')
             ->orderBy('u.first_name')
-            ->orderBy('s.sale_date')
+            ->orderBy('c.sign_date')
             ->get();
 
         // Group by advisor and aggregate monthly data
@@ -332,7 +451,7 @@ class ExcelReportService
                 'advisor_name' => $advisorData['advisor_name'],
                 'client_number' => count($advisorData['sales']) . ' clientes',
                 'monthly_values' => $monthlyTotals,
-                'total' => $yearTotal,
+                'total' => (float) $yearTotal,
                 'is_separator' => false
             ];
             
@@ -340,15 +459,16 @@ class ExcelReportService
             foreach ($advisorData['sales'] as $sale) {
                 $monthlyValues = array_fill(0, 12, 0);
                 $month = (int)$sale->sale_month - 1;
-                $monthlyValues[$month] = $sale->total_amount ?? 0;
+                $monthlyValues[$month] = (float) ($sale->total_amount ?? 0);
+                $clientName = trim(($sale->client_first_name ?? '') . ' ' . ($sale->client_last_name ?? ''));
                 
                 $data[] = [
                     'flight_number' => $sale->contract_number,
-                    'month_name' => Carbon::parse($sale->sale_date)->format('F'),
+                    'month_name' => Carbon::parse($sale->sign_date)->format('F'),
                     'advisor_name' => $advisorData['advisor_name'],
-                    'client_number' => $sale->client_name ?? $sale->contract_number,
+                    'client_number' => $clientName ?: $sale->contract_number,
                     'monthly_values' => $monthlyValues,
-                    'total' => $sale->total_amount ?? 0,
+                    'total' => (float) ($sale->total_amount ?? 0),
                     'is_separator' => false
                 ];
             }
@@ -360,98 +480,191 @@ class ExcelReportService
     }
 
     /**
-     * Get detailed sales data with payment schedules
+     * Get detailed sales data matching the original export format
      */
     private function getDetailedSalesData(array $filters = [])
     {
-        // Query sales with payment schedules
-        $query = DB::table('sales as s')
-            ->join('contracts as c', 's.contract_id', '=', 'c.contract_id')
-            ->join('users as advisor', 's.advisor_id', '=', 'advisor.id')
-            ->leftJoin('teams as t', 's.team_id', '=', 't.team_id')
+        // Query contracts with correct joins through employees table
+        $query = DB::table('contracts as c')
+            ->leftJoin('employees as e', 'c.advisor_id', '=', 'e.employee_id')
+            ->leftJoin('users as advisor', 'e.user_id', '=', 'advisor.user_id')
+            ->leftJoin('teams as t', 'e.team_id', '=', 't.team_id')
+            ->leftJoin('clients as cl', 'c.client_id', '=', 'cl.client_id')
+            ->leftJoin('lots as l', 'c.lot_id', '=', 'l.lot_id')
+            ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
             ->select(
-                's.*',
+                'c.contract_id',
                 'c.contract_number',
-                'c.client_name',
-                'c.contract_status',
+                'c.sign_date',
+                'c.total_price',
+                'c.down_payment',
+                'c.monthly_payment',
+                'c.balloon_payment',
+                'c.term_months',
+                'c.notes',
+                'c.source',
+                't.team_name as office_name',
                 'advisor.first_name as advisor_first_name',
                 'advisor.last_name as advisor_last_name',
-                't.team_name',
-                DB::raw('MONTH(s.sale_date) as sale_month'),
-                DB::raw('MONTHNAME(s.sale_date) as month_name')
+                'cl.first_name as client_first_name',
+                'cl.last_name as client_last_name',
+                'cl.primary_phone',
+                'cl.secondary_phone',
+                'cl.occupation',
+                'cl.salary',
+                'l.num_lot',
+                'l.manzana_id',
+                'l.external_code',
+                'm.name as manzana_name',
+                'r.deposit_amount',
+                DB::raw('MONTH(c.sign_date) as sale_month'),
+                DB::raw('MONTHNAME(c.sign_date) as month_name')
             );
 
         // Apply filters
         if (!empty($filters['year'])) {
-            $query->whereYear('s.sale_date', $filters['year']);
+            $query->whereYear('c.sign_date', $filters['year']);
         }
         if (!empty($filters['month'])) {
-            $query->whereMonth('s.sale_date', $filters['month']);
+            $query->whereMonth('c.sign_date', $filters['month']);
         }
         if (!empty($filters['advisor_id'])) {
-            $query->where('s.advisor_id', $filters['advisor_id']);
+            $query->where('c.advisor_id', $filters['advisor_id']);
         }
         if (!empty($filters['team_id'])) {
-            $query->where('s.team_id', $filters['team_id']);
+            $query->where('e.team_id', $filters['team_id']);
         }
         if (!empty($filters['office_id'])) {
-            $query->where('s.office_id', $filters['office_id']);
+            $query->where('e.team_id', $filters['office_id']);
+        }
+        if (!empty($filters['startDate'])) {
+            $query->whereDate('c.sign_date', '>=', $filters['startDate']);
+        }
+        if (!empty($filters['endDate'])) {
+            $query->whereDate('c.sign_date', '<=', $filters['endDate']);
         }
 
-        $sales = $query->orderBy('s.sale_date')->get();
+        $contracts = $query->orderBy('c.sign_date', 'asc')->get();
 
         // Transform data for Excel
         $data = [];
-        foreach ($sales as $sale) {
-            // Get payment schedule for this sale
-            $payments = DB::table('contract_installments')
-                ->where('contract_id', $sale->contract_id)
-                ->orderBy('installment_number')
+        foreach ($contracts as $contract) {
+            $clientName = trim(($contract->client_first_name ?? '') . ' ' . ($contract->client_last_name ?? ''));
+            $advisorName = trim(($contract->advisor_first_name ?? '') . ' ' . ($contract->advisor_last_name ?? ''));
+            
+            // Calculate initial percentage
+            $initialPercent = 0;
+            if ($contract->total_price > 0) {
+                // Fraction for Excel percentage formatting (e.g., 0.0199 => 1.99%)
+                $initialPercent = ($contract->down_payment / $contract->total_price);
+            }
+            
+            // Calculate total quota amount (monthly payment * term)
+            $quotaAmount = ($contract->monthly_payment ?? 0) * ($contract->term_months ?? 0);
+            
+            // Age not available in clients table
+            $age = null;
+            
+            // Schedules and template-based calculations
+            $schedules = DB::table('payment_schedules')
+                ->where('contract_id', $contract->contract_id)
+                ->orderBy('due_date', 'asc')
                 ->get();
 
-            // Calculate monthly payment values (for columns 01-ENE-25, etc.)
-            $monthlyPayments = array_fill(0, 12, 0);
-            $totalPaid = 0;
-            
-            foreach ($payments as $payment) {
-                if ($payment->due_date) {
-                    $month = Carbon::parse($payment->due_date)->month - 1;
-                    $monthlyPayments[$month] += $payment->amount ?? 0;
+            $initialsArr = [];
+            $numInstallments = 0;
+            // Reserva desde la tabla reservations (pre-contrato)
+            $separationAmount = (float) ($contract->deposit_amount ?? 0.0);
+            $balloonAmount = 0.0;
+            $preContractInitialsSum = 0.0;
+            $signDate = !empty($contract->sign_date) ? Carbon::parse($contract->sign_date) : null;
+
+            foreach ($schedules as $sc) {
+                $type = $sc->type ?? '';
+                $amount = (float) ($sc->amount ?? 0);
+                $dueDate = !empty($sc->due_date) ? Carbon::parse($sc->due_date) : null;
+
+                if ($type === 'inicial') {
+                    // separar iniciales pre-contrato para reserva y post-contrato para T. DE INICIAL
+                    if ($signDate && $dueDate && $dueDate->lt($signDate)) {
+                        $preContractInitialsSum += $amount;
+                        if ($separationAmount <= 0 && stripos($sc->notes ?? '', 'separ') !== false) {
+                            $separationAmount = $amount;
+                        }
+                    } else {
+                        if (count($initialsArr) < 5) {
+                            $initialsArr[] = $amount;
+                        }
+                        // Si alguna cuota marcada como separación ocurre post-firma, aún debe reflejarse
+                        if ($separationAmount <= 0 && stripos($sc->notes ?? '', 'separ') !== false) {
+                            $separationAmount = $amount;
+                        }
+                    }
+                } elseif ($type === 'financiamiento') {
+                    $numInstallments++;
+                } elseif ($type === 'balon') {
+                    $balloonAmount = $amount;
                 }
-                $totalPaid += $payment->paid_amount ?? 0;
             }
 
-            $balance = ($sale->total_amount ?? 0) - $totalPaid;
+            if ($separationAmount <= 0 && $preContractInitialsSum > 0) {
+                $separationAmount = $preContractInitialsSum;
+            }
+
+            $initialSum = array_sum($initialsArr);
+            $financedAmount = max(0, (float) ($contract->total_price ?? 0) - (float) ($contract->down_payment ?? 0));
+
+            $monthCode = strtoupper(substr(Carbon::parse($contract->sign_date)->translatedFormat('M'), 0, 3));
+            $monthFull = strtoupper(Carbon::parse($contract->sign_date)->translatedFormat('F'));
+
+            // Extract MZ and LOTE from external_code when available (e.g., "F2-03" → MZ=F2, LOTE=3)
+            $ext = $contract->external_code ?? null;
+            if ($ext && strpos($ext, '-') !== false) {
+                [$extMz, $extLot] = explode('-', $ext, 2);
+                $extMz = trim($extMz);
+                $extLot = ltrim(trim($extLot), '0');
+                $mappedMz = $extMz;
+                $mappedLot = $extLot !== '' ? $extLot : ($contract->num_lot ?? '-');
+            } else {
+                $mappedMz = $contract->manzana_name ?? ($contract->manzana_id ?? '-');
+                $mappedLot = $contract->num_lot ?? '-';
+            }
 
             $data[] = [
-                'month' => $sale->month_name ?? '',
-                'dedica' => '', // Placeholder - add logic if needed
-                'advisor' => $sale->advisor_first_name . ' ' . $sale->advisor_last_name,
-                'sale_percentage' => '100%', // Adjust based on commission data
-                'created_date' => Carbon::parse($sale->created_at)->format('d/m/Y'),
-                'credare' => '', // Add logic if available
-                'client_name' => $sale->client_name ?? '',
-                'client_range' => '', // Add client classification logic
-                'sale_value' => $sale->total_amount ?? 0,
-                'num_quotas' => count($payments),
-                'quota_payment' => $payments[0]->amount ?? 0,
-                'quota_total' => $sale->total_amount ?? 0,
-                // Monthly payment values
-                'jan_payment' => $monthlyPayments[0],
-                'feb_payment' => $monthlyPayments[1],
-                'mar_payment' => $monthlyPayments[2],
-                'apr_payment' => $monthlyPayments[3],
-                'may_payment' => $monthlyPayments[4],
-                'balance_mid' => $balance / 2, // Mid-year balance
-                'jun_payment' => $monthlyPayments[5],
-                'jul_payment' => $monthlyPayments[6],
-                'aug_payment' => $monthlyPayments[7],
-                'sep_payment' => $monthlyPayments[8],
-                'oct_payment' => $monthlyPayments[9],
-                'nov_payment' => $monthlyPayments[10],
-                'dec_payment' => $monthlyPayments[11],
-                'balance' => $balance,
-                'is_separator' => false
+                'month' => $contract->sign_date ? Carbon::parse($contract->sign_date)->format('Y-m') : '-',
+                'month_code' => $monthCode,
+                'month_name_full' => $monthFull,
+                'office' => $contract->office_name ?? '-',
+                'advisor' => $advisorName ?: '-',
+                'sale_number' => $contract->contract_number ?? '',
+                'date' => $contract->sign_date ? Carbon::parse($contract->sign_date)->format('d/m/Y') : '',
+                'phone1' => $contract->primary_phone ?? '',
+                'phone2' => $contract->secondary_phone ?? '',
+                'client_name' => $clientName,
+                'mz' => $mappedMz,
+                'lot' => $mappedLot,
+                'total_amount' => (float) ($contract->total_price ?? 0),
+                'down_payment' => (float) ($contract->down_payment ?? 0),
+                'separation' => (float) $separationAmount,
+                'initial_percent' => (float) $initialPercent,
+                'initial_payment' => (float) ($contract->down_payment ?? 0),
+                'direct_quota' => (float) ($contract->monthly_payment ?? 0),
+                'quota_amount' => (float) $quotaAmount,
+                'cash_amount' => 0.0,
+                'financed_amount' => (float) $financedAmount,
+                'num_installments' => (int) $numInstallments,
+                'separation_amount' => (float) $separationAmount,
+                'initials' => $initialsArr,
+                'initial_sum' => (float) $initialSum,
+                'balloon' => (float) ($balloonAmount ?: ($contract->balloon_payment ?? 0)),
+                'term' => (int) ($contract->term_months ?? 0),
+                'comments' => $contract->notes ?? '',
+                'age' => $age ?? '',
+                'income' => (float) ($contract->salary ?? 0),
+                'occupation' => $contract->occupation ?? '',
+                'residence' => '',
+                'source' => $contract->source ?? '',
             ];
         }
 
@@ -465,33 +678,46 @@ class ExcelReportService
     {
         // Query contracts with client information
         $query = DB::table('contracts as c')
-            ->join('sales as s', 'c.contract_id', '=', 's.contract_id')
-            ->join('users as advisor', 's.advisor_id', '=', 'advisor.id')
+            ->leftJoin('users as advisor', 'c.advisor_id', '=', 'advisor.user_id')
+            ->leftJoin('clients as cl', 'c.client_id', '=', 'cl.client_id')
             ->select(
-                'c.*',
-                's.sale_id',
-                's.sale_date',
-                's.total_amount',
-                's.down_payment',
+                'c.contract_id',
+                'c.sign_date',
+                'c.total_price',
+                'c.down_payment',
+                'c.balloon_payment',
+                'c.monthly_payment',
+                'c.term_months',
+                'c.notes',
+                'c.status',
+                'c.source',
                 'advisor.first_name as advisor_first_name',
-                'advisor.last_name as advisor_last_name'
+                'advisor.last_name as advisor_last_name',
+                'cl.occupation',
+                'cl.salary'
             );
 
         // Apply filters
         if (!empty($filters['year'])) {
-            $query->whereYear('s.sale_date', $filters['year']);
+            $query->whereYear('c.sign_date', $filters['year']);
         }
         if (!empty($filters['month'])) {
-            $query->whereMonth('s.sale_date', $filters['month']);
+            $query->whereMonth('c.sign_date', $filters['month']);
         }
         if (!empty($filters['status'])) {
-            $query->where('c.contract_status', $filters['status']);
+            $query->where('c.status', $filters['status']);
         }
         if (!empty($filters['advisor_id'])) {
-            $query->where('s.advisor_id', $filters['advisor_id']);
+            $query->where('c.advisor_id', $filters['advisor_id']);
+        }
+        if (!empty($filters['startDate'])) {
+            $query->whereDate('c.sign_date', '>=', $filters['startDate']);
+        }
+        if (!empty($filters['endDate'])) {
+            $query->whereDate('c.sign_date', '<=', $filters['endDate']);
         }
 
-        $contracts = $query->orderBy('s.sale_date', 'desc')->get();
+        $contracts = $query->orderBy('c.sign_date', 'desc')->get();
 
         // Transform data for Excel
         $data = [];
@@ -506,33 +732,24 @@ class ExcelReportService
             $quotaAmount = $numQuotas > 0 ? ($installments[0]->amount ?? 0) : 0;
 
             // Determine if contract is signed
-            $isSigned = !empty($contract->contract_status) && 
-                        $contract->contract_status !== 'pending';
+            $isSigned = !empty($contract->status) && 
+                        $contract->status !== 'pending';
 
-            // Calculate age if birth_date is available
+            // Age not available in clients table
             $age = null;
-            if (!empty($contract->client_birth_date)) {
-                $age = Carbon::parse($contract->client_birth_date)->age;
-            }
-
-            // Parse client additional data if stored as JSON
-            $additionalData = [];
-            if (!empty($contract->additional_data)) {
-                $additionalData = json_decode($contract->additional_data, true) ?? [];
-            }
 
             $data[] = [
-                'balloon' => $contract->down_payment ?? 0,
-                'direct_payment' => $quotaAmount,
-                'quota_amount' => $quotaAmount * $numQuotas,
+                'balloon' => (float) ($contract->balloon_payment ?? 0),
+                'direct_payment' => (float) ($contract->monthly_payment ?? 0),
+                'quota_amount' => (float) ($quotaAmount * $numQuotas),
                 'signed_contract' => $isSigned ? 'SI TIENE CONTRATO' : 'NO TIENE CONTRATO',
-                'comments' => $contract->notes ?? $additionalData['comments'] ?? '',
-                'age' => $age ?? $additionalData['age'] ?? '',
-                'income' => $additionalData['monthly_income'] ?? $additionalData['income'] ?? 0,
-                'occupation' => $contract->client_occupation ?? $additionalData['occupation'] ?? '',
-                'residence' => $contract->client_address ?? $additionalData['city'] ?? '',
-                'source' => $additionalData['lead_source'] ?? $additionalData['source'] ?? 'REFERIDO',
-                'is_separator' => !$isSigned // Mark unsigned contracts as separators
+                'comments' => $contract->notes ?? '',
+                'age' => $age ?? '',
+                'income' => (float) ($contract->salary ?? 0),
+                'occupation' => $contract->occupation ?? '',
+                'residence' => '',
+                'source' => $contract->source ?? 'REFERIDO',
+                'is_separator' => !$isSigned
             ];
         }
 
@@ -542,7 +759,7 @@ class ExcelReportService
     /**
      * Style helper methods
      */
-    private function styleHeaderCell($sheet, $cell, $fontSize = '12', $bold = true)
+    private function styleHeaderCell($sheet, $cell, $fontSize = 12, $bold = true)
     {
         $sheet->getStyle($cell)->applyFromArray([
             'font' => [
