@@ -95,6 +95,52 @@ class ContractController extends Controller
         );
     }
 
+    public function batch(Request $request)
+    {
+        $idsParam = $request->get('ids', '');
+        $ids = collect(explode(',', $idsParam))->filter()->map(fn($i) => (int) $i)->all();
+        if (empty($ids)) {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $contracts = Contract::with(['client.addresses', 'reservation.client.addresses', 'lot.manzana', 'reservation.lot.manzana'])
+            ->whereIn('contract_id', $ids)
+            ->get();
+
+        $data = $contracts->map(function(Contract $contract) {
+            $client = $contract->getClient();
+            $lot = $contract->getLot();
+            $addr = $client ? $client->addresses()->orderByDesc('address_id')->first() : null;
+            return [
+                'contract_id' => $contract->contract_id,
+                'contract_number' => $contract->contract_number,
+                'client' => $client ? [
+                    'client_id' => $client->client_id,
+                    'first_name' => $client->first_name,
+                    'last_name' => $client->last_name,
+                    'doc_number' => $client->doc_number ?? $client->document_number,
+                    'email' => $client->email,
+                    'primary_phone' => $client->primary_phone,
+                    'secondary_phone' => $client->secondary_phone,
+                    'address' => $addr ? [
+                        'line1' => $addr->line1,
+                        'city' => $addr->city,
+                        'state' => $addr->state,
+                        'country' => $addr->country,
+                    ] : null,
+                ] : null,
+                'lot' => $lot ? [
+                    'lot_id' => $lot->lot_id,
+                    'num_lot' => $lot->num_lot,
+                    'manzana_name' => optional($lot->manzana)->name,
+                    'manzana_id' => $lot->manzana_id,
+                ] : null,
+            ];
+        });
+
+        return response()->json(['success' => true, 'data' => $data]);
+    }
+
     /**
      * Update the given contract with validated data.
      */

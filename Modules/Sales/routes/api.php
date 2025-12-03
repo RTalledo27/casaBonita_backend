@@ -30,6 +30,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
         
         // Contract specific routes (must be before apiResource)
         Route::get('contracts/with-financing', [ContractController::class, 'withFinancing']);
+        Route::get('contracts/batch', [ContractController::class, 'batch']);
         Route::apiResource('contracts',    ContractController::class);
         Route::get('contracts/{contract}/preview', [ContractController::class, 'preview']);
         Route::post('contracts/calculate-payment', [ContractController::class, 'calculatePayment']);

@@ -127,7 +127,23 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
             ->name('collections.followups.store');
         Route::put('/{id}', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'update'])
             ->name('collections.followups.update');
+        Route::put('/{id}/commitment', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'updateCommitment'])
+            ->name('collections.followups.commitment');
     });
+
+    // Segmentación
+    Route::get('/segments/preventive', [\Modules\Collections\app\Http\Controllers\SegmentsController::class, 'preventive'])
+        ->name('collections.segments.preventive');
+    Route::get('/segments/mora', [\Modules\Collections\app\Http\Controllers\SegmentsController::class, 'mora'])
+        ->name('collections.segments.mora');
+
+    // Logs de gestión
+    Route::post('/followup-logs', [\Modules\Collections\app\Http\Controllers\FollowupLogsController::class, 'store'])
+        ->name('collections.followup-logs.store');
+
+    // KPIs
+    Route::get('/kpis', [\Modules\Collections\app\Http\Controllers\KpisController::class, 'index'])
+        ->name('collections.kpis.index');
     
     // Dashboard routes
     Route::get('/dashboard', [CollectionsDashboardController::class, 'getDashboard'])

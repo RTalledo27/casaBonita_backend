@@ -73,6 +73,12 @@ class FollowupsController extends Controller
                 $f->due_date = $f->due_date ?: ($nextDue->due_date ?? null);
                 $f->monthly_quota = $f->monthly_quota ?: ($nextDue->amount ?? null);
                 $f->sale_price = $f->sale_price ?: ($contract->total_price ?? null);
+                $f->contract_status = $f->contract_status ?: ($contract->status ?? null);
+                $advisor = $contract->getAdvisor();
+                if ($advisor) {
+                    $f->advisor_id = $f->advisor_id ?: ($advisor->employee_id ?? null);
+                    $f->advisor_name = $f->advisor_name ?: trim(($advisor->user->first_name ?? '') . ' ' . ($advisor->user->last_name ?? ''));
+                }
 
                 $f->paid_installments = $f->paid_installments ?: $paid->count();
                 $f->pending_installments = $f->pending_installments ?: $pending->count();
@@ -171,6 +177,13 @@ class FollowupsController extends Controller
             $data['due_date'] = $nextDue->due_date ?? null;
             $data['monthly_quota'] = $nextDue->amount ?? null;
             $data['sale_price'] = $contract->total_price ?? null;
+            // Estado y asesor
+            $data['contract_status'] = $contract->status ?? null;
+            $advisor = $contract->getAdvisor();
+            if ($advisor) {
+                $data['advisor_id'] = $advisor->employee_id ?? null;
+                $data['advisor_name'] = trim(($advisor->user->first_name ?? '') . ' ' . ($advisor->user->last_name ?? ''));
+            }
 
             // Lote (manzana-num_lot)
             $lot = $contract->getLot();
@@ -218,6 +231,19 @@ class FollowupsController extends Controller
     {
         $followup = Followup::findOrFail($id);
         $followup->fill($request->all());
+        $followup->save();
+        return response()->json(['success' => true, 'data' => $followup]);
+    }
+
+    public function updateCommitment(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'commitment_date' => 'required|date',
+            'commitment_amount' => 'required|numeric',
+        ]);
+        $followup = Followup::findOrFail($id);
+        $followup->commitment_date = $data['commitment_date'];
+        $followup->commitment_amount = $data['commitment_amount'];
         $followup->save();
         return response()->json(['success' => true, 'data' => $followup]);
     }

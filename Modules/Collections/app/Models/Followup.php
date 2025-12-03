@@ -27,7 +27,12 @@ class Followup extends Model
         'contract_id',
         'lot_id',
         'lot',
+        'lot_area_m2',
+        'lot_status',
         'sale_code',
+        'contract_status',
+        'advisor_id',
+        'advisor_name',
         'due_date',
         'sale_price',
         'amount_paid',
@@ -50,5 +55,11 @@ class Followup extends Model
         'owner',
         'general_notes',
         'general_reason',
+        // nuevos campos de gestión
+        'segment',
+        'tramo',
+        'channel',
+        'commitment_date',
+        'commitment_amount',
     ];
 }
