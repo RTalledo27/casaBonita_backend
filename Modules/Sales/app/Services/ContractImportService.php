@@ -1901,11 +1901,12 @@ class ContractImportService
             $contractNumber = $this->generateContractNumber();
             
             // Preparar datos del contrato
+            $contractNumberInput = $data['contract_number'] ?? $data['correlative'] ?? null;
             $contractData = [
                 'client_id' => $client->client_id,
                 'lot_id' => $lot->lot_id,
                 'advisor_id' => $advisor ? $advisor->employee_id : null,
-                'contract_number' => $contractNumber,
+                'contract_number' => $contractNumberInput ?: $contractNumber,
                 'reservation_id' => null, // Sin reservación para contratos directos
                 'sign_date' => $this->parseDate($data['fecha_venta'] ?? $data['sign_date'] ?? null), // Usar fecha del Excel
                 'total_price' => $totalPrice,
@@ -1948,6 +1949,16 @@ class ContractImportService
                 
                 // Retornar el contrato existente en lugar de crear uno nuevo
                 return $existingContract;
+            }
+
+            // Salvaguarda adicional: si existe por número, actualizar en vez de crear
+            if (!empty($contractData['contract_number'])) {
+                $existingByNumber = Contract::where('contract_number', $contractData['contract_number'])->first();
+                if ($existingByNumber) {
+                    $existingByNumber->fill($contractData);
+                    $existingByNumber->save();
+                    return $existingByNumber;
+                }
             }
 
             // Crear el contrato
@@ -2522,9 +2533,10 @@ class ContractImportService
             // Determinar si es financiado
             $isFinanced = $monthlyPayment > 0 && $termMonths > 0;
             
+            $contractNumberInput = $data['contract_number'] ?? $data['correlative'] ?? null;
             $contractData = [
                 'reservation_id' => $reservation->reservation_id,
-                'contract_number' => $this->generateContractNumber(),
+                'contract_number' => $contractNumberInput ?: $this->generateContractNumber(),
                 'sign_date' => $this->parseDate($data['fecha_venta'] ?? now()),
                 'total_price' => $totalPrice,
                 'down_payment' => $downPayment,
@@ -2580,6 +2592,16 @@ class ContractImportService
                 
                 // Retornar el contrato existente en lugar de crear uno nuevo
                 return $existingContract;
+            }
+
+            // Salvaguarda adicional: si existe por número, actualizar en vez de crear
+            if (!empty($contractData['contract_number'])) {
+                $existingByNumber = Contract::where('contract_number', $contractData['contract_number'])->first();
+                if ($existingByNumber) {
+                    $existingByNumber->fill($contractData);
+                    $existingByNumber->save();
+                    return $existingByNumber;
+                }
             }
             
             Log::info('Intentando crear contrato con Contract::create()');
