@@ -113,6 +113,11 @@ class Client extends Model
         return $this->hasMany(Reservation::class, 'client_id');
     }
     
+    public function verifications()
+    {
+        return $this->hasMany(ClientVerification::class, 'client_id');
+    }
+    
     // Accessor para obtener el nombre completo
     public function getFullNameAttribute(): string
     {

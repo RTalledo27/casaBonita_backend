@@ -5,6 +5,7 @@ namespace Modules\CRM\Transformers;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Modules\CRM\Transformers\CrmInteractionResource;
 use Modules\CRM\Transformers\AddressResource;
+use Modules\CRM\Models\ClientVerification;
 
 
 class ClientResource extends JsonResource
@@ -42,6 +43,8 @@ class ClientResource extends JsonResource
             'salary'           => $this->salary,
             'family_group'     => $this->family_group,
             'created_at'       => $this->created_at,
+            'email_verified'   => (bool) ClientVerification::where('client_id', $this->client_id)->where('type', 'email')->where('status', 'verified')->exists(),
+            'phone_verified'   => (bool) ClientVerification::where('client_id', $this->client_id)->where('type', 'phone')->where('status', 'verified')->exists(),
             // relaciones opcionales
             'addresses'        => AddressResource::collection($this->whenLoaded('addresses')),
             'interactions'     => CrmInteractionResource::collection($this->whenLoaded('interactions')),

@@ -43,7 +43,7 @@ class ExcelReportService
         // Set header
         $sheet->setCellValue('A1', 'INGRESOS CONTRACTUALES CASA BONITA GPAU - ' . $year);
         $sheet->mergeCells('A1:P1');
-        $this->styleHeaderCell($sheet, 'A1', '18', true);
+        $this->styleHeaderCell($sheet, 'A1', 18, true);
 
         // Column headers
         $columns = ['N° VUELO', 'MES', 'ASESOR(A)', 'NUMERO DE CLIENTE', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 
@@ -83,13 +83,13 @@ class ExcelReportService
             $col = 'E';
             foreach ($item['monthly_values'] as $value) {
                 $sheet->setCellValue($col . $row, $value);
-                $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('S/ #,##0.00');
+                $sheet->getStyle($col . $row)->getNumberFormat()->setFormatCode('"S/ " #,##0.00');
                 $col++;
             }
 
             // Total column
             $sheet->setCellValue('Q' . $row, $item['total']);
-            $sheet->getStyle('Q' . $row)->getNumberFormat()->setFormatCode('S/ #,##0.00');
+            $sheet->getStyle('Q' . $row)->getNumberFormat()->setFormatCode('"S/ " #,##0.00');
 
             // Apply red background for separator rows (based on image pattern)
             if ($item['is_separator']) {
@@ -488,11 +488,15 @@ class ExcelReportService
         $query = DB::table('contracts as c')
             ->leftJoin('employees as e', 'c.advisor_id', '=', 'e.employee_id')
             ->leftJoin('users as advisor', 'e.user_id', '=', 'advisor.user_id')
+            ->leftJoin('users as ua', 'c.advisor_id', '=', 'ua.user_id')
             ->leftJoin('teams as t', 'e.team_id', '=', 't.team_id')
             ->leftJoin('clients as cl', 'c.client_id', '=', 'cl.client_id')
             ->leftJoin('lots as l', 'c.lot_id', '=', 'l.lot_id')
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('employees as re', 'r.advisor_id', '=', 're.employee_id')
+            ->leftJoin('users as ru', 're.user_id', '=', 'ru.user_id')
+            ->leftJoin('teams as rt', 're.team_id', '=', 'rt.team_id')
             ->select(
                 'c.contract_id',
                 'c.contract_number',
@@ -507,6 +511,10 @@ class ExcelReportService
                 't.team_name as office_name',
                 'advisor.first_name as advisor_first_name',
                 'advisor.last_name as advisor_last_name',
+                'ua.first_name as advisor_user_first_name',
+                'ua.last_name as advisor_user_last_name',
+                'ru.first_name as reservation_advisor_first_name',
+                'ru.last_name as reservation_advisor_last_name',
                 'cl.first_name as client_first_name',
                 'cl.last_name as client_last_name',
                 'cl.primary_phone',
@@ -518,6 +526,7 @@ class ExcelReportService
                 'l.external_code',
                 'm.name as manzana_name',
                 'r.deposit_amount',
+                'rt.team_name as reservation_team_name',
                 DB::raw('MONTH(c.sign_date) as sale_month'),
                 DB::raw('MONTHNAME(c.sign_date) as month_name')
             );
@@ -551,7 +560,12 @@ class ExcelReportService
         $data = [];
         foreach ($contracts as $contract) {
             $clientName = trim(($contract->client_first_name ?? '') . ' ' . ($contract->client_last_name ?? ''));
-            $advisorName = trim(($contract->advisor_first_name ?? '') . ' ' . ($contract->advisor_last_name ?? ''));
+            $advisorNamePrimary = trim(($contract->advisor_first_name ?? '') . ' ' . ($contract->advisor_last_name ?? ''));
+            $advisorNameDirect = trim(($contract->advisor_user_first_name ?? '') . ' ' . ($contract->advisor_user_last_name ?? ''));
+            $advisorNameFromReservation = trim(($contract->reservation_advisor_first_name ?? '') . ' ' . ($contract->reservation_advisor_last_name ?? ''));
+            $advisorName = $advisorNamePrimary ?: ($advisorNameDirect ?: ($advisorNameFromReservation ?: '-'));
+
+            $officeName = $contract->office_name ?? ($contract->reservation_team_name ?? '-');
             
             // Calculate initial percentage
             $initialPercent = 0;
@@ -635,7 +649,7 @@ class ExcelReportService
                 'month' => $contract->sign_date ? Carbon::parse($contract->sign_date)->format('Y-m') : '-',
                 'month_code' => $monthCode,
                 'month_name_full' => $monthFull,
-                'office' => $contract->office_name ?? '-',
+                'office' => $officeName,
                 'advisor' => $advisorName ?: '-',
                 'sale_number' => $contract->contract_number ?? '',
                 'date' => $contract->sign_date ? Carbon::parse($contract->sign_date)->format('d/m/Y') : '',

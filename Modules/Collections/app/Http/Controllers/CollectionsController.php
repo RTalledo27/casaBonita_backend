@@ -407,8 +407,10 @@ class CollectionsController extends Controller
                             'due_date' => $schedule->due_date,
                             'amount' => $schedule->amount,
                             'status' => $schedule->status,
-                            'is_overdue' => $schedule->due_date < now() && $schedule->status != 'pagado',  // Changed from 'paid' to 'pagado'
-                            'days_overdue' => $schedule->due_date < now() && $schedule->status != 'pagado'  // Changed from 'paid' to 'pagado'
+                            'notes' => $schedule->notes,
+                            'type' => $schedule->type,
+                            'is_overdue' => $schedule->due_date < now() && $schedule->status != 'pagado',
+                            'days_overdue' => $schedule->due_date < now() && $schedule->status != 'pagado'
                                 ? now()->diffInDays($schedule->due_date) : 0
                         ];
                     })
@@ -662,6 +664,8 @@ class CollectionsController extends Controller
                             'due_date' => $schedule->due_date,
                             'amount' => $schedule->amount,
                             'status' => $actualStatus,
+                            'notes' => $schedule->notes,
+                            'type' => $schedule->type,
                             'is_overdue' => $isOverdue,
                             'days_overdue' => $daysOverdue
                         ];

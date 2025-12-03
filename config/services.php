@@ -35,6 +35,18 @@ return [
         ],
     ],
 
+    'sms' => [
+        'url' => env('SMS_GATEWAY_URL'),
+        'key' => env('SMS_GATEWAY_API_KEY'),
+        'sender' => env('SMS_SENDER', env('APP_NAME', 'Casa Bonita')),
+    ],
+
+    'infobip' => [
+        'base_url' => env('INFOBIP_BASE_URL'), // ej: https://XXXX.api.infobip.com
+        'api_key' => env('INFOBIP_API_KEY'),
+        'sender' => env('INFOBIP_SENDER', env('APP_NAME', 'Casa Bonita')),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | LOGICWARE CRM API Configuration

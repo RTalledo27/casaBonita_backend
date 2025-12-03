@@ -6,7 +6,8 @@ use Modules\CRM\Http\Controllers\{
     AddressController,
     CrmInteractionController,
     CRMController,
-    FamilyMemberController
+    FamilyMemberController,
+    ClientVerificationController
 };
 
 
@@ -34,5 +35,17 @@ Route::middleware(['auth:sanctum'])->prefix('v1/crm')->group(function () {
                 ->name('clients.summary');
             Route::get('clients/report/csv',             [ClientController::class, 'exportCsv'])
                 ->name('clients.report.csv');
+
+            Route::post('clients/{client_id}/verifications/request', [ClientVerificationController::class, 'requestVerification'])
+                ->name('crm.clients.verifications.request');
+            Route::post('clients/{client_id}/verifications/confirm', [ClientVerificationController::class, 'confirmVerification'])
+                ->name('crm.clients.verifications.confirm');
+            Route::post('clients/{client_id}/verifications/resend', [ClientVerificationController::class, 'resendVerification'])
+                ->name('crm.clients.verifications.resend');
+
+            Route::post('verifications/request-anon', [ClientVerificationController::class, 'requestAnon'])
+                ->name('crm.clients.verifications.request-anon');
+            Route::post('verifications/confirm-anon', [ClientVerificationController::class, 'confirmAnon'])
+                ->name('crm.clients.verifications.confirm-anon');
     });
 });

@@ -118,6 +118,16 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
     Route::get('/predictions', [CollectionsController::class, 'getCollectionPredictions'])
         ->middleware('permission:collections.reports.view')
         ->name('collections.predictions');
+
+    // Followups (gestión de cobranza)
+    Route::prefix('followups')->group(function () {
+        Route::get('/', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'index'])
+            ->name('collections.followups.index');
+        Route::post('/', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'store'])
+            ->name('collections.followups.store');
+        Route::put('/{id}', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'update'])
+            ->name('collections.followups.update');
+    });
     
     // Dashboard routes
     Route::get('/dashboard', [CollectionsDashboardController::class, 'getDashboard'])
@@ -143,6 +153,24 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
     Route::get('/dashboard/trends', [CollectionsDashboardController::class, 'getTrends'])
         ->middleware('permission:collections.dashboard.view')
         ->name('collections.dashboard.trends');
+
+    Route::prefix('notifications')->group(function () {
+        Route::post('/schedules/{schedule_id}/send-reminder', [\Modules\Collections\Http\Controllers\NotificationsController::class, 'sendScheduleReminder'])
+            ->middleware('permission:collections.schedules.view')
+            ->name('collections.notifications.send-reminder');
+        Route::post('/send-upcoming', [\Modules\Collections\Http\Controllers\NotificationsController::class, 'sendUpcomingReminders'])
+            ->middleware('permission:collections.schedules.view')
+            ->name('collections.notifications.send-upcoming');
+        Route::post('/send-custom', [\Modules\Collections\Http\Controllers\NotificationsController::class, 'sendCustomEmail'])
+            ->middleware('permission:collections.schedules.view')
+            ->name('collections.notifications.send-custom');
+        Route::post('/schedules/{schedule_id}/send-custom', [\Modules\Collections\Http\Controllers\NotificationsController::class, 'sendCustomEmailForSchedule'])
+            ->middleware('permission:collections.schedules.view')
+            ->name('collections.notifications.send-custom-for-schedule');
+        Route::post('/logs/{log_id}/confirm', [\Modules\Collections\Http\Controllers\NotificationsController::class, 'confirmReception'])
+            ->middleware('permission:collections.schedules.view')
+            ->name('collections.notifications.confirm-reception');
+    });
     
     // Rutas para gestión de pagos de clientes
     Route::prefix('customer-payments')->group(function () {
