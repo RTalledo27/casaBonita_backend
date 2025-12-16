@@ -134,6 +134,7 @@ class ContractController extends Controller
                     'num_lot' => $lot->num_lot,
                     'manzana_name' => optional($lot->manzana)->name,
                     'manzana_id' => $lot->manzana_id,
+                    'external_code' => $lot->external_code,
                 ] : null,
             ];
         });

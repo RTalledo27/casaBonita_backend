@@ -6,12 +6,17 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\NewUserCredentialsMail;
+use Illuminate\Support\Str;
 use Modules\HumanResources\Http\Requests\StoreEmployeeRequest;
 use Modules\HumanResources\Http\Requests\UpdateEmployeeRequest;
 use Modules\HumanResources\Repositories\EmployeeRepository;
 use Modules\HumanResources\Services\BonusService;
 use Modules\HumanResources\Services\CommissionService;
 use Modules\HumanResources\Transformers\EmployeeResource;
+use Modules\Security\Models\User;
+use Modules\Security\Transformers\UserResource;
 
 class EmployeeController extends Controller
 {
@@ -318,6 +323,56 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Reenviar correo de credenciales o resetear contraseña del usuario asociado al empleado
+     */
+    public function notifyUserCredentials(Request $request, int $employeeId): JsonResponse
+    {
+        try {
+            $employee = $this->employeeRepo->findById($employeeId);
+            if (!$employee || !$employee->user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Empleado o usuario no encontrado'
+                ], 404);
+            }
+
+            $user = $employee->user;
+            $newPassword = $request->get('password');
+            if ($newPassword) {
+                $user->password_hash = \Illuminate\Support\Facades\Hash::make($newPassword);
+                $user->must_change_password = true;
+                $user->save();
+            }
+
+            $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
+            if (config('clicklab.email_via_api')) {
+                $html = view('emails.new-user-credentials', [
+                    'user' => $user,
+                    'temporaryPassword' => $newPassword,
+                    'loginUrl' => $loginUrl,
+                ])->render();
+                app(\App\Services\ClicklabClient::class)->sendEmail($user->email, 'Tus Credenciales de Acceso', $html);
+            } else {
+                Mail::to($user->email)->send(new NewUserCredentialsMail($user, $newPassword, $loginUrl));
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Correo de credenciales enviado'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error enviando credenciales', [
+                'employee_id' => $employeeId,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Error enviando credenciales: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Generar usuario para un empleado existente
      */
     public function generateUser(Request $request, int $employeeId): JsonResponse
@@ -361,21 +416,47 @@ class EmployeeController extends Controller
             try {
                 // Crear usuario
                 $userData = $request->only(['username', 'email', 'first_name', 'last_name']);
-                $userData['password_hash'] = \Illuminate\Support\Facades\Hash::make($request->password);
+                $plainPassword = $request->password ?: Str::random(12);
+                $userData['password_hash'] = \Illuminate\Support\Facades\Hash::make($plainPassword);
                 $userData['status'] = 'active';
+                $userData['must_change_password'] = true;
 
-                $user = \Modules\Security\app\Models\User::create($userData);
+                $user = User::create($userData);
 
                 // Actualizar empleado con el user_id
                 $employee->update(['user_id' => $user->user_id]);
 
                 \Illuminate\Support\Facades\DB::commit();
 
+                // Enviar correo de bienvenida con credenciales
+                $emailSent = false;
+                try {
+                    $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
+                    if (config('clicklab.email_via_api')) {
+                        $html = view('emails.new-user-credentials', [
+                            'user' => $user,
+                            'temporaryPassword' => $plainPassword,
+                            'loginUrl' => $loginUrl,
+                        ])->render();
+                        app(\App\Services\ClicklabClient::class)->sendEmail($user->email, 'Tus Credenciales de Acceso', $html);
+                    } else {
+                        Mail::to($user->email)->send(new NewUserCredentialsMail($user, $plainPassword, $loginUrl));
+                    }
+                    $emailSent = true;
+                } catch (\Exception $mailError) {
+                    Log::error('Error enviando correo de bienvenida', [
+                        'user_id' => $user->user_id,
+                        'email' => $user->email,
+                        'error' => $mailError->getMessage()
+                    ]);
+                }
+
                 return response()->json([
                     'success' => true,
                     'data' => [
-                        'user' => new \Modules\Security\app\Transformers\UserResource($user),
-                        'employee' => new EmployeeResource($employee->load('user'))
+                        'user' => new UserResource($user),
+                        'employee' => new EmployeeResource($employee->load('user')),
+                        'email_sent' => $emailSent
                     ],
                     'message' => 'Usuario creado y asociado exitosamente'
                 ], 201);

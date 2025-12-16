@@ -11,12 +11,12 @@ class CustomCollectionsMail extends Mailable
     use Queueable, SerializesModels;
 
     public string $subjectLine;
-    public string $html;
+    public string $bodyHtml;
 
     public function __construct(string $subjectLine, string $html)
     {
         $this->subjectLine = $subjectLine;
-        $this->html = $html;
+        $this->bodyHtml = $html;
     }
 
     public function envelope(): \Illuminate\Mail\Mailables\Envelope
@@ -26,7 +26,9 @@ class CustomCollectionsMail extends Mailable
 
     public function content(): \Illuminate\Mail\Mailables\Content
     {
-        return new \Illuminate\Mail\Mailables\Content(view: 'emails.custom-collections', with: [ 'html' => $this->html ]);
+        return new \Illuminate\Mail\Mailables\Content(view: 'emails.custom-collections', with: [
+            'html' => $this->bodyHtml,
+            'subject' => $this->subjectLine,
+        ]);
     }
 }
-

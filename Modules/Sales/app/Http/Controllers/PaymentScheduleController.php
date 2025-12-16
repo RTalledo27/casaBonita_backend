@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 use Modules\Sales\Http\Requests\PaymentScheduleRequest;
 use Modules\Sales\Http\Requests\UpdatePaymentScheduleRequest;
 use Modules\Collections\Models\PaymentSchedule;
@@ -16,7 +15,7 @@ use Modules\Sales\Models\Contract;
 use Modules\Sales\Repositories\PaymentScheduleRepository;
 use Modules\Sales\Services\PaymentScheduleService;
 use Modules\Sales\Transformers\PaymentScheduleResource;
-use Modules\Services\PusherNotifier;
+use Modules\services\PusherNotifier;
 
 class PaymentScheduleController extends Controller
 {
@@ -43,7 +42,7 @@ class PaymentScheduleController extends Controller
         ];
         
         // Log para debugging
-        \Log::info('🔍 PaymentScheduleController::index - Filtros recibidos:', [
+        Log::info('PaymentScheduleController::index - Filtros recibidos:', [
             'request_params' => $request->all(),
             'processed_filters' => $filters
         ]);
@@ -361,7 +360,7 @@ class PaymentScheduleController extends Controller
                 'contract_id' => 'sometimes|integer|exists:contracts,contract_id'
             ]);
 
-            $query = PaymentSchedule::with(['contract.reservation.client', 'contract.reservation.lot', 'contract.client']);
+            $query = PaymentSchedule::with(['contract.reservation.client', 'contract.reservation.lot']);
 
             // Apply filters
             if ($request->has('due_date_from')) {
@@ -380,53 +379,27 @@ class PaymentScheduleController extends Controller
                 $query->where('contract_id', $request->input('contract_id'));
             }
 
-            $schedules = $query->get();
+            $schedules = $query->orderBy('due_date')->get();
 
-            // Calculate amounts dynamically based on due_date
-            $today = Carbon::now()->startOfDay();
-
-            // Schedules that are paid
-            $paidSchedules = $schedules->where('status', 'pagado');
-            $paidAmount = $paidSchedules->sum(function($schedule) {
-                return $schedule->amount_paid ?? $schedule->amount;
-            });
-
-            //  Overdue: pending/overdue status AND due_date is before today
-            $overdueSchedules = $schedules->filter(function($schedule) use ($today) {
-                return in_array($schedule->status, ['pendiente', 'vencido']) 
-                    && $schedule->due_date 
-                    && Carbon::parse($schedule->due_date)->lt($today);
-            });
-            $overdueAmount = $overdueSchedules->sum('amount');
-            $overdueCount = $overdueSchedules->count();
-
-            // Pending: pending status AND due_date is today or future
-            $pendingSchedules = $schedules->filter(function($schedule) use ($today) {
-                return $schedule->status === 'pendiente' 
-                    && $schedule->due_date 
-                    && Carbon::parse($schedule->due_date)->gte($today);
-            });
-            $pendingAmount = $pendingSchedules->sum('amount');
-            $pendingCount = $pendingSchedules->count();
-
+            // Calculate summary statistics
             $summary = [
                 'total_schedules' => $schedules->count(),
                 'total_amount' => $schedules->sum('amount'),
-                'paid_amount' => $paidAmount,
-                'pending_amount' => $pendingAmount,
-                'overdue_amount' => $overdueAmount,
+                'paid_amount' => $schedules->where('status', 'pagado')->sum('amount_paid'),
+                'pending_amount' => $schedules->where('status', 'pendiente')->sum('amount'),
+                'overdue_amount' => $schedules->where('status', 'vencido')->sum('amount'),
                 'by_status' => [
                     'pendiente' => [
-                        'count' => $pendingCount,
-                        'amount' => $pendingAmount
+                        'count' => $schedules->where('status', 'pendiente')->count(),
+                        'amount' => $schedules->where('status', 'pendiente')->sum('amount')
                     ],
                     'pagado' => [
-                        'count' => $paidSchedules->count(),
-                        'amount' => $paidAmount
+                        'count' => $schedules->where('status', 'pagado')->count(),
+                        'amount' => $schedules->where('status', 'pagado')->sum('amount_paid')
                     ],
                     'vencido' => [
-                        'count' => $overdueCount,
-                        'amount' => $overdueAmount
+                        'count' => $schedules->where('status', 'vencido')->count(),
+                        'amount' => $schedules->where('status', 'vencido')->sum('amount')
                     ],
                     'anulado' => [
                         'count' => $schedules->where('status', 'anulado')->count(),
@@ -434,49 +407,25 @@ class PaymentScheduleController extends Controller
                     ]
                 ],
                 'collection_rate' => $schedules->sum('amount') > 0 
-                    ? round(($paidAmount / $schedules->sum('amount')) * 100, 2)
+                    ? round(($schedules->where('status', 'pagado')->sum('amount_paid') / $schedules->sum('amount')) * 100, 2)
                     : 0
             ];
 
             // Format schedules data
             $schedulesData = $schedules->map(function($schedule) {
-                // Get client - try multiple paths
-                $clientName = 'N/A';
-                if ($schedule->contract) {
-                    // Try direct client relationship first (for Logicware contracts)
-                    if ($schedule->contract->client) {
-                        $clientName = $schedule->contract->client->full_name;
-                    }
-                    // Fallback to reservation->client
-                    elseif ($schedule->contract->reservation && $schedule->contract->reservation->client) {
-                        $clientName = $schedule->contract->reservation->client->full_name;
-                    }
-                }
-                
-                // Get lot number
-                $lotNumber = 'N/A';
-                if ($schedule->contract) {
-                    if ($schedule->contract->lot_number) {
-                        $lotNumber = $schedule->contract->lot_number;
-                    } 
-                    elseif ($schedule->contract->reservation && $schedule->contract->reservation->lot) {
-                        $lotNumber = $schedule->contract->reservation->lot->lot_number;
-                    }
-                }
-                
                 return [
                     'schedule_id' => $schedule->schedule_id,
                     'contract_id' => $schedule->contract_id,
                     'installment_number' => $schedule->installment_number,
                     'due_date' => $schedule->due_date,
                     'amount' => $schedule->amount,
-                    'amount_paid' => $schedule->amount_paid ?? $schedule->amount, // Use amount if amount_paid is null
+                    'amount_paid' => $schedule->amount_paid,
                     'status' => $schedule->status,
                     'payment_date' => $schedule->payment_date,
                     'payment_method' => $schedule->payment_method,
                     'notes' => $schedule->notes,
-                    'client_name' => $clientName,
-                    'lot_number' => $lotNumber,
+                    'client_name' => $schedule->contract?->reservation?->client?->full_name ?? 'N/A',
+                    'lot_number' => $schedule->contract?->reservation?->lot?->lot_number ?? 'N/A',
                     'contract_number' => $schedule->contract?->contract_number ?? 'N/A',
                     'days_overdue' => $schedule->status === 'vencido' && $schedule->due_date 
                         ? now()->diffInDays($schedule->due_date) 

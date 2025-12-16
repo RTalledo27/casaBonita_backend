@@ -42,7 +42,11 @@ class NotificationsController extends Controller
             'payment_link' => config('app.url')
         ];
 
-        Mail::to($email)->send(new InstallmentReminderMail($data));
+        if (config('clicklab.email_via_api')) {
+            app(\App\Services\ClicklabMailer::class)->send($email, new InstallmentReminderMail($data));
+        } else {
+            Mail::to($email)->send(new InstallmentReminderMail($data));
+        }
 
         CollectionMessageLog::create([
             'contract_id' => $schedule->contract_id,
@@ -96,7 +100,11 @@ class NotificationsController extends Controller
                 'payment_link' => config('app.url')
             ];
             try {
-                Mail::to($email)->send(new InstallmentReminderMail($data));
+                if (config('clicklab.email_via_api')) {
+                    app(\App\Services\ClicklabMailer::class)->send($email, new InstallmentReminderMail($data));
+                } else {
+                    Mail::to($email)->send(new InstallmentReminderMail($data));
+                }
                 CollectionMessageLog::create([
                     'contract_id' => $schedule->contract_id,
                     'schedule_id' => $schedule->schedule_id,
@@ -134,8 +142,15 @@ class NotificationsController extends Controller
             'html' => 'required|string'
         ]);
 
-        Mail::to($request->input('email'))
-            ->send(new CustomCollectionsMail($request->input('subject'), $request->input('html')));
+        if (config('clicklab.email_via_api')) {
+            app(\App\Services\ClicklabMailer::class)->send(
+                $request->input('email'),
+                new CustomCollectionsMail($request->input('subject'), $request->input('html'))
+            );
+        } else {
+            Mail::to($request->input('email'))
+                ->send(new CustomCollectionsMail($request->input('subject'), $request->input('html')));
+        }
 
         CollectionMessageLog::create([
             'recipient_email' => $request->input('email'),
@@ -177,7 +192,11 @@ class NotificationsController extends Controller
             ], 400);
         }
 
-        Mail::to($email)->send(new CustomCollectionsMail($request->input('subject'), $request->input('html')));
+        if (config('clicklab.email_via_api')) {
+            app(\App\Services\ClicklabMailer::class)->send($email, new CustomCollectionsMail($request->input('subject'), $request->input('html')));
+        } else {
+            Mail::to($email)->send(new CustomCollectionsMail($request->input('subject'), $request->input('html')));
+        }
 
         CollectionMessageLog::create([
             'contract_id' => $schedule->contract_id,

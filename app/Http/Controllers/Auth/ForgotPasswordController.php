@@ -61,7 +61,11 @@ class ForgotPasswordController extends Controller
 
         // Enviar email
         try {
-            Mail::to($request->email)->send(new ResetPasswordMail($user, $resetUrl, $token));
+            if (config('clicklab.email_via_api')) {
+                app(\App\Services\ClicklabMailer::class)->send($request->email, new ResetPasswordMail($user, $resetUrl, $token));
+            } else {
+                Mail::to($request->email)->send(new ResetPasswordMail($user, $resetUrl, $token));
+            }
             
             Log::info('Password reset email sent successfully', [
                 'email' => $request->email

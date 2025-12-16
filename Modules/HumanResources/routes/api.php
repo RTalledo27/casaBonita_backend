@@ -54,6 +54,7 @@ Route::prefix('v1')->group(function () {
                 Route::get('/{employee}', [EmployeeController::class,'show'])->name('hr.employees.show');
                 Route::post('/', [EmployeeController::class, 'store'])->name('hr.employees.store');
                 Route::post('/{employee}/generate-user', [EmployeeController::class, 'generateUser'])->name('hr.employees.generate-user');
+                Route::post('/{employee}/notify-user-credentials', [EmployeeController::class, 'notifyUserCredentials'])->name('hr.employees.notify-user-credentials');
                 
                 Route::get('{employee}/dashboard', [EmployeeController::class, 'dashboard']);
             });

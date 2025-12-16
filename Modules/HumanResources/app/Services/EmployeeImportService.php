@@ -499,8 +499,15 @@ class EmployeeImportService
     {
         $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
         
-        Mail::to($user->email)->send(
-            new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl)
-        );
+        if (config('clicklab.email_via_api')) {
+            app(\App\Services\ClicklabMailer::class)->send(
+                $user->email,
+                new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl)
+            );
+        } else {
+            Mail::to($user->email)->send(
+                new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl)
+            );
+        }
     }
 }

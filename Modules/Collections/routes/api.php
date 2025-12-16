@@ -129,6 +129,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
             ->name('collections.followups.update');
         Route::put('/{id}/commitment', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'updateCommitment'])
             ->name('collections.followups.commitment');
+        Route::post('/{id}/quick-action', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'quickAction'])
+            ->name('collections.followups.quick-action');
     });
 
     // Segmentación
@@ -138,6 +140,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
         ->name('collections.segments.mora');
 
     // Logs de gestión
+    Route::get('/followup-logs', [\Modules\Collections\app\Http\Controllers\FollowupLogsController::class, 'index'])
+        ->name('collections.followup-logs.index');
     Route::post('/followup-logs', [\Modules\Collections\app\Http\Controllers\FollowupLogsController::class, 'store'])
         ->name('collections.followup-logs.store');
 

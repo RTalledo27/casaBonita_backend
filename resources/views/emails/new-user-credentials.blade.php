@@ -289,9 +289,14 @@
             <!-- Credentials Box -->
             <div class="credentials-box">
                 <div class="credentials-title">🔐 TUS CREDENCIALES DE ACCESO</div>
-                
+
                 <div class="credential-row">
-                    <span class="credential-label">📧 Usuario / Email:</span>
+                    <span class="credential-label">👤 Usuario:</span>
+                    <span class="credential-value">{{ $user->username }}</span>
+                </div>
+
+                <div class="credential-row">
+                    <span class="credential-label">📧 Email:</span>
                     <span class="credential-value">{{ $user->email }}</span>
                 </div>
                 

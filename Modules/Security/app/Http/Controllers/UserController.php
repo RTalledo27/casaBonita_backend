@@ -12,6 +12,11 @@ use Modules\Security\Repositories\UserRepository;
 use Modules\Security\Transformers\UserResource;
 use Pusher\Pusher;
 use Symfony\Component\HttpFoundation\Response;
+use App\Mail\NewUserCredentialsMail;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+use App\Services\ClicklabClient;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -126,6 +131,49 @@ class UserController extends Controller
 
             DB::commit();
 
+            try {
+                $plainPassword = $request->input('password') ?: Str::random(12);
+                if (!$request->input('password')) {
+                    $user->password_hash = \Illuminate\Support\Facades\Hash::make($plainPassword);
+                    $user->must_change_password = true;
+                    $user->save();
+                }
+                $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
+                if (config('clicklab.email_via_api')) {
+                    $html = view('emails.new-user-credentials', [
+                        'user' => $user,
+                        'temporaryPassword' => $plainPassword,
+                        'loginUrl' => $loginUrl,
+                    ])->render();
+                    app(\App\Services\ClicklabClient::class)->sendEmail($user->email, 'Tus Credenciales de Acceso', $html);
+                } else {
+                    Mail::to($user->email)->send(new NewUserCredentialsMail($user, $plainPassword, $loginUrl));
+                }
+                if (config('clicklab.notify_on_user_create')) {
+                    $channels = config('clicklab.channels', []);
+                    $client = app(ClicklabClient::class);
+                    $text = 'Bienvenido. Usuario: ' . $user->username . ' Clave: ' . $plainPassword . ' Ingreso: ' . $loginUrl;
+                    if (in_array('sms', $channels) && $user->phone) {
+                        $client->sendSms($user->phone, $text);
+                    }
+                    if (in_array('whatsapp', $channels) && $user->phone) {
+                        $tpl = config('clicklab.wa_template_name');
+                        $ns  = config('clicklab.wa_template_namespace');
+                        $lang= config('clicklab.wa_template_language');
+                        if ($tpl) {
+                            $client->sendWhatsappTemplate($user->phone, $tpl, [$user->first_name, $user->username, $plainPassword, $loginUrl], $lang, $ns);
+                        } else {
+                            $client->sendWhatsappText($user->phone, $text);
+                        }
+                    }
+                }
+            } catch (\Throwable $mailError) {
+                Log::error('Error enviando credenciales al crear usuario', [
+                    'user_id' => $user->user_id,
+                    'email' => $user->email,
+                    'error' => $mailError->getMessage(),
+                ]);
+            }
 
             //PUSHER
             $pusher = $this->pusherInstance();
@@ -182,11 +230,53 @@ class UserController extends Controller
         try {
             DB::beginTransaction();
 
+            $oldEmail = $user->email;
+
             $data = $request->validated();
             $data['photo_profile'] = $request->file('photo_profile');
             $data['cv_file'] = $request->file('cv_file');
 
             $this->repository->update($user, $data);
+            $user->refresh();
+            $newEmail = $user->email;
+
+            if ($oldEmail !== $newEmail) {
+                $temporaryPassword = Str::random(12);
+                $user->password = bcrypt($temporaryPassword);
+                $user->must_change_password = true;
+                $user->password_changed_at = null;
+                $user->save();
+
+                $loginUrl = config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:4200')) . '/login';
+                if (config('clicklab.email_via_api')) {
+                    $html = view('emails.new-user-credentials', [
+                        'user' => $user,
+                        'temporaryPassword' => $temporaryPassword,
+                        'loginUrl' => $loginUrl,
+                    ])->render();
+                    app(\App\Services\ClicklabClient::class)->sendEmail($user->email, 'Tus Credenciales de Acceso', $html);
+                } else {
+                    Mail::to($user->email)->send(new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl));
+                }
+                if (config('clicklab.notify_on_user_update_email')) {
+                    $channels = config('clicklab.channels', []);
+                    $client = app(ClicklabClient::class);
+                    $text = 'Actualización de acceso. Usuario: ' . $user->username . ' Clave temporal: ' . $temporaryPassword . ' Ingreso: ' . $loginUrl;
+                    if (in_array('sms', $channels) && $user->phone) {
+                        $client->sendSms($user->phone, $text);
+                    }
+                    if (in_array('whatsapp', $channels) && $user->phone) {
+                        $tpl = config('clicklab.wa_template_name');
+                        $ns  = config('clicklab.wa_template_namespace');
+                        $lang= config('clicklab.wa_template_language');
+                        if ($tpl) {
+                            $client->sendWhatsappTemplate($user->phone, $tpl, [$user->first_name, $user->username, $temporaryPassword, $loginUrl], $lang, $ns);
+                        } else {
+                            $client->sendWhatsappText($user->phone, $text);
+                        }
+                    }
+                }
+            }
             
             if ($request->has('roles')) {
                 $user->syncRoles($request->input('roles'));

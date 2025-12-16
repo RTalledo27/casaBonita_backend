@@ -45,7 +45,11 @@ class ClientVerificationController extends Controller
                     'code' => $code,
                     'expires_at' => $expires->format('Y-m-d H:i')
                 ];
-                Mail::to($client->email)->send(new ClientVerificationMail($data));
+                if (config('clicklab.email_via_api')) {
+                    app(\App\Services\ClicklabMailer::class)->send($client->email, new ClientVerificationMail($data));
+                } else {
+                    Mail::to($client->email)->send(new ClientVerificationMail($data));
+                }
                 $deliveryTo = $client->email;
             }
         } else {
@@ -55,7 +59,11 @@ class ClientVerificationController extends Controller
                 'code' => $code,
                 'expires_at' => $expires->format('Y-m-d H:i')
             ];
-            Mail::to($request->input('value'))->send(new ClientVerificationMail($data));
+            if (config('clicklab.email_via_api')) {
+                app(\App\Services\ClicklabMailer::class)->send($request->input('value'), new ClientVerificationMail($data));
+            } else {
+                Mail::to($request->input('value'))->send(new ClientVerificationMail($data));
+            }
             $deliveryTo = $request->input('value');
         }
 
@@ -102,7 +110,11 @@ class ClientVerificationController extends Controller
                     'code' => $code,
                     'expires_at' => $expires->format('Y-m-d H:i')
                 ];
-                Mail::to($request->input('relay_email'))->send(new ClientVerificationMail($data));
+                if (config('clicklab.email_via_api')) {
+                    app(\App\Services\ClicklabMailer::class)->send($request->input('relay_email'), new ClientVerificationMail($data));
+                } else {
+                    Mail::to($request->input('relay_email'))->send(new ClientVerificationMail($data));
+                }
                 $deliveryTo = $request->input('relay_email');
             }
         } else {
@@ -112,7 +124,11 @@ class ClientVerificationController extends Controller
                 'code' => $code,
                 'expires_at' => $expires->format('Y-m-d H:i')
             ];
-            Mail::to($request->input('value'))->send(new ClientVerificationMail($data));
+            if (config('clicklab.email_via_api')) {
+                app(\App\Services\ClicklabMailer::class)->send($request->input('value'), new ClientVerificationMail($data));
+            } else {
+                Mail::to($request->input('value'))->send(new ClientVerificationMail($data));
+            }
             $deliveryTo = $request->input('value');
         }
 
@@ -252,7 +268,11 @@ class ClientVerificationController extends Controller
                 'code' => $verification->code,
                 'expires_at' => $verification->expires_at->format('Y-m-d H:i')
             ];
-            Mail::to($recipient)->send(new ClientVerificationMail($data));
+            if (config('clicklab.email_via_api')) {
+                app(\App\Services\ClicklabMailer::class)->send($recipient, new ClientVerificationMail($data));
+            } else {
+                Mail::to($recipient)->send(new ClientVerificationMail($data));
+            }
         }
 
         return response()->json([

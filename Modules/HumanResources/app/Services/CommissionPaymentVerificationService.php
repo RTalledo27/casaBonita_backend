@@ -9,8 +9,8 @@ use Exception;
 use Illuminate\Support\Facades\DB;
 use Modules\Collections\Models\AccountReceivable;
 use Modules\Collections\Models\CustomerPayment;
-use Modules\Collections\Models\PaymentSchedule;
 use Modules\HumanResources\Models\Commission;
+use Modules\Sales\Models\PaymentSchedule;
 
 class CommissionPaymentVerificationService
 {
