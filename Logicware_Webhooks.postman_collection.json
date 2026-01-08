@@ -1,0 +1,139 @@
+# Colección Postman - Logicware Webhooks Testing
+# Importar este archivo en Postman
+
+{
+  "info": {
+    "name": "Logicware Webhooks",
+    "description": "Collection para probar webhooks de Logicware",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "webhook_secret",
+      "value": "test_secret_123",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Sales Process Completed",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Webhook-Signature",
+            "value": "sha256={{$randomUUID}}",
+            "description": "Calcular con HMAC-SHA256"
+          },
+          {
+            "key": "X-LW-Event",
+            "value": "sales.process.completed"
+          },
+          {
+            "key": "X-LW-Delivery",
+            "value": "{{$randomUUID}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{$randomUUID}}\",\n  \"eventType\": \"sales.process.completed\",\n  \"eventTimestamp\": \"{{$isoTimestamp}}\",\n  \"data\": {\n    \"ord_correlative\": \"202501-000000001\",\n    \"ord_total\": 50000.00,\n    \"client\": {\n      \"type_document\": \"DNI\",\n      \"document\": \"12345678\",\n      \"full_name\": \"JUAN PEREZ PEREZ\"\n    },\n    \"units\": [\n      {\n        \"unit_number\": \"M-01\",\n        \"sub_total\": 50000.00\n      }\n    ]\n  },\n  \"sourceId\": \"1001\",\n  \"correlationId\": \"sales-{{$randomUUID}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/webhooks/logicware",
+          "host": ["{{base_url}}"],
+          "path": ["api", "webhooks", "logicware"]
+        }
+      }
+    },
+    {
+      "name": "2. Payment Created",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Webhook-Signature",
+            "value": "sha256={{$randomUUID}}"
+          },
+          {
+            "key": "X-LW-Event",
+            "value": "payment.created"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{$randomUUID}}\",\n  \"eventType\": \"payment.created\",\n  \"eventTimestamp\": \"{{$isoTimestamp}}\",\n  \"data\": {\n    \"ord_correlative\": \"202501-000000001\",\n    \"payment_id\": 5001,\n    \"amount\": 2500.00,\n    \"currency\": \"PEN\",\n    \"payment_date\": \"2025-01-08\",\n    \"installment_number\": 3\n  },\n  \"sourceId\": \"5001\",\n  \"correlationId\": \"payment-{{$randomUUID}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/webhooks/logicware",
+          "host": ["{{base_url}}"],
+          "path": ["api", "webhooks", "logicware"]
+        }
+      }
+    },
+    {
+      "name": "3. Unit Updated",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Webhook-Signature",
+            "value": "sha256={{$randomUUID}}"
+          },
+          {
+            "key": "X-LW-Event",
+            "value": "unit.updated"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"messageId\": \"{{$randomUUID}}\",\n  \"eventType\": \"unit.updated\",\n  \"eventTimestamp\": \"{{$isoTimestamp}}\",\n  \"data\": {\n    \"unit_id\": 1223,\n    \"unit_number\": \"M-15\",\n    \"status\": \"Vendido\",\n    \"price\": 45000.00\n  },\n  \"sourceId\": \"1223\",\n  \"correlationId\": \"unit-{{$randomUUID}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/webhooks/logicware",
+          "host": ["{{base_url}}"],
+          "path": ["api", "webhooks", "logicware"]
+        }
+      }
+    },
+    {
+      "name": "Get Webhook Logs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{auth_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/logicware/webhooks/logs?limit=20",
+          "host": ["{{base_url}}"],
+          "path": ["api", "logicware", "webhooks", "logs"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "20"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

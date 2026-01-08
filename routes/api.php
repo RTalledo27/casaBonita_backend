@@ -8,6 +8,7 @@ use App\Http\Controllers\SalesReportsController;
 use App\Http\Controllers\PaymentSchedulesController;
 use App\Http\Controllers\ProjectionsController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\WebhookController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\UserSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
@@ -23,6 +24,9 @@ Route::get('/user', function (Request $request) {
 Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail']);
 Route::post('/reset-password', [ResetPasswordController::class, 'reset']);
 Route::post('/verify-reset-token', [ResetPasswordController::class, 'verifyToken']);
+
+// Webhook de Logicware (sin autenticación - validación por firma HMAC)
+Route::post('/webhooks/logicware', [WebhookController::class, 'handleLogicwareWebhook']);
 
 // Profile API Routes
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
@@ -141,6 +145,12 @@ Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
     Route::get('/connection-stats', [LogicwareLotImportController::class, 'getConnectionStats']);
     Route::post('/clear-cache', [LogicwareLotImportController::class, 'clearCache'])
         ->middleware('permission:inventory.lots.store'); // Solo usuarios con permiso de crear lotes
+    
+    // Logs de Webhooks (solo para administradores)
+    Route::get('/webhooks/logs', [WebhookController::class, 'getLogs'])
+        ->middleware('permission:inventory.lots.store');
+    Route::get('/webhooks/logs/{messageId}', [WebhookController::class, 'getLogDetail'])
+        ->middleware('permission:inventory.lots.store');
 });
 
 // Commission schemes & rules - HumanResources admin APIs

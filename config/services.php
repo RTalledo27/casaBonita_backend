@@ -62,6 +62,7 @@ return [
         'api_key' => env('LOGICWARE_API_KEY'),
         'subdomain' => env('LOGICWARE_SUBDOMAIN', 'casabonita'),
         'timeout' => env('LOGICWARE_TIMEOUT', 30),
+        'webhook_secret' => env('LOGICWARE_WEBHOOK_SECRET'), // Secret para validar webhooks
     ],
 
 ];

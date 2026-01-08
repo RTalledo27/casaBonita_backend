@@ -31,6 +31,55 @@ class LogicwareContractImporter
     }
 
     /**
+     * Importar una sola venta desde el payload del webhook
+     * 
+     * @param array $saleData Datos de la venta desde el webhook
+     * @return Contract
+     * @throws Exception
+     */
+    public function importSingleSale(array $saleData): Contract
+    {
+        try {
+            Log::info('[LogicwareImporter] 📦 Importando venta individual desde webhook', [
+                'document_number' => $saleData['documentNumber'] ?? 'N/A'
+            ]);
+
+            DB::beginTransaction();
+
+            $result = $this->processSale($saleData);
+            
+            if (!$result['created'] && isset($result['contract'])) {
+                // Contrato ya existía
+                Log::info('[LogicwareImporter] Contrato ya existe, retornando existente', [
+                    'contract_id' => $result['contract']->contract_id
+                ]);
+                DB::commit();
+                return $result['contract'];
+            }
+            
+            if (!isset($result['contract'])) {
+                throw new Exception('No se pudo procesar la venta: ' . ($result['reason'] ?? 'Error desconocido'));
+            }
+
+            DB::commit();
+
+            Log::info('[LogicwareImporter] ✅ Venta individual importada', [
+                'contract_id' => $result['contract']->contract_id,
+                'contract_number' => $result['contract']->contract_number
+            ]);
+
+            return $result['contract'];
+
+        } catch (Exception $e) {
+            DB::rollBack();
+            Log::error('[LogicwareImporter] Error importando venta individual', [
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
      * Importar contratos desde Logicware en un rango de fechas
      * 
      * @param string|null $startDate Formato YYYY-MM-DD
@@ -221,17 +270,19 @@ class LogicwareContractImporter
                 $existingContract = Contract::where('lot_id', $lot->lot_id)->first();
 
                 if ($existingContract) {
-                    Log::info('[LogicwareImporter] Contrato ya existe para este lote', [
+                    Log::info('[LogicwareImporter] 🔄 Contrato existente - actualizando', [
                         'lot_id' => $lot->lot_id,
                         'contract_id' => $existingContract->contract_id
                     ]);
-                    continue;
+                    
+                    // Actualizar datos del contrato existente
+                    $contract = $this->updateContractFromRealData($existingContract, $client, $lot, $advisor, $document, $unit);
+                } else {
+                    // Crear nuevo contrato
+                    $contract = $this->createContractFromRealData($client, $lot, $advisor, $document, $unit);
                 }
-
-                // 6. Crear contrato
-                $contract = $this->createContractFromRealData($client, $lot, $advisor, $document, $unit);
                 
-                // 7. Sincronizar cronograma de pagos desde Logicware (incluye estado de pagos)
+                // 7. Sincronizar cronograma de pagos desde Logicware (merge inteligente)
                 $correlative = $document['correlative'] ?? null;
                 $scheduleCreated = false;
                 
@@ -556,6 +607,70 @@ class LogicwareContractImporter
     }
     
     /**
+     * Actualizar contrato existente con datos de Logicware
+     * 
+     * @param Contract $contract Contrato existente
+     * @param Client $client
+     * @param Lot $lot
+     * @param Employee $advisor
+     * @param array $document Documento de Logicware
+     * @param array $unit Unidad vendida
+     * @return Contract
+     */
+    protected function updateContractFromRealData(Contract $contract, Client $client, Lot $lot, Employee $advisor, array $document, array $unit): Contract
+    {
+        $contractDate = isset($document['saleStartDate']) ? Carbon::parse($document['saleStartDate']) : $contract->sign_date;
+        
+        $financing = $document['financing'] ?? [];
+        
+        // Extraer datos financieros actualizados
+        $listPrice = $this->parseNumericValue($unit['listPrice'] ?? $unit['basePrice'] ?? 0);
+        $unitPrice = $this->parseNumericValue($unit['unitPrice'] ?? $unit['price'] ?? 0);
+        $discount = $this->parseNumericValue($unit['discount'] ?? 0);
+        $totalPrice = $this->parseNumericValue($unit['total'] ?? $unit['totalPrice'] ?? 0);
+        
+        $downPayment = $this->parseNumericValue($financing['downPayment'] ?? 0);
+        $amountToFinance = $this->parseNumericValue($financing['amountToFinance'] ?? 0);
+        $totalInstallments = (int)($financing['totalInstallments'] ?? 0);
+        $balloonPayment = $this->parseNumericValue($financing['balloonPayment'] ?? $financing['balloon'] ?? 0);
+        $bppBonus = $this->parseNumericValue($financing['bppBonus'] ?? $financing['bpp'] ?? 0);
+        
+        if (!$totalPrice && $listPrice) {
+            $totalPrice = $listPrice - ($discount ?? 0);
+        }
+        
+        // Actualizar datos del contrato
+        $contract->update([
+            'client_id' => $client->client_id,
+            'advisor_id' => $advisor->employee_id,
+            'contract_number' => $document['correlative'] ?? $contract->contract_number,
+            'sign_date' => $contractDate,
+            'base_price' => $listPrice,
+            'unit_price' => $unitPrice,
+            'discount' => $discount,
+            'total_price' => $totalPrice,
+            'down_payment' => $downPayment,
+            'financing_amount' => $amountToFinance,
+            'term_months' => $totalInstallments,
+            'balloon_payment' => $balloonPayment,
+            'bpp' => $bppBonus,
+            'currency' => $financing['currency'] ?? $contract->currency ?? 'PEN',
+            'notes' => ($contract->notes ?? '') . "\nActualizado desde Logicware el " . now()->format('Y-m-d H:i:s')
+        ]);
+        
+        Log::info('[LogicwareImporter] ✅ Contrato actualizado', [
+            'contract_id' => $contract->contract_id,
+            'contract_number' => $contract->contract_number,
+            'total_price' => $totalPrice,
+            'discount' => $discount,
+            'balloon_payment' => $balloonPayment,
+            'bpp' => $bppBonus
+        ]);
+
+        return $contract;
+    }
+    
+    /**
      * Parsear valor numérico (helper method)
      */
     protected function parseNumericValue($value): ?float
@@ -832,10 +947,10 @@ class LogicwareContractImporter
      * @return void
      * @throws Exception
      */
-    protected function syncPaymentScheduleFromLogicware(Contract $contract, string $correlative): void
+    public function syncPaymentScheduleFromLogicware(Contract $contract, string $correlative): array
     {
         try {
-            Log::info('[LogicwareImporter] 🔄 Sincronizando cronograma desde Logicware', [
+            Log::info('[LogicwareImporter] 🔄 Sincronizando cronograma desde Logicware (merge inteligente)', [
                 'contract_id' => $contract->contract_id,
                 'correlative' => $correlative
             ]);
@@ -848,7 +963,11 @@ class LogicwareContractImporter
                     'correlative' => $correlative,
                     'structure' => array_keys($scheduleData['data'] ?? [])
                 ]);
-                return;
+                return [
+                    'success' => false,
+                    'message' => 'No se recibieron cuotas desde Logicware',
+                    'total_installments' => 0
+                ];
             }
 
             $installments = $scheduleData['data']['installments'];
@@ -858,13 +977,22 @@ class LogicwareContractImporter
                 'total' => $totalInstallments
             ]);
 
+            // Obtener cuotas existentes en nuestro sistema
+            $existingSchedules = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $contract->contract_id)
+                ->get()
+                ->keyBy('installment_number');
+
             $createdCount = 0;
+            $updatedCount = 0;
+            $skippedCount = 0;
             $paidCount = 0;
 
             foreach ($installments as $inst) {
+                $installmentNumber = (int)($inst['installmentNumber'] ?? 0);
+                
                 // Determinar el tipo de cuota por el label
                 $label = strtolower($inst['label'] ?? '');
-                $type = 'otro'; // Por defecto
+                $type = 'otro';
 
                 if (strpos($label, 'inicial') !== false || strpos($label, 'separación') !== false || strpos($label, 'reserva') !== false) {
                     $type = 'inicial';
@@ -876,43 +1004,89 @@ class LogicwareContractImporter
                     $type = 'financiamiento';
                 }
 
-                // Determinar estado: si ya pagó algo, está pagada
+                // Determinar estado desde Logicware
                 $totalPaid = $this->parseNumericValue($inst['totalPaidAmount'] ?? 0);
                 $payment = $this->parseNumericValue($inst['payment'] ?? 0);
                 $remainingBalance = $this->parseNumericValue($inst['remainingBalance'] ?? $payment);
                 
                 $isPaid = $totalPaid >= $payment || $remainingBalance == 0 || strtoupper($inst['status'] ?? '') === 'PAID';
-                $status = $isPaid ? 'pagado' : 'pendiente';
+                $logicwareStatus = $isPaid ? 'pagado' : 'pendiente';
 
                 if ($isPaid) {
                     $paidCount++;
                 }
 
-                // Crear la cuota en nuestro sistema
-                \Modules\Sales\Models\PaymentSchedule::create([
-                    'contract_id' => $contract->contract_id,
-                    'installment_number' => (int)($inst['installmentNumber'] ?? 0),
-                    'due_date' => $inst['dueDate'] ? Carbon::parse($inst['dueDate'])->toDateString() : null,
-                    'amount' => $payment,
-                    'status' => $status,
-                    'type' => $type,
-                    'currency' => $contract->currency ?? 'PEN',
-                    'notes' => $inst['label'] ?? null,
-                    'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
-                    'logicware_paid_amount' => $totalPaid > 0 ? $totalPaid : null,
-                    'paid_date' => ($isPaid && isset($inst['paymentDate'])) ? Carbon::parse($inst['paymentDate'])->toDateString() : null
-                ]);
+                $dueDate = $inst['dueDate'] ? Carbon::parse($inst['dueDate'])->toDateString() : null;
+                $paidDate = ($isPaid && isset($inst['paymentDate'])) ? Carbon::parse($inst['paymentDate'])->toDateString() : null;
 
-                $createdCount++;
+                // Verificar si la cuota ya existe
+                if (isset($existingSchedules[$installmentNumber])) {
+                    $existingSchedule = $existingSchedules[$installmentNumber];
+                    
+                    // MERGE INTELIGENTE: Priorizar pagos locales
+                    // Si localmente está pagado, NO sobrescribir con estado de Logicware
+                    $finalStatus = $existingSchedule->status === 'pagado' ? 'pagado' : $logicwareStatus;
+                    $finalPaidDate = $existingSchedule->paid_date ?? $paidDate;
+                    $finalPaidAmount = $existingSchedule->paid_amount ?? ($isPaid ? $totalPaid : null);
+                    
+                    // Actualizar datos de la cuota (montos, fechas) pero respetar pagos locales
+                    $existingSchedule->update([
+                        'due_date' => $dueDate,
+                        'amount' => $payment,
+                        'status' => $finalStatus,
+                        'type' => $type,
+                        'notes' => $inst['label'] ?? $existingSchedule->notes,
+                        'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
+                        'logicware_paid_amount' => $isPaid ? $totalPaid : null,
+                        'paid_date' => $finalPaidDate
+                    ]);
+                    
+                    $updatedCount++;
+                    
+                    Log::debug('[LogicwareImporter] Cuota actualizada', [
+                        'installment_number' => $installmentNumber,
+                        'status' => $finalStatus,
+                        'local_was_paid' => $existingSchedule->status === 'pagado',
+                        'logicware_status' => $logicwareStatus
+                    ]);
+                } else {
+                    // Crear nueva cuota
+                    \Modules\Sales\Models\PaymentSchedule::create([
+                        'contract_id' => $contract->contract_id,
+                        'installment_number' => $installmentNumber,
+                        'due_date' => $dueDate,
+                        'amount' => $payment,
+                        'status' => $logicwareStatus,
+                        'type' => $type,
+                        'currency' => $contract->currency ?? 'PEN',
+                        'notes' => $inst['label'] ?? null,
+                        'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
+                        'logicware_paid_amount' => $totalPaid > 0 ? $totalPaid : null,
+                        'paid_date' => $paidDate
+                    ]);
+
+                    $createdCount++;
+                }
             }
 
-            Log::info('[LogicwareImporter] ✅ Cronograma sincronizado desde Logicware', [
+            Log::info('[LogicwareImporter] ✅ Cronograma sincronizado con merge inteligente', [
                 'contract_id' => $contract->contract_id,
                 'correlative' => $correlative,
-                'total_cuotas' => $createdCount,
+                'cuotas_creadas' => $createdCount,
+                'cuotas_actualizadas' => $updatedCount,
                 'cuotas_pagadas' => $paidCount,
-                'cuotas_pendientes' => $createdCount - $paidCount
+                'total_procesadas' => $createdCount + $updatedCount
             ]);
+
+            return [
+                'success' => true,
+                'message' => 'Cronograma sincronizado exitosamente',
+                'total_installments' => $totalInstallments,
+                'created' => $createdCount,
+                'updated' => $updatedCount,
+                'paid' => $paidCount,
+                'skipped' => $skippedCount
+            ];
 
         } catch (Exception $e) {
             Log::error('[LogicwareImporter] Error sincronizando cronograma desde Logicware', [
@@ -920,7 +1094,12 @@ class LogicwareContractImporter
                 'correlative' => $correlative,
                 'error' => $e->getMessage()
             ]);
-            // No lanzar excepción, permitir que el contrato se cree sin cronograma
+            
+            return [
+                'success' => false,
+                'message' => 'Error sincronizando cronograma: ' . $e->getMessage(),
+                'total_installments' => 0
+            ];
         }
     }
 
