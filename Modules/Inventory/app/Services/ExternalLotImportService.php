@@ -717,6 +717,7 @@ class ExternalLotImportService
             $unitPrice = $this->parseNumericValue($unit['unitPrice'] ?? $unit['price'] ?? 0); // 🔥 Precio Unitario (Venta)
             $discount = $this->parseNumericValue($unit['discount'] ?? $financing['discount'] ?? 0); // 🔥 Descuento
             $totalPrice = $this->parseNumericValue($unit['total'] ?? 0); // 🔥 Precio Final (total desde Logicware)
+            $reservationAmount = $this->parseNumericValue($financing['reservationAmount'] ?? 0); // 🏷️ Monto de Reserva
             $downPayment = $this->parseNumericValue($financing['downPayment'] ?? 0);
             $financingAmount = $this->parseNumericValue($financing['amountToFinance'] ?? 0);
             $balloonPayment = $this->parseNumericValue($financing['balloonPayment'] ?? $financing['balloon'] ?? 0);
@@ -729,12 +730,79 @@ class ExternalLotImportService
             $termMonths = (int)($financing['financingInstallments'] ?? 12);
             $monthlyPayment = $financingAmount > 0 && $termMonths > 0 ? ($financingAmount / $termMonths) : 0;
 
-            // Crear contrato directo con TODOS los campos financieros
+            $contractNumber = $document['correlative'] ?? null;
+            
+            // 🔍 VERIFICAR SI EL CONTRATO YA EXISTE
+            // Prioridad 1: Buscar por contract_number (si existe)
+            $existingContract = null;
+            if ($contractNumber) {
+                $existingContract = \Modules\Sales\Models\Contract::where('contract_number', $contractNumber)->first();
+            }
+            
+            // Prioridad 2: Si no se encontró por número, buscar por lote (evita duplicados en mismo lote)
+            if (!$existingContract && $lotId) {
+                $existingContract = \Modules\Sales\Models\Contract::where('lot_id', $lotId)
+                    ->where('client_id', $client->client_id)
+                    ->whereIn('status', ['vigente', 'activo'])
+                    ->first();
+                    
+                if ($existingContract) {
+                    Log::info('[ExternalLotImport] 🔍 Contrato existente encontrado por lote', [
+                        'contract_id' => $existingContract->contract_id,
+                        'lot_id' => $lotId,
+                        'client_id' => $client->client_id
+                    ]);
+                }
+            }
+
+            // 🏷️ MANEJAR RESERVA SI EXISTE
+            $reservationId = null;
+            if ($reservationAmount > 0 && $lotId) {
+                // Buscar reserva existente para este lote y cliente
+                $reservation = \Modules\Sales\Models\Reservation::where('lot_id', $lotId)
+                    ->where('client_id', $client->client_id)
+                    ->whereIn('status', ['activa', 'convertida'])
+                    ->first();
+
+                if (!$reservation) {
+                    // Crear nueva reserva con los datos de Logicware
+                    $reservationDate = isset($document['separationStartDate']) 
+                        ? \Carbon\Carbon::parse($document['separationStartDate'])->format('Y-m-d')
+                        : substr($saleDate, 0, 10);
+                    
+                    $expirationDate = isset($document['separationEndDate']) 
+                        ? \Carbon\Carbon::parse($document['separationEndDate'])->format('Y-m-d')
+                        : \Carbon\Carbon::parse($reservationDate)->addDays(30)->format('Y-m-d');
+
+                    $reservation = \Modules\Sales\Models\Reservation::create([
+                        'lot_id' => $lotId,
+                        'client_id' => $client->client_id,
+                        'advisor_id' => $advisorId,
+                        'reservation_date' => $reservationDate,
+                        'expiration_date' => $expirationDate,
+                        'deposit_amount' => $reservationAmount,
+                        'status' => 'convertida' // Ya se convirtió en venta
+                    ]);
+
+                    Log::info('[ExternalLotImport] 🏷️ Reserva creada desde Logicware', [
+                        'reservation_id' => $reservation->reservation_id,
+                        'client_id' => $client->client_id,
+                        'lot_id' => $lotId,
+                        'deposit_amount' => $reservationAmount,
+                        'reservation_date' => $reservationDate
+                    ]);
+                }
+
+                $reservationId = $reservation->reservation_id;
+            }
+
+            // Preparar datos del contrato
             $contractData = [
                 'client_id' => $client->client_id,
                 'lot_id' => $lotId,
                 'advisor_id' => $advisorId,
-                'contract_number' => $document['correlative'] ?? null,
+                'reservation_id' => $reservationId, // 🏷️ Vincular con reserva si existe
+                'contract_number' => $contractNumber,
                 'contract_date' => substr($saleDate,0,10),
                 'sign_date' => substr($saleDate,0,10),
                 'base_price' => $basePrice, // 🔥 NUEVO: Precio base de lista
@@ -757,18 +825,42 @@ class ExternalLotImportService
                 'logicware_data' => json_encode($document) // 🔥 Guardar datos completos para re-linkeo futuro
             ];
 
-            $contract = \Modules\Sales\Models\Contract::create($contractData);
-            $this->stats['created']++;
+            if ($existingContract) {
+                // 🔄 ACTUALIZAR CONTRATO EXISTENTE
+                // ⚠️ NO actualizamos reservation_id en contratos existentes para no violar constraint
+                unset($contractData['reservation_id']); // Remover reservation_id del update
+                $existingContract->update($contractData);
+                $contract = $existingContract;
+                $this->stats['updated']++;
 
-            Log::info('[ExternalLotImport] 💰 Contrato creado con datos financieros completos', [
-                'contract_id' => $contract->contract_id,
-                'base_price' => $basePrice,
-                'unit_price' => $unitPrice,
-                'discount' => $discount,
-                'total_price' => $totalPrice,
-                'balloon_payment' => $balloonPayment,
-                'bpp' => $bppBonus
-            ]);
+                Log::info('[ExternalLotImport] 🔄 Contrato actualizado con datos desde Logicware', [
+                    'contract_id' => $contract->contract_id,
+                    'contract_number' => $contractNumber,
+                    'base_price' => $basePrice,
+                    'unit_price' => $unitPrice,
+                    'discount' => $discount,
+                    'total_price' => $totalPrice,
+                    'balloon_payment' => $balloonPayment,
+                    'bpp' => $bppBonus
+                ]);
+            } else {
+                // ✨ CREAR NUEVO CONTRATO
+                $contract = \Modules\Sales\Models\Contract::create($contractData);
+                $this->stats['created']++;
+
+                Log::info('[ExternalLotImport] 💰 Contrato creado con datos financieros completos', [
+                    'contract_id' => $contract->contract_id,
+                    'contract_number' => $contractNumber,
+                    'has_reservation' => $reservationId ? 'Sí' : 'No',
+                    'reservation_id' => $reservationId,
+                    'base_price' => $basePrice,
+                    'unit_price' => $unitPrice,
+                    'discount' => $discount,
+                    'total_price' => $totalPrice,
+                    'balloon_payment' => $balloonPayment,
+                    'bpp' => $bppBonus
+                ]);
+            }
 
             // 🔄 SINCRONIZAR CRONOGRAMA DESDE LOGICWARE (incluye estado de pagos)
             $correlative = $document['correlative'] ?? null;
@@ -786,12 +878,22 @@ class ExternalLotImportService
                         'contract_id' => $contract->contract_id,
                         'correlative' => $correlative
                     ]);
+                    
+                    // ⏱️ RATE LIMIT: Esperar 350ms entre peticiones (máx 200/min = 1 cada 300ms)
+                    usleep(350000); // 350 milisegundos
+                    
                 } catch (Exception $scheduleError) {
                     Log::warning('[ExternalLotImport] ⚠️ No se pudo sincronizar cronograma desde Logicware, usando fallback', [
                         'contract_id' => $contract->contract_id,
                         'correlative' => $correlative,
                         'error' => $scheduleError->getMessage()
                     ]);
+                    
+                    // Si es error 429 (rate limit), esperar 2 segundos antes de continuar
+                    if (strpos($scheduleError->getMessage(), '429') !== false) {
+                        Log::info('[ExternalLotImport] ⏸️ Rate limit detectado, esperando 2 segundos...');
+                        sleep(2);
+                    }
                     
                     // Fallback: generar cronograma tradicional
                     $financing = $document['financing'] ?? [];
@@ -1074,6 +1176,7 @@ class ExternalLotImportService
         $installments = $scheduleData['data']['installments'];
         $totalInstallments = count($installments);
         $createdCount = 0;
+        $updatedCount = 0;
         $paidCount = 0;
 
         Log::info('[ExternalLotImport] Cuotas recibidas desde Logicware', [
@@ -1101,46 +1204,81 @@ class ExternalLotImportService
                 $type = 'financiamiento';
             }
 
-            // 💰 DETECCIÓN DE ESTADO DE PAGO
+            // 💰 DETECCIÓN DE ESTADO DE PAGO DESDE LOGICWARE
             $totalPaid = $this->parseNumericValue($inst['totalPaidAmount'] ?? 0);
             $payment = $this->parseNumericValue($inst['payment'] ?? 0);
             $remainingBalance = $this->parseNumericValue($inst['remainingBalance'] ?? $payment);
             
-            $isPaid = $totalPaid >= $payment || 
-                      $remainingBalance == 0 || 
-                      strtoupper($inst['status'] ?? '') === 'PAID';
+            $logicwareStatus = ($totalPaid >= $payment || 
+                               $remainingBalance == 0 || 
+                               strtoupper($inst['status'] ?? '') === 'PAID') ? 'pagado' : 'pendiente';
             
-            $status = $isPaid ? 'pagado' : 'pendiente';
+            $paidDate = isset($inst['paymentDate']) 
+                ? \Carbon\Carbon::parse($inst['paymentDate'])->format('Y-m-d')
+                : null;
 
-            if ($isPaid) {
-                $paidCount++;
-            }
+            // 🔍 BUSCAR SI LA CUOTA YA EXISTE LOCALMENTE
+            $installmentNumber = (int)($inst['installmentNumber'] ?? 0);
+            $existingSchedule = \Modules\Sales\Models\PaymentSchedule::where('contract_id', $contract->contract_id)
+                ->where('installment_number', $installmentNumber)
+                ->first();
 
-            // 📝 CREAR REGISTRO DE CUOTA
-            \Modules\Sales\Models\PaymentSchedule::create([
+            // 📝 PREPARAR DATOS DE LA CUOTA
+            $scheduleData = [
                 'contract_id' => $contract->contract_id,
-                'installment_number' => (int)($inst['installmentNumber'] ?? 0),
-                'due_date' => $inst['dueDate'] ? \Carbon\Carbon::parse($inst['dueDate'])->toDateString() : null,
+                'installment_number' => $installmentNumber,
+                'due_date' => isset($inst['dueDate']) 
+                    ? \Carbon\Carbon::parse($inst['dueDate'])->format('Y-m-d')
+                    : null,
                 'amount' => $payment,
-                'status' => $status,
                 'type' => $type,
-                'currency' => $contract->currency ?? 'PEN',
-                'notes' => $inst['label'] ?? null,
-                'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
-                'logicware_paid_amount' => $totalPaid > 0 ? $totalPaid : null,
-                'paid_date' => ($isPaid && isset($inst['paymentDate'])) 
-                    ? \Carbon\Carbon::parse($inst['paymentDate'])->toDateString() 
-                    : null
-            ]);
+                'description' => $inst['label'] ?? null
+            ];
 
-            $createdCount++;
+            if ($existingSchedule) {
+                // 🔄 MERGE INTELIGENTE: Preservar estado local si ya está pagado
+                $finalStatus = $existingSchedule->status === 'pagado' ? 'pagado' : $logicwareStatus;
+                $finalPaidDate = $existingSchedule->paid_date ?? $paidDate;
+
+                // Actualizar cuota existente (mantener el payment status local si es "pagado")
+                $existingSchedule->update(array_merge($scheduleData, [
+                    'status' => $finalStatus,
+                    'paid_date' => $finalPaidDate
+                ]));
+
+                $updatedCount++;
+
+                if ($finalStatus === 'pagado') {
+                    $paidCount++;
+                }
+
+                Log::debug('[ExternalLotImport] Cuota actualizada (merge inteligente)', [
+                    'installment_number' => $installmentNumber,
+                    'local_status' => $existingSchedule->status,
+                    'logicware_status' => $logicwareStatus,
+                    'final_status' => $finalStatus
+                ]);
+            } else {
+                // ✨ CREAR NUEVA CUOTA
+                \Modules\Sales\Models\PaymentSchedule::create(array_merge($scheduleData, [
+                    'status' => $logicwareStatus,
+                    'paid_date' => $paidDate
+                ]));
+
+                $createdCount++;
+
+                if ($logicwareStatus === 'pagado') {
+                    $paidCount++;
+                }
+            }
         }
 
-        Log::info('[ExternalLotImport] ✅ Cronograma sincronizado desde Logicware', [
+        Log::info('[ExternalLotImport] ✅ Cronograma sincronizado con merge inteligente', [
             'contract_id' => $contract->contract_id,
-            'total_cuotas' => $createdCount,
-            'cuotas_pagadas' => $paidCount,
-            'cuotas_pendientes' => $createdCount - $paidCount
+            'total_installments' => $totalInstallments,
+            'created' => $createdCount,
+            'updated' => $updatedCount,
+            'paid' => $paidCount
         ]);
     }
 }

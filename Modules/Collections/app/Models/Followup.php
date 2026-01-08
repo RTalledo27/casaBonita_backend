@@ -61,5 +61,8 @@ class Followup extends Model
         'channel',
         'commitment_date',
         'commitment_amount',
+        'commitment_status',
+        'commitment_notes',
+        'commitment_fulfilled_date',
     ];
 }

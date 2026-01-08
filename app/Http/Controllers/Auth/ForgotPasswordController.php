@@ -61,8 +61,8 @@ class ForgotPasswordController extends Controller
 
         // Enviar email
         try {
-            if (config('clicklab.email_via_api')) {
-                app(\App\Services\ClicklabMailer::class)->send($request->email, new ResetPasswordMail($user, $resetUrl, $token));
+            if (config('infobip.email_via_api')) {
+                app(\App\Services\InfobipMailer::class)->send($request->email, new ResetPasswordMail($user, $resetUrl, $token));
             } else {
                 Mail::to($request->email)->send(new ResetPasswordMail($user, $resetUrl, $token));
             }

@@ -42,8 +42,8 @@ class NotificationsController extends Controller
             'payment_link' => config('app.url')
         ];
 
-        if (config('clicklab.email_via_api')) {
-            app(\App\Services\ClicklabMailer::class)->send($email, new InstallmentReminderMail($data));
+        if (config('infobip.email_via_api')) {
+            app(\App\Services\InfobipMailer::class)->send($email, new InstallmentReminderMail($data));
         } else {
             Mail::to($email)->send(new InstallmentReminderMail($data));
         }
@@ -100,8 +100,8 @@ class NotificationsController extends Controller
                 'payment_link' => config('app.url')
             ];
             try {
-                if (config('clicklab.email_via_api')) {
-                    app(\App\Services\ClicklabMailer::class)->send($email, new InstallmentReminderMail($data));
+                if (config('infobip.email_via_api')) {
+                    app(\App\Services\InfobipMailer::class)->send($email, new InstallmentReminderMail($data));
                 } else {
                     Mail::to($email)->send(new InstallmentReminderMail($data));
                 }
@@ -142,8 +142,8 @@ class NotificationsController extends Controller
             'html' => 'required|string'
         ]);
 
-        if (config('clicklab.email_via_api')) {
-            app(\App\Services\ClicklabMailer::class)->send(
+        if (config('infobip.email_via_api')) {
+            app(\App\Services\InfobipMailer::class)->send(
                 $request->input('email'),
                 new CustomCollectionsMail($request->input('subject'), $request->input('html'))
             );
@@ -192,8 +192,8 @@ class NotificationsController extends Controller
             ], 400);
         }
 
-        if (config('clicklab.email_via_api')) {
-            app(\App\Services\ClicklabMailer::class)->send($email, new CustomCollectionsMail($request->input('subject'), $request->input('html')));
+        if (config('infobip.email_via_api')) {
+            app(\App\Services\InfobipMailer::class)->send($email, new CustomCollectionsMail($request->input('subject'), $request->input('html')));
         } else {
             Mail::to($email)->send(new CustomCollectionsMail($request->input('subject'), $request->input('html')));
         }

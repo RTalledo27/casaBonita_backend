@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Sales\Models\PaymentSchedule;
 use Modules\Sales\Models\Contract;
+use Modules\Collections\app\Models\Followup;
 use Carbon\Carbon;
 
 class SegmentsController extends Controller
@@ -16,27 +17,84 @@ class SegmentsController extends Controller
         $today = Carbon::now()->startOfDay();
         $limit = $today->copy()->addDays($window);
 
+        // Obtener contratos con cuotas pendientes próximas a vencer
         $schedules = PaymentSchedule::with(['contract.reservation.client','contract.reservation.lot.manzana','contract.lot.manzana'])
             ->where('status', 'pendiente')
             ->whereDate('due_date', '>=', $today)
             ->whereDate('due_date', '<=', $limit)
             ->get();
 
-        $data = $schedules->map(function($s){
+        // Obtener todos los seguimientos preventivos existentes
+        $existingFollowups = Followup::where('segment', 'preventivo')
+            ->orWhere(function($q) {
+                $q->where('overdue_installments', 0)
+                  ->where('pending_installments', '>', 0);
+            })
+            ->get()
+            ->keyBy('contract_id');
+
+        $data = collect();
+
+        // Mapear payment_schedules
+        $schedules->each(function($s) use (&$data, $today, $existingFollowups) {
             $c = $s->contract;
-            $lot = $c?->getLot();
-            $manzana = $c?->getManzanaName();
-            $client = $c?->getClient();
-            return [
-                'contract_id' => $c?->contract_id,
-                'sale_code' => $c?->contract_number,
+            if (!$c) return;
+            
+            $lot = $c->getLot();
+            $manzana = $c->getManzanaName();
+            $client = $c->getClient();
+            $daysUntilDue = Carbon::parse($s->due_date)->diffInDays($today, false);
+            
+            // Verificar si ya existe seguimiento para este contrato
+            $followup = $existingFollowups->get($c->contract_id);
+            
+            $data->push([
+                'contract_id' => $c->contract_id,
+                'sale_code' => $c->contract_number,
                 'client_id' => $client?->client_id,
                 'client_name' => $client ? trim(($client->first_name ?? '') . ' ' . ($client->last_name ?? '')) : null,
+                'phone1' => $client?->phone ?? $client?->mobile_phone ?? null,
+                'phone2' => $client?->mobile_phone ?? null,
+                'email' => $client?->email ?? null,
                 'due_date' => $s->due_date,
                 'monthly_quota' => $s->amount,
+                'days_until_due' => abs($daysUntilDue),
                 'lot_id' => $lot?->lot_id,
                 'lot' => ($manzana || $lot?->num_lot) ? sprintf('MZ-%s L-%s', $manzana ?: '-', $lot?->num_lot ?: '-') : ($lot?->external_code ?: null),
-            ];
+                'schedule_id' => $s->schedule_id,
+                'installment_number' => $s->installment_number,
+                'has_followup' => $followup !== null,
+                'followup_id' => $followup?->followup_id,
+                'management_status' => $followup?->management_status,
+                'last_contact' => $followup?->contact_date,
+            ]);
+        });
+
+        // Agregar seguimientos que no tienen payment_schedule en la ventana pero existen en BD
+        $contractIdsFromSchedules = $schedules->pluck('contract_id')->unique();
+        $existingFollowups->each(function($followup) use (&$data, $contractIdsFromSchedules) {
+            if (!$contractIdsFromSchedules->contains($followup->contract_id)) {
+                $data->push([
+                    'contract_id' => $followup->contract_id,
+                    'sale_code' => $followup->sale_code,
+                    'client_id' => $followup->client_id,
+                    'client_name' => $followup->client_name,
+                    'phone1' => $followup->phone1,
+                    'phone2' => $followup->phone2,
+                    'email' => $followup->email,
+                    'due_date' => $followup->due_date,
+                    'monthly_quota' => $followup->monthly_quota,
+                    'days_until_due' => 0,
+                    'lot_id' => $followup->lot_id,
+                    'lot' => $followup->lot,
+                    'schedule_id' => null,
+                    'installment_number' => null,
+                    'has_followup' => true,
+                    'followup_id' => $followup->followup_id,
+                    'management_status' => $followup->management_status,
+                    'last_contact' => $followup->contact_date,
+                ]);
+            }
         });
 
         return response()->json(['success' => true, 'data' => $data]);
@@ -46,6 +104,8 @@ class SegmentsController extends Controller
     {
         $tramo = $request->get('tramo', '1');
         $today = Carbon::now()->startOfDay();
+        
+        // Obtener contratos con cuotas vencidas
         $schedules = PaymentSchedule::with(['contract.reservation.client','contract.reservation.lot.manzana','contract.lot.manzana'])
             ->where('status', 'pendiente')
             ->whereDate('due_date', '<', $today)
@@ -61,23 +121,92 @@ class SegmentsController extends Controller
             };
         });
 
-        $data = $filtered->map(function($s) use ($today){
+        // Obtener todos los seguimientos en mora existentes
+        $existingFollowups = Followup::where('segment', 'mora')
+            ->orWhere('overdue_installments', '>', 0)
+            ->get()
+            ->keyBy('contract_id');
+
+        $data = collect();
+
+        // Mapear payment_schedules
+        $filtered->each(function($s) use (&$data, $today, $existingFollowups) {
             $c = $s->contract;
-            $lot = $c?->getLot();
-            $manzana = $c?->getManzanaName();
-            $client = $c?->getClient();
+            if (!$c) return;
+            
+            $lot = $c->getLot();
+            $manzana = $c->getManzanaName();
+            $client = $c->getClient();
             $days = Carbon::parse($s->due_date)->diffInDays($today);
-            return [
-                'contract_id' => $c?->contract_id,
-                'sale_code' => $c?->contract_number,
+            
+            // Contar cuotas vencidas del contrato
+            $overdueCount = PaymentSchedule::where('contract_id', $c->contract_id)
+                ->where('status', 'pendiente')
+                ->whereDate('due_date', '<', $today)
+                ->count();
+            
+            // Verificar si ya existe seguimiento para este contrato
+            $followup = $existingFollowups->get($c->contract_id);
+            
+            $data->push([
+                'contract_id' => $c->contract_id,
+                'sale_code' => $c->contract_number,
                 'client_id' => $client?->client_id,
                 'client_name' => $client ? trim(($client->first_name ?? '') . ' ' . ($client->last_name ?? '')) : null,
+                'phone1' => $client?->phone ?? $client?->mobile_phone ?? null,
+                'phone2' => $client?->mobile_phone ?? null,
+                'email' => $client?->email ?? null,
                 'due_date' => $s->due_date,
                 'monthly_quota' => $s->amount,
                 'days_overdue' => $days,
+                'overdue_installments' => $overdueCount,
                 'lot_id' => $lot?->lot_id,
                 'lot' => ($manzana || $lot?->num_lot) ? sprintf('MZ-%s L-%s', $manzana ?: '-', $lot?->num_lot ?: '-') : ($lot?->external_code ?: null),
-            ];
+                'schedule_id' => $s->schedule_id,
+                'installment_number' => $s->installment_number,
+                'has_followup' => $followup !== null,
+                'followup_id' => $followup?->followup_id,
+                'management_status' => $followup?->management_status,
+                'last_contact' => $followup?->contact_date,
+            ]);
+        });
+
+        // Agregar seguimientos que no tienen payment_schedule vencido pero existen en BD
+        $contractIdsFromSchedules = $filtered->pluck('contract_id')->unique();
+        $existingFollowups->each(function($followup) use (&$data, $contractIdsFromSchedules, $tramo) {
+            if (!$contractIdsFromSchedules->contains($followup->contract_id)) {
+                // Verificar que el seguimiento corresponde al tramo solicitado
+                $matchesTramo = match($tramo) {
+                    '1' => $followup->tramo === '1-30',
+                    '2' => $followup->tramo === '31-60',
+                    '3' => $followup->tramo === '61+',
+                    default => true,
+                };
+                
+                if ($matchesTramo) {
+                    $data->push([
+                        'contract_id' => $followup->contract_id,
+                        'sale_code' => $followup->sale_code,
+                        'client_id' => $followup->client_id,
+                        'client_name' => $followup->client_name,
+                        'phone1' => $followup->phone1,
+                        'phone2' => $followup->phone2,
+                        'email' => $followup->email,
+                        'due_date' => $followup->due_date,
+                        'monthly_quota' => $followup->monthly_quota,
+                        'days_overdue' => 0,
+                        'overdue_installments' => $followup->overdue_installments,
+                        'lot_id' => $followup->lot_id,
+                        'lot' => $followup->lot,
+                        'schedule_id' => null,
+                        'installment_number' => null,
+                        'has_followup' => true,
+                        'followup_id' => $followup->followup_id,
+                        'management_status' => $followup->management_status,
+                        'last_contact' => $followup->contact_date,
+                    ]);
+                }
+            }
         });
 
         return response()->json(['success' => true, 'data' => $data]);

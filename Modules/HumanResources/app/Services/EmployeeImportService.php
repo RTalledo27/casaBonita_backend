@@ -499,8 +499,8 @@ class EmployeeImportService
     {
         $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
         
-        if (config('clicklab.email_via_api')) {
-            app(\App\Services\ClicklabMailer::class)->send(
+        if (config('infobip.email_via_api')) {
+            app(\App\Services\InfobipMailer::class)->send(
                 $user->email,
                 new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl)
             );

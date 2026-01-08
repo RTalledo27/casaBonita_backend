@@ -11,7 +11,7 @@ use Modules\Sales\Models\PaymentSchedule;
 use Modules\CRM\Models\Client;
 use Modules\Inventory\Models\Lot;
 use Carbon\Carbon;
-use App\Services\ClicklabClient;
+use App\Services\MetaWhatsAppClient;
 use App\Services\SmsService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -249,6 +249,8 @@ class FollowupsController extends Controller
         $followup = Followup::findOrFail($id);
         $followup->commitment_date = $data['commitment_date'];
         $followup->commitment_amount = $data['commitment_amount'];
+        $followup->commitment_status = 'pending'; // Inicializar como pendiente
+        $followup->management_status = 'in_progress';
         $followup->save();
         return response()->json(['success' => true, 'data' => $followup]);
     }
@@ -272,7 +274,7 @@ class FollowupsController extends Controller
             'use_contract_id' => 'nullable|boolean', // Indica si $id es contract_id
         ]);
 
-        // Intentar obtener followup existente o crear uno temporal desde contrato
+        // Intentar obtener followup existente o crear uno desde contrato
         $followup = $this->getOrCreateFollowup($id, $data['use_contract_id'] ?? false);
         
         if (!$followup) {
@@ -280,6 +282,13 @@ class FollowupsController extends Controller
                 'success' => false,
                 'message' => 'No se encontró el registro de seguimiento ni el contrato'
             ], 404);
+        }
+
+        // Si es un followup temporal (followup_id = 0), crear permanentemente en BD
+        $wasCreated = false;
+        if ($followup->followup_id === 0) {
+            $followup = $this->createFollowupFromContract($followup->contract_id);
+            $wasCreated = true;
         }
 
         $channel = $data['channel'];
@@ -337,17 +346,18 @@ class FollowupsController extends Controller
         return response()->json([
             'success' => $success,
             'message' => $success 
-                ? "Acción de {$channel} ejecutada correctamente" 
+                ? ($wasCreated ? "Seguimiento creado y acción de {$channel} ejecutada" : "Acción de {$channel} ejecutada correctamente")
                 : "Error al ejecutar acción: {$errorMessage}",
             'data' => [
                 'followup' => $followup,
-                'log' => $logData
+                'log' => $logData,
+                'was_created' => $wasCreated
             ]
         ], $success ? 200 : 500);
     }
 
     /**
-     * Enviar mensaje por WhatsApp usando ClicklabClient
+     * Enviar mensaje por WhatsApp usando Meta WhatsApp API (solo Meta)
      */
     private function sendWhatsApp(Followup $followup, string $message): bool
     {
@@ -355,12 +365,17 @@ class FollowupsController extends Controller
             throw new \Exception('Cliente no tiene teléfono registrado');
         }
 
-        $clicklab = app(ClicklabClient::class);
-        $result = $clicklab->sendWhatsappText($followup->phone1, $message);
+        $metaWhatsApp = app(MetaWhatsAppClient::class);
+        $result = $metaWhatsApp->sendText($followup->phone1, $message);
         
         if (!$result['ok']) {
-            throw new \Exception('Error al enviar WhatsApp: ' . json_encode($result['body']));
+            throw new \Exception('Error al enviar WhatsApp vía Meta: ' . json_encode($result['body']));
         }
+
+        Log::info('WhatsApp enviado vía Meta', [
+            'to' => $followup->phone1,
+            'message_id' => $result['message_id'] ?? null
+        ]);
 
         return true;
     }
@@ -483,5 +498,74 @@ class FollowupsController extends Controller
         $followup->monthly_quota = $nextDue->amount ?? null;
 
         return $followup;
+    }
+
+    /**
+     * Crea un seguimiento permanente en la BD desde un contrato
+     */
+    private function createFollowupFromContract(int $contractId): Followup
+    {
+        $contract = Contract::findOrFail($contractId);
+        $client = $contract->getClient();
+
+        $data = [
+            'contract_id' => $contract->contract_id,
+            'client_id' => $contract->client_id,
+            'sale_code' => $contract->contract_number,
+            'client_name' => $client ? trim(($client->first_name ?? '') . ' ' . ($client->last_name ?? '')) : null,
+            'dni' => $client?->document_number,
+            'phone1' => $client?->primary_phone,
+            'phone2' => $client?->secondary_phone,
+            'email' => $client?->email,
+            'address' => $client?->address,
+            'district' => $client?->district,
+            'province' => $client?->province,
+            'department' => $client?->department,
+            'sale_price' => $contract->total_price,
+            'contract_status' => $contract->status,
+            'management_status' => 'pending', // Estado inicial
+        ];
+
+        // Obtener advisor
+        $advisor = $contract->getAdvisor();
+        if ($advisor) {
+            $data['advisor_id'] = $advisor->employee_id;
+            $data['advisor_name'] = trim(($advisor->user->first_name ?? '') . ' ' . ($advisor->user->last_name ?? ''));
+        }
+
+        // Obtener lote
+        $lot = $contract->getLot();
+        if ($lot) {
+            $data['lot_id'] = $lot->lot_id;
+            $manzanaName = $contract->getManzanaName();
+            $data['lot'] = sprintf('MZ-%s L-%s', $manzanaName ?: '-', $lot->num_lot ?: '-');
+            $data['lot_area_m2'] = $lot->area_m2;
+            $data['lot_status'] = $lot->status;
+        }
+
+        // Métricas de cronograma
+        $schedules = PaymentSchedule::where('contract_id', $contract->contract_id)->get();
+        $today = Carbon::now()->startOfDay();
+        $paid = $schedules->where('status', 'pagado');
+        $pending = $schedules->where('status', 'pendiente');
+        $overdue = $pending->filter(function($s) use ($today) { 
+            return $s->due_date && Carbon::parse($s->due_date)->lt($today); 
+        });
+
+        $nextDue = $pending->filter(function($s) use ($today) { 
+            return $s->due_date && Carbon::parse($s->due_date)->gte($today); 
+        })->sortBy('due_date')->first();
+
+        $data['due_date'] = $nextDue->due_date ?? null;
+        $data['monthly_quota'] = $nextDue->amount ?? null;
+        $data['paid_installments'] = $paid->count();
+        $data['pending_installments'] = $pending->count();
+        $data['total_installments'] = $schedules->count();
+        $data['overdue_installments'] = $overdue->count();
+        $data['amount_paid'] = $paid->sum(function($s){ return $s->amount_paid ?? $s->amount; });
+        $data['amount_due'] = $pending->sum('amount');
+        $data['pending_amount'] = $overdue->sum('amount');
+
+        return Followup::create($data);
     }
 }

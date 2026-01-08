@@ -69,7 +69,7 @@ class LogicwareApiService
                 'forced_refresh' => $forceRefresh
             ]);
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->createHttpClient()
                 ->withHeaders([
                     'X-API-Key' => $this->apiKey,
                     'X-Subdomain' => $this->subdomain,
@@ -146,6 +146,26 @@ class LogicwareApiService
     }
 
     /**
+     * Crear cliente HTTP con configuración SSL para desarrollo local
+     * 
+     * @param int|null $timeout Timeout personalizado (opcional)
+     * @return \Illuminate\Http\Client\PendingRequest
+     */
+    protected function createHttpClient(?int $timeout = null)
+    {
+        $client = Http::timeout($timeout ?? $this->timeout);
+        
+        // En desarrollo local, desactivar verificación SSL para evitar cURL error 60
+        if (config('app.env') === 'local') {
+            $client = $client->withOptions([
+                'verify' => false
+            ]);
+        }
+        
+        return $client;
+    }
+
+    /**
      * Verificar que el API Key esté configurado
      * 
      * @throws Exception
@@ -206,7 +226,7 @@ class LogicwareApiService
                 'daily_requests' => $this->getDailyRequestCount()
             ]);
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->createHttpClient()
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url, $filters);
 
@@ -405,7 +425,7 @@ class LogicwareApiService
             Log::info('[LogicwareAPI] Obteniendo ventas del API', ['url' => $url, 'query' => $query]);
 
             // Realizar petición
-            $response = Http::timeout($this->timeout)
+            $response = $this->createHttpClient()
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url, $query);
 
@@ -487,7 +507,7 @@ class LogicwareApiService
             ]);
 
             // Timeout extendido para cronogramas (45 segundos)
-            $response = Http::timeout(45)
+            $response = $this->createHttpClient(45)
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url);
 
@@ -579,7 +599,7 @@ class LogicwareApiService
                 'daily_requests' => $this->getDailyRequestCount()
             ]);
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->createHttpClient()
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url);
 
@@ -699,7 +719,7 @@ class LogicwareApiService
             $tokenUrl = "{$this->baseUrl}/auth/external/token";
             Log::info('[LogicwareAPI] Probando generación de token', ['url' => $tokenUrl]);
             
-            $response = Http::timeout(10)
+            $response = $this->createHttpClient(10)
                 ->withHeaders([
                     'X-API-Key' => $this->apiKey,
                     'X-Subdomain' => $this->subdomain,
@@ -726,7 +746,7 @@ class LogicwareApiService
                         $stockUrl = "{$this->baseUrl}/external/units/stock/full";
                         Log::info('[LogicwareAPI] Probando obtención de stock', ['url' => $stockUrl]);
                         
-                        $stockResponse = Http::timeout(10)
+                        $stockResponse = $this->createHttpClient(10)
                             ->withHeaders([
                                 'Authorization' => 'Bearer ' . $token,
                                 'X-Subdomain' => $this->subdomain,
@@ -936,7 +956,7 @@ class LogicwareApiService
                 'projectCode' => $projectCode
             ]);
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->createHttpClient()
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url, ['projectCode' => $projectCode]);
 
@@ -950,7 +970,7 @@ class LogicwareApiService
                 $this->bearerToken = null;
                 
                 // Reintentar con nuevo token
-                $response = Http::timeout($this->timeout)
+                $response = $this->createHttpClient()
                     ->withHeaders($this->getAuthHeaders())
                     ->get($url, ['projectCode' => $projectCode]);
                     
@@ -1068,7 +1088,7 @@ class LogicwareApiService
                 'stageId' => $stageId
             ]);
 
-            $response = Http::timeout($this->timeout)
+            $response = $this->createHttpClient()
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url, [
                     'projectCode' => $projectCode,
@@ -1085,7 +1105,7 @@ class LogicwareApiService
                 $this->bearerToken = null;
                 
                 // Reintentar con nuevo token
-                $response = Http::timeout($this->timeout)
+                $response = $this->createHttpClient()
                     ->withHeaders($this->getAuthHeaders())
                     ->get($url, [
                         'projectCode' => $projectCode,
