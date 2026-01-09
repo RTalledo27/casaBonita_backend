@@ -255,6 +255,21 @@ class ExternalLotImportController extends Controller
                 'force_refresh' => $forceRefresh
             ]);
 
+            // Validar fechas
+            if ($startDate && !strtotime($startDate)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Fecha de inicio inválida'
+                ], 400);
+            }
+
+            if ($endDate && !strtotime($endDate)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Fecha de fin inválida'
+                ], 400);
+            }
+
             $sales = $this->apiService->getSales($startDate, $endDate, $forceRefresh);
 
             return response()->json([
@@ -268,11 +283,19 @@ class ExternalLotImportController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('[ExternalLotImportController] Error obteniendo ventas', ['error' => $e->getMessage()]);
+            Log::error('[ExternalLotImportController] Error obteniendo ventas', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error obteniendo ventas: ' . $e->getMessage()
+                'message' => 'Error obteniendo ventas: ' . $e->getMessage(),
+                'error_details' => config('app.debug') ? [
+                    'type' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
             ], 500);
         }
     }
@@ -286,26 +309,56 @@ class ExternalLotImportController extends Controller
     {
         try {
             // Aumentar tiempo de ejecución para importaciones grandes
-            set_time_limit(300); // 5 minutos
-            ini_set('max_execution_time', '300');
+            set_time_limit(600); // 10 minutos
+            ini_set('max_execution_time', '600');
+            ini_set('memory_limit', '512M');
             
             $startDate = $request->input('startDate');
             $endDate = $request->input('endDate');
             $forceRefresh = $request->boolean('force_refresh', false);
 
-            Log::info('[ExternalLotImportController] Importando ventas (timeout extendido a 300s)', [
+            Log::info('[ExternalLotImportController] Importando ventas (timeout extendido a 600s)', [
                 'start' => $startDate, 
                 'end' => $endDate, 
-                'force' => $forceRefresh
+                'force' => $forceRefresh,
+                'memory_limit' => ini_get('memory_limit'),
+                'max_execution_time' => ini_get('max_execution_time')
             ]);
+
+            // Validar fechas
+            if ($startDate && !strtotime($startDate)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Fecha de inicio inválida'
+                ], 400);
+            }
+
+            if ($endDate && !strtotime($endDate)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Fecha de fin inválida'
+                ], 400);
+            }
 
             $result = $this->importService->importSales($startDate, $endDate, $forceRefresh);
 
             return response()->json($result, $result['success'] ? 200 : 500);
 
         } catch (\Exception $e) {
-            Log::error('[ExternalLotImportController] Error importando ventas', ['error' => $e->getMessage()]);
-            return response()->json([ 'success' => false, 'message' => $e->getMessage() ], 500);
+            Log::error('[ExternalLotImportController] Error importando ventas', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error en la importación: ' . $e->getMessage(),
+                'error_details' => config('app.debug') ? [
+                    'type' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ] : null
+            ], 500);
         }
     }
 
