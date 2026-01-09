@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\SalesCutService;
 use App\Models\SalesCut;
+use App\Exports\SalesCutExport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SalesCutController extends Controller
 {
@@ -302,6 +304,37 @@ class SalesCutController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al actualizar notas',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Exportar corte a Excel
+     * GET /api/v1/sales/cuts/{id}/export
+     */
+    public function export(int $id): BinaryFileResponse|JsonResponse
+    {
+        try {
+            $cut = SalesCut::with(['items.contract.client', 'items.contract.advisor', 'closedBy'])
+                ->findOrFail($id);
+
+            $export = new SalesCutExport($cut);
+            $filePath = $export->export();
+
+            $fileName = 'corte_' . $cut->cut_date->format('Y-m-d') . '.xlsx';
+
+            return response()->download($filePath, $fileName)->deleteFileAfterSend(true);
+
+        } catch (\Exception $e) {
+            Log::error('[SalesCut] Error al exportar corte', [
+                'cut_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al exportar corte',
                 'error' => $e->getMessage(),
             ], 500);
         }

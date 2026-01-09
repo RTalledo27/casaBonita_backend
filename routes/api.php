@@ -159,6 +159,7 @@ Route::middleware('auth:sanctum')->prefix('v1/sales/cuts')->group(function () {
     Route::get('/today', [\App\Http\Controllers\Api\SalesCutController::class, 'today']);
     Route::get('/monthly-stats', [\App\Http\Controllers\Api\SalesCutController::class, 'monthlyStats']);
     Route::get('/{id}', [\App\Http\Controllers\Api\SalesCutController::class, 'show']);
+    Route::get('/{id}/export', [\App\Http\Controllers\Api\SalesCutController::class, 'export']);
     Route::post('/create-daily', [\App\Http\Controllers\Api\SalesCutController::class, 'createDaily']);
     Route::post('/{id}/close', [\App\Http\Controllers\Api\SalesCutController::class, 'close']);
     Route::post('/{id}/review', [\App\Http\Controllers\Api\SalesCutController::class, 'review']);
