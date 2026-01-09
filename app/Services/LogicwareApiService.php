@@ -230,6 +230,26 @@ class LogicwareApiService
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url, $filters);
 
+            // Si el token expiró (401), regenerar y reintentar UNA vez
+            if ($response->status() === 401) {
+                Log::warning('[LogicwareAPI] 🔄 Token expirado (401), regenerando y reintentando...');
+                
+                // Limpiar token expirado del caché
+                $tokenCacheKey = "logicware_bearer_token_{$this->subdomain}";
+                Cache::forget($tokenCacheKey);
+                $this->bearerToken = null;
+                
+                // Reintentar con nuevo token
+                $response = $this->createHttpClient()
+                    ->withHeaders($this->getAuthHeaders())
+                    ->get($url, $filters);
+                    
+                if ($response->status() === 401) {
+                    Log::error('[LogicwareAPI] ❌ Aún 401 después de regenerar token');
+                    throw new Exception("Error de autenticación: Token inválido incluso después de regenerar");
+                }
+            }
+
             if (!$response->successful()) {
                 // Si es error 429 (rate limit), usar datos mock
                 if ($response->status() === 429) {
@@ -429,6 +449,26 @@ class LogicwareApiService
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url, $query);
 
+            // Si el token expiró (401), regenerar y reintentar UNA vez
+            if ($response->status() === 401) {
+                Log::warning('[LogicwareAPI] 🔄 Token expirado (401), regenerando y reintentando...');
+                
+                // Limpiar token expirado del caché
+                $tokenCacheKey = "logicware_bearer_token_{$this->subdomain}";
+                Cache::forget($tokenCacheKey);
+                $this->bearerToken = null;
+                
+                // Reintentar con nuevo token
+                $response = $this->createHttpClient()
+                    ->withHeaders($this->getAuthHeaders())
+                    ->get($url, $query);
+                    
+                if ($response->status() === 401) {
+                    Log::error('[LogicwareAPI] ❌ Aún 401 después de regenerar token');
+                    throw new Exception("Error de autenticación: Token inválido incluso después de regenerar");
+                }
+            }
+
             if (!$response->successful()) {
                 // Si es error 429 (rate limit), usar datos mock
                 if ($response->status() === 429) {
@@ -510,6 +550,26 @@ class LogicwareApiService
             $response = $this->createHttpClient(45)
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url);
+
+            // Si el token expiró (401), regenerar y reintentar UNA vez
+            if ($response->status() === 401) {
+                Log::warning('[LogicwareAPI] 🔄 Token expirado (401), regenerando y reintentando...');
+                
+                // Limpiar token expirado del caché
+                $tokenCacheKey = "logicware_bearer_token_{$this->subdomain}";
+                Cache::forget($tokenCacheKey);
+                $this->bearerToken = null;
+                
+                // Reintentar con nuevo token
+                $response = $this->createHttpClient(45)
+                    ->withHeaders($this->getAuthHeaders())
+                    ->get($url);
+                    
+                if ($response->status() === 401) {
+                    Log::error('[LogicwareAPI] ❌ Aún 401 después de regenerar token');
+                    throw new Exception("Error de autenticación: Token inválido incluso después de regenerar");
+                }
+            }
 
             if (!$response->successful()) {
                 Log::error('[LogicwareAPI] Error al obtener cronograma de pagos', [
