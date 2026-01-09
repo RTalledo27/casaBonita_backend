@@ -765,24 +765,42 @@ class ExternalLotImportService
                     ->first();
 
                 if (!$reservation) {
-                    // Crear nueva reserva con los datos de Logicware
-                    $reservationDate = isset($document['separationStartDate']) 
-                        ? \Carbon\Carbon::parse($document['separationStartDate'])->format('Y-m-d')
-                        : substr($saleDate, 0, 10);
-                    
-                    $expirationDate = isset($document['separationEndDate']) 
-                        ? \Carbon\Carbon::parse($document['separationEndDate'])->format('Y-m-d')
-                        : \Carbon\Carbon::parse($reservationDate)->addDays(30)->format('Y-m-d');
+                    // Solo crear reserva si tenemos advisor_id válido
+                    if (!$advisorId) {
+                        Log::warning('[ExternalLotImport] ⚠️ No se puede crear reserva sin advisor_id', [
+                            'client_id' => $client->client_id,
+                            'lot_id' => $lotId,
+                            'seller' => $sellerName
+                        ]);
+                    } else {
+                        // Crear nueva reserva con los datos de Logicware
+                        $reservationDate = isset($document['separationStartDate']) 
+                            ? \Carbon\Carbon::parse($document['separationStartDate'])->format('Y-m-d')
+                            : substr($saleDate, 0, 10);
+                        
+                        $expirationDate = isset($document['separationEndDate']) 
+                            ? \Carbon\Carbon::parse($document['separationEndDate'])->format('Y-m-d')
+                            : \Carbon\Carbon::parse($reservationDate)->addDays(30)->format('Y-m-d');
 
-                    $reservation = \Modules\Sales\Models\Reservation::create([
-                        'lot_id' => $lotId,
-                        'client_id' => $client->client_id,
-                        'advisor_id' => $advisorId,
-                        'reservation_date' => $reservationDate,
-                        'expiration_date' => $expirationDate,
-                        'deposit_amount' => $reservationAmount,
-                        'status' => 'convertida' // Ya se convirtió en venta
-                    ]);
+                        $reservation = \Modules\Sales\Models\Reservation::create([
+                            'lot_id' => $lotId,
+                            'client_id' => $client->client_id,
+                            'advisor_id' => $advisorId,
+                            'reservation_date' => $reservationDate,
+                            'expiration_date' => $expirationDate,
+                            'deposit_amount' => $reservationAmount,
+                            'status' => 'convertida' // Ya se convirtió en venta
+                        ]);
+
+                        Log::info('[ExternalLotImport] 🏷️ Reserva creada desde Logicware', [
+                            'reservation_id' => $reservation->reservation_id,
+                            'client_id' => $client->client_id,
+                            'lot_id' => $lotId,
+                            'deposit_amount' => $reservationAmount,
+                            'reservation_date' => $reservationDate
+                        ]);
+                    }
+                }
 
                     Log::info('[ExternalLotImport] 🏷️ Reserva creada desde Logicware', [
                         'reservation_id' => $reservation->reservation_id,
@@ -797,11 +815,16 @@ class ExternalLotImportService
             }
 
             // Preparar datos del contrato
+            // ⚠️ IMPORTANTE: El constraint chk_contract_source requiere:
+            //   - O SOLO reservation_id (sin client_id ni lot_id)
+            //   - O SOLO client_id + lot_id (sin reservation_id)
+            // Como vienen de Logicware, usamos client_id + lot_id SIN reservation_id
             $contractData = [
                 'client_id' => $client->client_id,
                 'lot_id' => $lotId,
                 'advisor_id' => $advisorId,
-                'reservation_id' => $reservationId, // 🏷️ Vincular con reserva si existe
+                // NO incluir reservation_id para cumplir constraint chk_contract_source
+                // 'reservation_id' => $reservationId,
                 'contract_number' => $contractNumber,
                 'contract_date' => substr($saleDate,0,10),
                 'sign_date' => substr($saleDate,0,10),

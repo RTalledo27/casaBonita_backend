@@ -1,3 +1,4 @@
+504 Gateway Time-out
 # 🔧 Fix para Errores de Importación en Producción
 
 ## Problemas Identificados:
