@@ -90,6 +90,14 @@ class PermissionSeeder extends Seeder
             'sales.contracts.update',
             'sales.contracts.delete',
             'sales.conversions.process',
+            
+            // MODULE SALES - CUTS
+            'sales.cuts.view',                 // Ver cortes de ventas
+            'sales.cuts.create',               // Crear cortes manualmente
+            'sales.cuts.close',                // Cerrar cortes
+            'sales.cuts.review',               // Revisar cortes
+            'sales.cuts.notes',                // Actualizar notas de cortes
+            'sales.cuts.stats',                // Ver estadísticas mensuales
 
             //lot-media:
             'inventory.media.index',
