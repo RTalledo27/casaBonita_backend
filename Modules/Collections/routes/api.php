@@ -18,6 +18,10 @@ Route::prefix('v1/collections/test')->group(function () {
     Route::get('/dashboard/trends', [CollectionsDashboardController::class, 'getTrends'])
         ->name('collections.test.dashboard.trends');
     
+    // Test KPIs endpoint without auth
+    Route::get('/kpis', [\Modules\Collections\app\Http\Controllers\KpisController::class, 'index'])
+        ->name('collections.test.kpis');
+    
     Route::get('/reports/collection-efficiency', function () {
         try {
             return response()->json([
