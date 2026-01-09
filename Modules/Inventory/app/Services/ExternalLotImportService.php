@@ -802,16 +802,9 @@ class ExternalLotImportService
                     }
                 }
 
-                    Log::info('[ExternalLotImport] 🏷️ Reserva creada desde Logicware', [
-                        'reservation_id' => $reservation->reservation_id,
-                        'client_id' => $client->client_id,
-                        'lot_id' => $lotId,
-                        'deposit_amount' => $reservationAmount,
-                        'reservation_date' => $reservationDate
-                    ]);
+                if ($reservation) {
+                    $reservationId = $reservation->reservation_id;
                 }
-
-                $reservationId = $reservation->reservation_id;
             }
 
             // Preparar datos del contrato
