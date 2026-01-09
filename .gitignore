@@ -1,25 +1,48 @@
-/.phpunit.cache
-/node_modules
+# ── Dependencias ─────────────────────────────────────────────
+/vendor/
+/node_modules/
+
+# ── Laravel ─────────────────────────────────────────────────
+/bootstrap/cache/
+/storage/logs/
+/storage/framework/sessions/
+/storage/framework/cache/
+/storage/framework/views/
+/storage/*.key
+/public/storage
+
+# ── Build / Vite ────────────────────────────────────────────
 /public/build
 /public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
+# Opcional si usas mix
+/public/mix-manifest.json
+
+# ── Config/env (amplía tu ignore actual) ────────────────────
 .env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-Homestead.json
-Homestead.yaml
-npm-debug.log
-yarn-error.log
-/auth.json
-/.fleet
+.env.*
+!.env.example
+.auth.json
+
+# ── Herramientas/IDEs ───────────────────────────────────────
+/.phpunit.result.cache
+/.phpunit.cache
+/.phpactor.json
 /.idea
-/.nova
 /.vscode
+/.fleet
+/.nova
 /.zed
 
+# ── Logs y temporales ───────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+pnpm-debug.log*
+coverage/
+*.pid
+.DS_Store
+Thumbs.db
+
+# ── Servicios ───────────────────────────────────────────────
 .vercel
