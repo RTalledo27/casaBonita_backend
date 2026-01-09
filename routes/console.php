@@ -9,6 +9,22 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 // =======================================================================================
+// CORTES DE VENTAS DIARIOS AUTOMÁTICOS
+// =======================================================================================
+
+// Crear corte diario automáticamente a las 11:59 PM cada día
+Schedule::command('sales:create-daily-cut')
+    ->dailyAt('23:59')
+    ->timezone('America/Lima')
+    ->description('Crear corte diario de ventas automáticamente')
+    ->onFailure(function () {
+        \Log::error('Failed to create daily sales cut');
+    })
+    ->onSuccess(function () {
+        \Log::info('Daily sales cut created successfully');
+    });
+
+// =======================================================================================
 // AUTOMATED BONUS CALCULATION SCHEDULE
 // =======================================================================================
 

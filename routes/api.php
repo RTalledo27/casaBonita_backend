@@ -153,6 +153,18 @@ Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
         ->middleware('permission:inventory.lots.store');
 });
 
+// Sales Cuts API - Cortes de Ventas Diarios
+Route::middleware('auth:sanctum')->prefix('v1/sales/cuts')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\SalesCutController::class, 'index']);
+    Route::get('/today', [\App\Http\Controllers\Api\SalesCutController::class, 'today']);
+    Route::get('/monthly-stats', [\App\Http\Controllers\Api\SalesCutController::class, 'monthlyStats']);
+    Route::get('/{id}', [\App\Http\Controllers\Api\SalesCutController::class, 'show']);
+    Route::post('/create-daily', [\App\Http\Controllers\Api\SalesCutController::class, 'createDaily']);
+    Route::post('/{id}/close', [\App\Http\Controllers\Api\SalesCutController::class, 'close']);
+    Route::post('/{id}/review', [\App\Http\Controllers\Api\SalesCutController::class, 'review']);
+    Route::patch('/{id}/notes', [\App\Http\Controllers\Api\SalesCutController::class, 'updateNotes']);
+});
+
 // Commission schemes & rules - HumanResources admin APIs
 Route::middleware('auth:sanctum')->prefix('v1/hr')->group(function () {
     Route::get('/commission-schemes', [\Modules\HumanResources\Http\Controllers\CommissionSchemeController::class, 'index']);
