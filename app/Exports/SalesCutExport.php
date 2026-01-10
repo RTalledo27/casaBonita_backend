@@ -159,8 +159,12 @@ class SalesCutExport
             $sheet->setCellValue('B' . $row, $item->contract ? $item->contract->contract_number : '-');
             $sheet->setCellValue('C' . $row, $item->contract && $item->contract->client ? 
                 $item->contract->client->first_name . ' ' . $item->contract->client->last_name : '-');
-            $sheet->setCellValue('D' . $row, $item->contract && $item->contract->advisor ? 
-                $item->contract->advisor->first_name . ' ' . $item->contract->advisor->last_name : '-');
+            // Obtener nombre del asesor desde employee (no desde contract->advisor)
+            $advisorName = '-';
+            if ($item->employee && $item->employee->user) {
+                $advisorName = $item->employee->user->first_name . ' ' . $item->employee->user->last_name;
+            }
+            $sheet->setCellValue('D' . $row, $advisorName);
             $sheet->setCellValue('E' . $row, 'S/ ' . number_format($item->amount, 2));
             $sheet->setCellValue('F' . $row, $item->payment_method ? strtoupper($item->payment_method) : '-');
             $sheet->setCellValue('G' . $row, $item->commission ? 'S/ ' . number_format($item->commission, 2) : '-');
