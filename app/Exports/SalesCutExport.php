@@ -218,14 +218,45 @@ class SalesCutExport
         }
         $sheet->getStyle('A1:D1')->applyFromArray($headerStyle);
         
+        // Obtener datos de summary_data o calcularlos desde items
+        $summaryData = is_string($this->cut->summary_data) 
+            ? json_decode($this->cut->summary_data, true) 
+            : $this->cut->summary_data;
+        
+        $advisors = $summaryData['sales_by_advisor'] ?? [];
+        
+        // Si summary_data está vacío, calcular desde items
+        if (empty($advisors)) {
+            $advisorData = [];
+            foreach ($this->cut->items->where('item_type', 'sale') as $item) {
+                if ($item->employee && $item->employee->user) {
+                    $employeeId = $item->employee_id;
+                    $advisorName = $item->employee->user->first_name . ' ' . $item->employee->user->last_name;
+                    
+                    if (!isset($advisorData[$employeeId])) {
+                        $advisorData[$employeeId] = [
+                            'advisor_name' => $advisorName,
+                            'sales_count' => 0,
+                            'total_amount' => 0,
+                            'commission' => 0,
+                        ];
+                    }
+                    
+                    $advisorData[$employeeId]['sales_count']++;
+                    $advisorData[$employeeId]['total_amount'] += $item->amount;
+                    $advisorData[$employeeId]['commission'] += $item->commission ?? 0;
+                }
+            }
+            $advisors = array_values($advisorData);
+        }
+        
         // Data
-        $advisors = $this->cut->summary_data['sales_by_advisor'] ?? [];
         $row = 2;
         foreach ($advisors as $advisor) {
             $sheet->setCellValue('A' . $row, $advisor['advisor_name']);
             $sheet->setCellValue('B' . $row, $advisor['sales_count']);
             $sheet->setCellValue('C' . $row, 'S/ ' . number_format($advisor['total_amount'], 2));
-            $sheet->setCellValue('D' . $row, 'S/ ' . number_format($advisor['total_commission'], 2));
+            $sheet->setCellValue('D' . $row, 'S/ ' . number_format($advisor['commission'], 2));
             $row++;
         }
         
@@ -248,7 +279,7 @@ class SalesCutExport
             $sheet->setCellValue('A' . $row, 'TOTALES:');
             $sheet->setCellValue('B' . $row, collect($advisors)->sum('sales_count'));
             $sheet->setCellValue('C' . $row, 'S/ ' . number_format(collect($advisors)->sum('total_amount'), 2));
-            $sheet->setCellValue('D' . $row, 'S/ ' . number_format(collect($advisors)->sum('total_commission'), 2));
+            $sheet->setCellValue('D' . $row, 'S/ ' . number_format(collect($advisors)->sum('commission'), 2));
             $sheet->getStyle('A' . $row . ':D' . $row)->applyFromArray([
                 'font' => ['bold' => true],
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FEF3C7']],
