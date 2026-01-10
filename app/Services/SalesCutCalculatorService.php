@@ -182,7 +182,11 @@ class SalesCutCalculatorService
         // Ventas por asesor
         $salesByAdvisor = $contracts->groupBy('advisor_id')
             ->map(function($advisorContracts, $advisorId) {
-                $advisor = DB::table('employees')->where('employee_id', $advisorId)->first();
+                $advisor = DB::table('employees as e')
+                    ->join('users as u', 'e.user_id', '=', 'u.user_id')
+                    ->where('e.employee_id', $advisorId)
+                    ->select('u.first_name', 'u.last_name')
+                    ->first();
                 
                 return [
                     'advisor_id' => $advisorId,
