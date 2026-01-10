@@ -80,7 +80,6 @@ class SalesCutCalculatorService
             })
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
-            ->whereNull('c.deleted_at')
             ->select(
                 'c.contract_id',
                 'c.total_price',
@@ -111,7 +110,6 @@ class SalesCutCalculatorService
         $payments = DB::table('payment_schedules')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('status', 'paid')
-            ->whereNull('deleted_at')
             ->select('schedule_id', 'contract_id', 'amount', 'payment_date', 'payment_method', 'installment_number')
             ->get();
 
@@ -144,14 +142,12 @@ class SalesCutCalculatorService
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('status', 'paid')
             ->where('payment_method', 'cash')
-            ->whereNull('deleted_at')
             ->sum('amount') ?? 0;
 
         $bankBalance = DB::table('payment_schedules')
             ->whereBetween('payment_date', [$startDate, $endDate])
             ->where('status', 'paid')
             ->whereIn('payment_method', ['bank_transfer', 'card'])
-            ->whereNull('deleted_at')
             ->sum('amount') ?? 0;
 
         return [
