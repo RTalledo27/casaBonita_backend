@@ -7,6 +7,7 @@ use App\Events\ContractCreated;
 use App\Events\PaymentRecorded;
 use Illuminate\Support\Facades\DB;
 use Modules\Sales\Models\Contract;
+use Modules\Sales\Models\PaymentSchedule;
 use Carbon\Carbon;
 
 class TestEventsCommand extends Command
@@ -89,40 +90,40 @@ class TestEventsCommand extends Command
         $this->info('🔥 Disparando evento: PaymentRecorded');
         
         try {
-            // Obtener un pago real de la BD
-            $payment = DB::table('payments')->first();
+            // Obtener un pago real usando el modelo
+            $payment = PaymentSchedule::first();
             
             if (!$payment) {
                 $this->warn('   ⚠️  No hay pagos en la base de datos');
-                $this->comment('   💡 Creando datos de prueba...');
+                $this->comment('   💡 Creando un PaymentSchedule de prueba en memoria...');
                 
-                // Crear un array con estructura de pago de prueba
-                $paymentData = [
-                    'payment_id' => 999999,
+                // Crear un objeto de prueba sin guardar en BD
+                $payment = new PaymentSchedule([
+                    'schedule_id' => 999999,
                     'contract_id' => 1,
+                    'installment_number' => 1,
+                    'due_date' => Carbon::now()->format('Y-m-d'),
                     'amount' => 1000.00,
+                    'status' => 'paid',
                     'payment_date' => Carbon::now()->format('Y-m-d'),
-                ];
+                ]);
                 
-                $this->line("   📝 Usando pago de prueba ID: 999999");
+                $this->line("   📝 Usando pago de prueba (no guardado en BD)");
             } else {
-                $paymentData = (array) $payment;
-                $this->line("   📝 Usando pago ID: {$payment->payment_id}");
+                $this->line("   📝 Usando pago ID: {$payment->schedule_id}");
+                $this->line("   📝 Contrato: {$payment->contract_id}");
+                $this->line("   📝 Monto: S/ " . number_format($payment->amount ?? 0, 2));
             }
             
-            // Disparar el evento
-            event(new PaymentRecorded(
-                $paymentData['payment_id'],
-                $paymentData['contract_id'] ?? 1,
-                $paymentData['amount'] ?? 0,
-                $paymentData['payment_date'] ?? Carbon::now()->format('Y-m-d')
-            ));
+            // Disparar el evento con el objeto completo
+            event(new PaymentRecorded($payment));
             
             $this->info('   ✅ Evento PaymentRecorded disparado');
             $this->comment('   💡 El listener UpdateTodaySalesCut@handlePaymentRecorded debería ejecutarse');
             
         } catch (\Exception $e) {
             $this->error('   ❌ Error al disparar evento: ' . $e->getMessage());
+            $this->line('   Stack trace: ' . $e->getTraceAsString());
         }
         
         $this->newLine();
