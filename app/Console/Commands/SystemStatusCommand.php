@@ -236,22 +236,15 @@ class SystemStatusCommand extends Command
                 ->first();
             
             if ($todayCut) {
-                $this->line("   ✅ Corte de hoy: {$todayCut->cut_date}");
+                $this->line("   ✅ Corte de hoy: {$todayCut->cut_date} (Estado: {$todayCut->status})");
+                $this->line("   📊 Ventas: {$todayCut->total_sales_count} | Ingresos: S/ " . number_format($todayCut->total_revenue, 2));
+                $this->line("   💰 Pagos: {$todayCut->total_payments_count} | Recibido: S/ " . number_format($todayCut->total_payments_received, 2));
+                $this->line("   💵 Saldo: Efectivo S/ " . number_format($todayCut->cash_balance, 2) . " | Banco S/ " . number_format($todayCut->bank_balance, 2));
+                $this->line("   📝 Actualizado: {$todayCut->updated_at}");
                 
-                // Verificar qué columnas existen
-                $cutArray = (array) $todayCut;
-                
-                if (isset($todayCut->total_contracts)) {
-                    $this->line("   📊 Total contratos: {$todayCut->total_contracts}");
-                }
-                if (isset($todayCut->total_payments)) {
-                    $this->line("   💵 Total pagos: {$todayCut->total_payments}");
-                }
-                if (isset($todayCut->total_amount)) {
-                    $this->line("   💰 Monto total: S/ " . number_format($todayCut->total_amount, 2));
-                }
-                if (isset($todayCut->updated_at)) {
-                    $this->line("   📝 Última actualización: {$todayCut->updated_at}");
+                // Verificar si hay actividad
+                if ($todayCut->total_sales_count == 0 && $todayCut->total_payments_count == 0) {
+                    $this->warn("   ⚠️  Sin actividad registrada - Los eventos pueden no estar ejecutándose");
                 }
             } else {
                 $this->warn('   ⚠️  No existe corte para hoy');
@@ -268,9 +261,9 @@ class SystemStatusCommand extends Command
             return [
                 'today' => $todayCut ? [
                     'date' => $todayCut->cut_date,
-                    'contracts' => $todayCut->total_contracts ?? 0,
-                    'payments' => $todayCut->total_payments ?? 0,
-                    'amount' => $todayCut->total_amount ?? 0,
+                    'sales_count' => $todayCut->total_sales_count ?? 0,
+                    'payments_count' => $todayCut->total_payments_count ?? 0,
+                    'revenue' => $todayCut->total_revenue ?? 0,
                 ] : null,
                 'last_week_count' => $lastWeek->count(),
             ];
