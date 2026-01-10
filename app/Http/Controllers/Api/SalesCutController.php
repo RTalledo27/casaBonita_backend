@@ -453,16 +453,51 @@ class SalesCutController extends Controller
                 'notes' => $validated['notes'] ?? null,
             ]);
 
+            // Crear items del corte (contratos)
+            $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
+                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+                ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+                ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
+                ->get();
+
+            foreach ($contracts as $contract) {
+                $cut->items()->create([
+                    'item_type' => 'sale',
+                    'contract_id' => $contract->contract_id,
+                    'employee_id' => $contract->advisor_id,
+                    'amount' => $contract->total_price,
+                    'commission' => round($contract->total_price * 0.03, 2),
+                ]);
+            }
+
+            // Crear items de pagos
+            $payments = \Illuminate\Support\Facades\DB::table('payments as p')
+                ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
+                ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+                ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
+                ->get();
+
+            foreach ($payments as $payment) {
+                $cut->items()->create([
+                    'item_type' => 'payment',
+                    'contract_id' => $payment->contract_id,
+                    'payment_schedule_id' => $payment->schedule_id,
+                    'amount' => $payment->amount,
+                    'payment_method' => $this->mapPaymentMethod($payment->method),
+                ]);
+            }
+
             Log::info('[SalesCut] Corte creado manualmente', [
                 'cut_id' => $cut->cut_id,
                 'type' => $cutType,
                 'period' => $calculatedData['period'],
+                'items_created' => $cut->items()->count(),
             ]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Corte creado y guardado exitosamente',
-                'data' => $cut,
+                'data' => $cut->load('items'),
             ], 201);
 
         } catch (\Exception $e) {
@@ -545,5 +580,22 @@ class SalesCutController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Mapear método de pago de payments a sales_cut_items
+     */
+    private function mapPaymentMethod(string $method): string
+    {
+        $map = [
+            'efectivo' => 'cash',
+            'transferencia' => 'bank_transfer',
+            'tarjeta' => 'credit_card',
+            'yape' => 'bank_transfer',
+            'plin' => 'bank_transfer',
+            'otro' => 'bank_transfer',
+        ];
+
+        return $map[$method] ?? 'cash';
     }
 }
