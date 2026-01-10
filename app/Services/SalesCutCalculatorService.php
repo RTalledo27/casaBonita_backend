@@ -107,13 +107,20 @@ class SalesCutCalculatorService
      */
     private function calculatePayments(string $startDate, string $endDate): array
     {
-        $payments = DB::table('payment_schedules')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('status', 'pagado')
-            ->select('schedule_id', 'contract_id', 'amount_paid', 'payment_date', 'payment_method', 'installment_number')
+        $payments = DB::table('payments as p')
+            ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
+            ->whereBetween('p.payment_date', [$startDate, $endDate])
+            ->select(
+                'p.payment_id',
+                'ps.contract_id',
+                'p.amount',
+                'p.payment_date',
+                'p.method as payment_method',
+                'ps.installment_number'
+            )
             ->get();
 
-        $amount = $payments->sum('amount_paid') ?? 0;
+        $amount = $payments->sum('amount') ?? 0;
         $installments = $payments->count();
 
         return [
@@ -138,17 +145,15 @@ class SalesCutCalculatorService
      */
     private function calculateBalances(string $startDate, string $endDate): array
     {
-        $cashBalance = DB::table('payment_schedules')
+        $cashBalance = DB::table('payments')
             ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('status', 'pagado')
-            ->where('payment_method', 'cash')
-            ->sum('amount_paid') ?? 0;
+            ->where('method', 'efectivo')
+            ->sum('amount') ?? 0;
 
-        $bankBalance = DB::table('payment_schedules')
+        $bankBalance = DB::table('payments')
             ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('status', 'pagado')
-            ->whereIn('payment_method', ['bank_transfer', 'card'])
-            ->sum('amount_paid') ?? 0;
+            ->whereIn('method', ['transferencia', 'tarjeta', 'yape', 'plin'])
+            ->sum('amount') ?? 0;
 
         return [
             'cash' => $cashBalance,
@@ -197,7 +202,7 @@ class SalesCutCalculatorService
                 return [
                     'method' => $method ?? 'No especificado',
                     'count' => $methodPayments->count(),
-                    'amount' => $methodPayments->sum('amount_paid'),
+                    'amount' => $methodPayments->sum('amount'),
                 ];
             })
             ->values()
