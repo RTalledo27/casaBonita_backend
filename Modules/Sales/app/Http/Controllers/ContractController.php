@@ -4,6 +4,7 @@ namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\UserActivityLog;
+use App\Events\ContractCreated;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,9 @@ class ContractController extends Controller
             );
 
             DB::commit();
+
+            // Disparar evento para actualizar corte del día
+            event(new ContractCreated($contract));
 
             // Notify listeners a new contract was created
             $this->pusher->notify('contract-channel', 'created', [

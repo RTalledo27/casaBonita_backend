@@ -273,17 +273,17 @@ class LogicwareImportController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Stock completo obtenido exitosamente',
-                'data' => $stockData,
-                'stats' => $stats,
+                'data' => $stockData['data'] ?? [],  // Extraer el array directamente
+                'statistics' => $stats,  // Cambiar de 'stats' a 'statistics'
                 'cache_info' => [
                     'cached_at' => $stockData['cached_at'] ?? null,
                     'cache_expires_at' => $stockData['cache_expires_at'] ?? null,
                     'is_cached' => isset($stockData['cached_at'])
                 ],
-                'api_usage' => [
+                'api_info' => [  // Cambiar de 'api_usage' a 'api_info'
                     'daily_requests_used' => $logicwareService->getDailyRequestCount(),
                     'daily_requests_limit' => 4,
-                    'requests_remaining' => 4 - $logicwareService->getDailyRequestCount()
+                    'has_available_requests' => $logicwareService->getDailyRequestCount() < 4
                 ]
             ], 200);
 

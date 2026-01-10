@@ -70,3 +70,70 @@ Schedule::command('logicware:renew-token')
     ->onSuccess(function () {
         \Log::info('[LogicwareScheduler] Token de Logicware verificado/renovado');
     });
+
+// =======================================================================================
+// LOGICWARE DATA SYNC SCHEDULE
+// =======================================================================================
+
+// Importar contratos desde Logicware cada 30 minutos
+// Mantiene sincronizada la información de contratos entre sistemas
+Schedule::command('logicware:import-contracts')
+    ->everyThirtyMinutes()
+    ->timezone('America/Lima')
+    ->description('Sincronización de contratos desde Logicware cada 30 minutos')
+    ->onFailure(function () {
+        \Log::error('[LogicwareSync] Error al importar contratos desde Logicware');
+    })
+    ->onSuccess(function () {
+        \Log::info('[LogicwareSync] Contratos importados exitosamente desde Logicware');
+    });
+
+// =======================================================================================
+// PAYMENT SCHEDULES GENERATION
+// =======================================================================================
+
+// Generar cronogramas de pagos para contratos sin cronograma
+// Se ejecuta diariamente a las 2:00 AM
+Schedule::command('collections:generate-schedules')
+    ->dailyAt('02:00')
+    ->timezone('America/Lima')
+    ->description('Generar cronogramas de pagos para contratos activos sin cronograma')
+    ->onFailure(function () {
+        \Log::error('[ScheduleGenerator] Error al generar cronogramas de pagos');
+    })
+    ->onSuccess(function () {
+        \Log::info('[ScheduleGenerator] Cronogramas de pagos generados exitosamente');
+    });
+
+// =======================================================================================
+// CACHE MAINTENANCE
+// =======================================================================================
+
+// Limpiar cache obsoleto diariamente a las 3:00 AM
+Schedule::command('cache:prune-stale-tags')
+    ->dailyAt('03:00')
+    ->timezone('America/Lima')
+    ->description('Limpieza de tags obsoletos en cache')
+    ->onFailure(function () {
+        \Log::error('[CacheMaintenance] Error al limpiar cache obsoleto');
+    })
+    ->onSuccess(function () {
+        \Log::info('[CacheMaintenance] Cache limpiado exitosamente');
+    });
+
+// =======================================================================================
+// DATABASE BACKUP (Recomendado agregar)
+// =======================================================================================
+
+// Backup automático de base de datos diario a las 4:00 AM
+// Nota: Requiere configurar el comando de backup
+// Schedule::command('backup:run --only-db')
+//     ->dailyAt('04:00')
+//     ->timezone('America/Lima')
+//     ->description('Backup automático de base de datos')
+//     ->onFailure(function () {
+//         \Log::error('[Backup] Error al crear backup de base de datos');
+//     })
+//     ->onSuccess(function () {
+//         \Log::info('[Backup] Backup de base de datos creado exitosamente');
+//     });

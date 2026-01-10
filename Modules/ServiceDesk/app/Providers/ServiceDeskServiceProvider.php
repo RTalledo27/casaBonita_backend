@@ -91,10 +91,11 @@ class ServiceDeskServiceProvider extends ServiceProvider
         //     $schedule->command('inspire')->hourly();
         // });
 
-        $this->app->booted(function () {
-            $schedule = $this->app->make(Schedule::class);
-            $schedule->command('servicedesk:escalate-tier1')->everyFiveMinutes();
-        });
+        // TODO: Implementar comando servicedesk:escalate-tier1
+        // $this->app->booted(function () {
+        //     $schedule = $this->app->make(Schedule::class);
+        //     $schedule->command('servicedesk:escalate-tier1')->everyFiveMinutes();
+        // });
     }
 
     /**

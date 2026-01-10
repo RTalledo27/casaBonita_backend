@@ -3,6 +3,7 @@
 namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Events\PaymentRecorded;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -127,6 +128,12 @@ class PaymentScheduleController extends Controller
             
             DB::commit();
             Log::info('✅ Transacción confirmada');
+            
+            // Si se registró un pago, disparar evento para actualizar corte del día
+            if (isset($payment)) {
+                event(new PaymentRecorded($updated));
+                Log::info('📢 Evento PaymentRecorded disparado para schedule_id: ' . $updated->schedule_id);
+            }
 
             $this->pusher->notify('schedule-channel', 'updated', [
                 'schedule' => (new PaymentScheduleResource($updated))->toArray($request),

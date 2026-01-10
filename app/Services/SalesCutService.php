@@ -312,6 +312,125 @@ class SalesCutService
     }
 
     /**
+     * Agregar venta al corte actual (real-time)
+     */
+    public function addSaleToCurrentCut(Contract $contract): void
+    {
+        $cut = $this->getTodayCut();
+        
+        if (!$cut || $cut->status !== 'open') {
+            Log::warning('[SalesCut] No hay corte abierto para agregar venta', [
+                'contract_id' => $contract->contract_id
+            ]);
+            return;
+        }
+
+        try {
+            // Crear item de venta
+            SalesCutItem::create([
+                'cut_id' => $cut->cut_id,
+                'item_type' => 'sale',
+                'contract_id' => $contract->contract_id,
+                'employee_id' => $contract->advisor_id,
+                'amount' => $contract->total_price,
+                'commission' => $this->calculateCommission($contract),
+                'description' => "Venta: {$contract->contract_number}",
+                'metadata' => [
+                    'client_name' => $contract->client ? $contract->client->first_name . ' ' . $contract->client->last_name : null,
+                    'lot_number' => $contract->lot ? $contract->lot->num_lot : null,
+                    'advisor_name' => $contract->advisor && $contract->advisor->user 
+                        ? $contract->advisor->user->first_name . ' ' . $contract->advisor->user->last_name 
+                        : null,
+                ],
+            ]);
+
+            // Crear item de comisión si aplica
+            $commission = $this->calculateCommission($contract);
+            if ($commission > 0 && $contract->advisor_id) {
+                SalesCutItem::create([
+                    'cut_id' => $cut->cut_id,
+                    'item_type' => 'commission',
+                    'contract_id' => $contract->contract_id,
+                    'employee_id' => $contract->advisor_id,
+                    'amount' => 0,
+                    'commission' => $commission,
+                    'description' => "Comisión por venta {$contract->contract_number}",
+                    'metadata' => [
+                        'commission_rate' => $this->getCommissionRate($contract),
+                        'sale_amount' => $contract->total_price,
+                    ],
+                ]);
+            }
+
+            // Recalcular totales
+            $this->updateCutTotals($cut);
+
+            Log::info('[SalesCut] Venta agregada al corte en tiempo real', [
+                'cut_id' => $cut->cut_id,
+                'contract_id' => $contract->contract_id,
+                'amount' => $contract->total_price,
+                'commission' => $commission,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SalesCut] Error al agregar venta al corte', [
+                'error' => $e->getMessage(),
+                'contract_id' => $contract->contract_id,
+            ]);
+        }
+    }
+
+    /**
+     * Agregar pago al corte actual (real-time)
+     */
+    public function addPaymentToCurrentCut(PaymentSchedule $payment): void
+    {
+        $cut = $this->getTodayCut();
+        
+        if (!$cut || $cut->status !== 'open') {
+            Log::warning('[SalesCut] No hay corte abierto para agregar pago', [
+                'schedule_id' => $payment->schedule_id
+            ]);
+            return;
+        }
+
+        try {
+            // Crear item de pago
+            SalesCutItem::create([
+                'cut_id' => $cut->cut_id,
+                'item_type' => 'payment',
+                'contract_id' => $payment->contract_id,
+                'payment_schedule_id' => $payment->schedule_id,
+                'employee_id' => $payment->contract->advisor_id ?? null,
+                'amount' => $payment->amount_paid ?? $payment->amount,
+                'payment_method' => $payment->payment_method ?? 'cash',
+                'description' => "Pago de cuota #{$payment->installment_number}",
+                'metadata' => [
+                    'contract_number' => $payment->contract->contract_number ?? null,
+                    'client_name' => $payment->contract->client 
+                        ? $payment->contract->client->first_name . ' ' . $payment->contract->client->last_name 
+                        : null,
+                    'installment_number' => $payment->installment_number,
+                    'installment_type' => $payment->type,
+                ],
+            ]);
+
+            // Recalcular totales
+            $this->updateCutTotals($cut);
+
+            Log::info('[SalesCut] Pago agregado al corte en tiempo real', [
+                'cut_id' => $cut->cut_id,
+                'schedule_id' => $payment->schedule_id,
+                'amount' => $payment->amount_paid ?? $payment->amount,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SalesCut] Error al agregar pago al corte', [
+                'error' => $e->getMessage(),
+                'schedule_id' => $payment->schedule_id,
+            ]);
+        }
+    }
+
+    /**
      * Obtener corte del día actual
      */
     public function getTodayCut(): ?SalesCut
