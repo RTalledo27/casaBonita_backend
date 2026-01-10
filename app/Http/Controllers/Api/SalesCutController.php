@@ -461,12 +461,20 @@ class SalesCutController extends Controller
                 ->get();
 
             foreach ($contracts as $contract) {
+                // Obtener comisión real de la tabla commissions
+                $realCommission = \Illuminate\Support\Facades\DB::table('commissions')
+                    ->where('contract_id', $contract->contract_id)
+                    ->where('employee_id', $contract->advisor_id)
+                    ->whereNull('parent_commission_id') // Solo comisión padre
+                    ->where('status', '!=', 'cancelled')
+                    ->sum('commission_amount') ?? 0;
+
                 $cut->items()->create([
                     'item_type' => 'sale',
                     'contract_id' => $contract->contract_id,
                     'employee_id' => $contract->advisor_id,
                     'amount' => $contract->total_price,
-                    'commission' => round($contract->total_price * 0.03, 2),
+                    'commission' => round($realCommission, 2),
                 ]);
             }
 

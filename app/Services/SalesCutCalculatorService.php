@@ -132,12 +132,26 @@ class SalesCutCalculatorService
     }
 
     /**
-     * Calcular comisiones (3% de las ventas)
+     * Calcular comisiones del período desde la tabla commissions
+     * Usa las comisiones REALES que ya fueron calculadas por el sistema
      */
     private function calculateCommissions($contracts): float
     {
-        $totalSales = $contracts->sum('total_price') ?? 0;
-        return round($totalSales * 0.03, 2);
+        if ($contracts->isEmpty()) {
+            return 0;
+        }
+
+        // Obtener IDs de contratos
+        $contractIds = $contracts->pluck('contract_id')->toArray();
+
+        // Sumar comisiones reales de la tabla commissions para estos contratos
+        $totalCommissions = DB::table('commissions')
+            ->whereIn('contract_id', $contractIds)
+            ->whereNull('parent_commission_id') // Solo comisiones padre (no divididas)
+            ->where('status', '!=', 'cancelled')
+            ->sum('commission_amount') ?? 0;
+
+        return round($totalCommissions, 2);
     }
 
     /**
@@ -188,12 +202,21 @@ class SalesCutCalculatorService
                     ->select('u.first_name', 'u.last_name')
                     ->first();
                 
+                // Obtener comisiones reales de estos contratos
+                $contractIds = $advisorContracts->pluck('contract_id')->toArray();
+                $realCommission = DB::table('commissions')
+                    ->whereIn('contract_id', $contractIds)
+                    ->where('employee_id', $advisorId)
+                    ->whereNull('parent_commission_id') // Solo comisiones padre
+                    ->where('status', '!=', 'cancelled')
+                    ->sum('commission_amount') ?? 0;
+                
                 return [
                     'advisor_id' => $advisorId,
                     'advisor_name' => $advisor ? $advisor->first_name . ' ' . $advisor->last_name : 'Sin asignar',
                     'sales_count' => $advisorContracts->count(),
                     'total_amount' => $advisorContracts->sum('total_price'),
-                    'commission' => round($advisorContracts->sum('total_price') * 0.03, 2),
+                    'commission' => round($realCommission, 2),
                 ];
             })
             ->sortByDesc('total_amount')
