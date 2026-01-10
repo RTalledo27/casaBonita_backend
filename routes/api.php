@@ -155,11 +155,19 @@ Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
 
 // Sales Cuts API - Cortes de Ventas Diarios
 Route::middleware('auth:sanctum')->prefix('v1/sales/cuts')->group(function () {
+    // Listado y consultas
     Route::get('/', [\App\Http\Controllers\Api\SalesCutController::class, 'index']);
     Route::get('/today', [\App\Http\Controllers\Api\SalesCutController::class, 'today']);
     Route::get('/monthly-stats', [\App\Http\Controllers\Api\SalesCutController::class, 'monthlyStats']);
     Route::get('/{id}', [\App\Http\Controllers\Api\SalesCutController::class, 'show']);
     Route::get('/{id}/export', [\App\Http\Controllers\Api\SalesCutController::class, 'export']);
+    
+    // Nuevos endpoints para cálculo flexible
+    Route::post('/calculate', [\App\Http\Controllers\Api\SalesCutController::class, 'calculate']); // Preview sin guardar
+    Route::post('/', [\App\Http\Controllers\Api\SalesCutController::class, 'store']); // Crear y guardar
+    Route::put('/{id}/recalculate', [\App\Http\Controllers\Api\SalesCutController::class, 'recalculate']); // Recalcular existente
+    
+    // Endpoints legacy (mantener compatibilidad)
     Route::post('/create-daily', [\App\Http\Controllers\Api\SalesCutController::class, 'createDaily']);
     Route::post('/{id}/close', [\App\Http\Controllers\Api\SalesCutController::class, 'close']);
     Route::post('/{id}/review', [\App\Http\Controllers\Api\SalesCutController::class, 'review']);
