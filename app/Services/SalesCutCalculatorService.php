@@ -68,10 +68,28 @@ class SalesCutCalculatorService
      */
     private function calculateSales(string $startDate, string $endDate): array
     {
-        $contracts = DB::table('contracts')
-            ->whereBetween('sign_date', [$startDate, $endDate])
-            ->whereNull('deleted_at')
-            ->select('contract_id', 'total_price', 'down_payment', 'advisor_id', 'client_name', 'lot_name', 'sign_date')
+        $contracts = DB::table('contracts as c')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('clients as cl', function($join) {
+                $join->on('c.client_id', '=', 'cl.client_id')
+                     ->orOn('r.client_id', '=', 'cl.client_id');
+            })
+            ->leftJoin('lots as l', function($join) {
+                $join->on('c.lot_id', '=', 'l.lot_id')
+                     ->orOn('r.lot_id', '=', 'l.lot_id');
+            })
+            ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
+            ->whereBetween('c.sign_date', [$startDate, $endDate])
+            ->whereNull('c.deleted_at')
+            ->select(
+                'c.contract_id',
+                'c.total_price',
+                'c.down_payment',
+                'c.advisor_id',
+                'c.sign_date',
+                DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
+                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name')
+            )
             ->get();
 
         $revenue = $contracts->sum('total_price') ?? 0;
