@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Events\ContractCreated;
 use App\Events\PaymentRecorded;
 use Illuminate\Support\Facades\DB;
+use Modules\Sales\Models\Contract;
 use Carbon\Carbon;
 
 class TestEventsCommand extends Command
@@ -57,8 +58,8 @@ class TestEventsCommand extends Command
         $this->info('🔥 Disparando evento: ContractCreated');
         
         try {
-            // Obtener un contrato real de la BD
-            $contract = DB::table('contracts')->first();
+            // Obtener un contrato real usando el modelo
+            $contract = Contract::first();
             
             if (!$contract) {
                 $this->error('   ❌ No hay contratos en la base de datos para probar');
@@ -66,15 +67,18 @@ class TestEventsCommand extends Command
             }
 
             $this->line("   📝 Usando contrato ID: {$contract->contract_id}");
+            $this->line("   📝 Cliente: {$contract->client_name}");
+            $this->line("   📝 Precio: S/ " . number_format($contract->total_price ?? 0, 2));
             
-            // Disparar el evento
-            event(new ContractCreated($contract->contract_id));
+            // Disparar el evento con el objeto completo
+            event(new ContractCreated($contract));
             
             $this->info('   ✅ Evento ContractCreated disparado');
             $this->comment('   💡 El listener UpdateTodaySalesCut@handleContractCreated debería ejecutarse');
             
         } catch (\Exception $e) {
             $this->error('   ❌ Error al disparar evento: ' . $e->getMessage());
+            $this->line('   Stack trace: ' . $e->getTraceAsString());
         }
         
         $this->newLine();
