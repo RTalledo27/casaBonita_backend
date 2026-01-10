@@ -237,9 +237,22 @@ class SystemStatusCommand extends Command
             
             if ($todayCut) {
                 $this->line("   ✅ Corte de hoy: {$todayCut->cut_date}");
-                $this->line("   📊 Total ventas: {$todayCut->total_sales}");
-                $this->line("   💵 Monto total: S/ " . number_format($todayCut->total_amount, 2));
-                $this->line("   📝 Última actualización: {$todayCut->updated_at}");
+                
+                // Verificar qué columnas existen
+                $cutArray = (array) $todayCut;
+                
+                if (isset($todayCut->total_contracts)) {
+                    $this->line("   📊 Total contratos: {$todayCut->total_contracts}");
+                }
+                if (isset($todayCut->total_payments)) {
+                    $this->line("   💵 Total pagos: {$todayCut->total_payments}");
+                }
+                if (isset($todayCut->total_amount)) {
+                    $this->line("   💰 Monto total: S/ " . number_format($todayCut->total_amount, 2));
+                }
+                if (isset($todayCut->updated_at)) {
+                    $this->line("   📝 Última actualización: {$todayCut->updated_at}");
+                }
             } else {
                 $this->warn('   ⚠️  No existe corte para hoy');
             }
@@ -255,14 +268,15 @@ class SystemStatusCommand extends Command
             return [
                 'today' => $todayCut ? [
                     'date' => $todayCut->cut_date,
-                    'sales' => $todayCut->total_sales,
-                    'amount' => $todayCut->total_amount,
+                    'contracts' => $todayCut->total_contracts ?? 0,
+                    'payments' => $todayCut->total_payments ?? 0,
+                    'amount' => $todayCut->total_amount ?? 0,
                 ] : null,
                 'last_week_count' => $lastWeek->count(),
             ];
         } catch (\Exception $e) {
             $this->error('   ❌ Error: ' . $e->getMessage());
-            return ['status' => 'error', 'message' => $e->getMessage()];
+            return ['today' => null, 'last_week_count' => 0, 'status' => 'error', 'message' => $e->getMessage()];
         }
     }
 
