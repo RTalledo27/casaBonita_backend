@@ -60,6 +60,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/inventory')->group(function () {
             Route::get('/daily-limit-status', [ExternalLotImportController::class, 'getDailyLimitStatus'])->name('external-lot-import.daily-limit-status');
             Route::get('/sales', [ExternalLotImportController::class, 'sales'])->name('external-lot-import.sales');
             Route::post('/sales/import', [ExternalLotImportController::class, 'importSales'])->name('external-lot-import.sales.import');
+            Route::get('/sales/import/async/{id}/status', [ExternalLotImportController::class, 'getSalesImportStatus'])->name('external-lot-import.sales.import.status');
         });
     });
 });
