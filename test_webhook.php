@@ -11,8 +11,9 @@
  */
 
 // Configuración
-$webhookUrl = 'http://127.0.0.1:8000/api/webhooks/logicware';
-$secret = 'test_secret_123'; // Cambiar por tu LOGICWARE_WEBHOOK_SECRET
+$webhookUrl = 'https://api.casabonita.pe/api/webhooks/logicware'; // Producción
+// $webhookUrl = 'http://127.0.0.1:8000/api/webhooks/logicware'; // Local
+$secret = '48bdcc5cc66334177b6eaf2c40e5d121f18002a6c0fbede191e12794a7b82ea9'; // LOGICWARE_WEBHOOK_SECRET del .env
 
 // Payloads de ejemplo para diferentes eventos
 $payloads = [
