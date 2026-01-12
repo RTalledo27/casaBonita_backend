@@ -11,7 +11,8 @@ class ResetSalesInventoryData extends Command
 {
     protected $signature = 'db:reset-sales-inventory
                             {--force : Ejecutar sin confirmación}
-                            {--seed=test : none|simple|test (recarga data luego del borrado)}';
+                            {--seed=test : none|simple|test (recarga data luego del borrado)}
+                            {--lock-wait=15 : Segundos máximos esperando locks de MySQL por tabla}';
 
     protected $description = 'Borra datos de contratos/reservas/cronogramas e inventario, y opcionalmente recarga data';
 
@@ -55,6 +56,12 @@ class ResetSalesInventoryData extends Command
 
         $this->info('🧹 Limpiando tablas objetivo...');
 
+        $lockWait = (int) $this->option('lock-wait');
+        if ($lockWait > 0) {
+            DB::statement('SET SESSION lock_wait_timeout = ' . $lockWait);
+            DB::statement('SET SESSION innodb_lock_wait_timeout = ' . $lockWait);
+        }
+
         Schema::disableForeignKeyConstraints();
 
         try {
@@ -64,12 +71,18 @@ class ResetSalesInventoryData extends Command
                     continue;
                 }
 
-                DB::table($table)->truncate();
+                $this->line("  ⏳ {$table}");
+                try {
+                    DB::table($table)->truncate();
+                } catch (\Throwable $e) {
+                    throw new \RuntimeException("Error en tabla {$table}: " . $e->getMessage(), previous: $e);
+                }
                 $this->line("  ✓ {$table}");
             }
         } catch (\Throwable $e) {
             Schema::enableForeignKeyConstraints();
             $this->error('Error borrando datos: ' . $e->getMessage());
+            $this->line('Sugerencia: detener workers/reverb y reintentar, o aumentar --lock-wait.');
             return 1;
         }
 

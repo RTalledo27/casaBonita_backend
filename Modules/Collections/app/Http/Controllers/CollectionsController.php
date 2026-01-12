@@ -557,8 +557,23 @@ class CollectionsController extends Controller
             }
 
             if ($request->has('client_name')) {
-                $query->whereHas('reservation.client', function($q) use ($request) {
-                    $q->where('full_name', 'like', '%' . $request->input('client_name') . '%');
+                $term = trim((string) $request->input('client_name'));
+                $query->where(function ($q) use ($term) {
+                    $apply = function ($clientQuery) use ($term) {
+                        $like = '%' . $term . '%';
+                        $clientQuery->where(function ($qq) use ($like) {
+                            $qq->where('first_name', 'like', $like)
+                                ->orWhere('last_name', 'like', $like)
+                                ->orWhere('doc_number', 'like', $like)
+                                ->orWhereRaw("CONCAT(first_name,' ',last_name) like ?", [$like]);
+                        });
+                    };
+
+                    $q->whereHas('reservation.client', function ($clientQuery) use ($apply) {
+                        $apply($clientQuery);
+                    })->orWhereHas('client', function ($clientQuery) use ($apply) {
+                        $apply($clientQuery);
+                    });
                 });
             }
 
