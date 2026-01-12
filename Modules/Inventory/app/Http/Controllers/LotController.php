@@ -15,7 +15,7 @@ use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Inventory\Models\ManzanaFinancingRule;
 use Modules\Inventory\Repositories\LotRepository;
 use Modules\Inventory\Transformers\LotResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 use Pusher\Pusher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;

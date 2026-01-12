@@ -10,7 +10,7 @@ use Modules\Inventory\Http\Requests\StreetTypeRequest;
 use Modules\Inventory\Models\StreetType;
 use Modules\Inventory\Repositories\StreetTypeRepository;
 use Modules\Inventory\Transformers\StreetTypeResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 use Pusher\Pusher;
 
 class StreetTypeController extends Controller

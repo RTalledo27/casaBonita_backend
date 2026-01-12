@@ -12,7 +12,7 @@ use Modules\Sales\Http\Requests\UpdatePaymentRequest;
 use Modules\Sales\Models\Payment;
 use Modules\Sales\Repositories\PaymentRepository;
 use Modules\Sales\Transformers\PaymentResource;
-use Modules\services\PusherNotifier;
+use Modules\Services\PusherNotifier;
 
 class PaymentController extends Controller
 {
