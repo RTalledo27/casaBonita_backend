@@ -55,24 +55,7 @@ class ProcessSalesImportJob implements ShouldQueue
                 'force_refresh' => $forceRefresh,
             ]);
 
-            $result = $service->importSales($startDate, $endDate, $forceRefresh);
-
-            $stats = $result['data']['stats'] ?? null;
-            if (is_array($stats)) {
-                $total = (int) ($stats['total'] ?? 0);
-                $processed = $total;
-                $successful = (int) ($stats['created'] ?? 0) + (int) ($stats['updated'] ?? 0);
-                $failed = (int) ($stats['errors'] ?? 0);
-                $progress = $total > 0 ? ($processed / $total) * 100 : 90;
-
-                $this->importProcess->update([
-                    'total_rows' => $total,
-                    'processed_rows' => $processed,
-                    'successful_rows' => $successful,
-                    'failed_rows' => $failed,
-                    'progress_percentage' => $progress,
-                ]);
-            }
+            $result = $service->importSalesWithProgress($this->importProcess, $startDate, $endDate, $forceRefresh);
 
             if (!($result['success'] ?? false)) {
                 $this->importProcess->markAsFailed([

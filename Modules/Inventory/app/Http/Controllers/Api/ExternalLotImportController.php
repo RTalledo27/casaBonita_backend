@@ -274,11 +274,24 @@ class ExternalLotImportController extends Controller
 
             $sales = $this->apiService->getSales($startDate, $endDate, $forceRefresh);
 
+            $items = $sales['data'] ?? [];
+            $totalClients = is_array($items) ? count($items) : 0;
+            $totalDocuments = 0;
+            if (is_array($items)) {
+                foreach ($items as $c) {
+                    if (!empty($c['documents']) && is_array($c['documents'])) {
+                        $totalDocuments += count($c['documents']);
+                    }
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'total' => isset($sales['data']) ? count($sales['data']) : 0,
-                    'items' => $sales['data'] ?? [],
+                    'total_clients' => $totalClients,
+                    'total_documents' => $totalDocuments,
+                    'total' => $totalClients,
+                    'items' => $items,
                     'cached_at' => $sales['cached_at'] ?? null,
                     'cache_expires_at' => $sales['cache_expires_at'] ?? null,
                 ]

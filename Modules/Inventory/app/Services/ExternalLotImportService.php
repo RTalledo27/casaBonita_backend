@@ -34,6 +34,96 @@ class ExternalLotImportService
         $this->apiService = $apiService;
     }
 
+    public function importSalesWithProgress(\App\Models\AsyncImportProcess $importProcess, ?string $startDate = null, ?string $endDate = null, bool $forceRefresh = false): array
+    {
+        $this->resetStats();
+
+        try {
+            Log::info('[ExternalLotImport] Iniciando importación de ventas con progreso', [
+                'process_id' => $importProcess->id,
+                'start' => $startDate,
+                'end' => $endDate,
+            ]);
+
+            $salesResponse = $this->apiService->getSales($startDate, $endDate, $forceRefresh);
+            if (!isset($salesResponse['data']) || !is_array($salesResponse['data'])) {
+                throw new Exception('Formato de respuesta inesperado del API para ventas');
+            }
+
+            $clients = $salesResponse['data'];
+            $totalClients = count($clients);
+            $totalDocuments = 0;
+            foreach ($clients as $c) {
+                if (!empty($c['documents']) && is_array($c['documents'])) {
+                    $totalDocuments += count($c['documents']);
+                }
+            }
+
+            $this->stats['total'] = $totalDocuments;
+
+            $importProcess->update([
+                'total_rows' => $totalDocuments,
+                'processed_rows' => 0,
+                'successful_rows' => 0,
+                'failed_rows' => 0,
+                'progress_percentage' => 0,
+                'summary' => array_merge($importProcess->summary ?? [], [
+                    'total_clients' => $totalClients,
+                    'total_documents' => $totalDocuments,
+                ]),
+            ]);
+
+            $processed = 0;
+            $successful = 0;
+            $failed = 0;
+
+            foreach ($clients as $clientDoc) {
+                $client = $this->upsertClientFromSaleDoc($clientDoc);
+
+                if (!empty($clientDoc['documents']) && is_array($clientDoc['documents'])) {
+                    foreach ($clientDoc['documents'] as $document) {
+                        $ok = $this->processSaleDocumentItem($client, $document);
+
+                        $processed++;
+                        if ($ok) $successful++;
+                        else $failed++;
+
+                        $importProcess->updateProgress($processed, $successful, $failed);
+                    }
+                }
+            }
+
+            return [
+                'success' => $failed === 0,
+                'message' => 'Importación completada',
+                'data' => [
+                    'stats' => array_merge($this->stats, [
+                        'total_clients' => $totalClients,
+                        'total_documents' => $totalDocuments,
+                        'processed_documents' => $processed,
+                        'successful_documents' => $successful,
+                        'failed_documents' => $failed,
+                    ]),
+                    'errors' => $this->errors,
+                ],
+            ];
+
+        } catch (Exception $e) {
+            Log::error('[ExternalLotImport] Error importando ventas con progreso', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => $e->getMessage(),
+                'data' => [
+                    'errors' => [$e->getMessage()],
+                ],
+            ];
+        }
+    }
+
     /**
      * Importar todos los lotes disponibles desde el API externa
      * 
@@ -619,10 +709,6 @@ class ExternalLotImportService
                     'doc_number' => $docNumber,
                     'full_name' => $doc['fullName'] ?? 'N/D'
                 ]);
-
-                $this->stats['created']++;
-            } else {
-                $this->stats['updated']++;
             }
 
             // Procesar cada documento/venta del cliente
@@ -639,12 +725,63 @@ class ExternalLotImportService
         }
     }
 
+    protected function upsertClientFromSaleDoc(array $doc)
+    {
+        $docNumber = $doc['documentNumber'] ?? null;
+        $email = $doc['email'] ?? null;
+
+        $client = \Modules\CRM\Models\Client::where('doc_number', $docNumber)
+            ->orWhere('email', $email)
+            ->first();
+
+        if ($client) {
+            return $client;
+        }
+
+        $firstName = $doc['firstName'] ?? null;
+        $paternal = $doc['paternalSurname'] ?? null;
+        $maternal = $doc['maternalSurname'] ?? null;
+        $phone = $doc['phone'] ?? null;
+        $birthDate = isset($doc['birthDate']) ? substr($doc['birthDate'], 0, 10) : null;
+
+        $client = \Modules\CRM\Models\Client::create([
+            'first_name' => $firstName ?: ($doc['fullName'] ?? 'N/D'),
+            'last_name' => trim(($paternal ?? '') . ' ' . ($maternal ?? '')),
+            'doc_type' => 'DNI',
+            'doc_number' => $docNumber,
+            'email' => $email,
+            'primary_phone' => $phone,
+            'date' => $birthDate,
+            'type' => 'client',
+            'source' => 'logicware'
+        ]);
+
+        if (!empty($doc['address'])) {
+            \Modules\CRM\Models\Address::create([
+                'client_id' => $client->client_id,
+                'line1' => $doc['address'],
+                'line2' => $doc['district'] ?? null,
+                'city' => $doc['province'] ?? null,
+                'state' => $doc['department'] ?? null,
+                'country' => 'PER'
+            ]);
+        }
+
+        Log::info('[ExternalLotImport] Cliente creado desde Logicware', [
+            'client_id' => $client->client_id,
+            'doc_number' => $docNumber,
+            'full_name' => $doc['fullName'] ?? 'N/D'
+        ]);
+
+        return $client;
+    }
+
     /**
      * Procesar un item de documento (proforma/venta)
      * @param \Modules\CRM\Models\Client $client
      * @param array $document
      */
-    protected function processSaleDocumentItem($client, array $document): void
+    protected function processSaleDocumentItem($client, array $document): bool
     {
         try {
             // Buscar asesor por nombre usando score-based matching
@@ -927,10 +1064,12 @@ class ExternalLotImportService
                 }
             }
 
+            return true;
         } catch (Exception $e) {
             Log::error('[ExternalLotImport] Error procesando documento item', ['error' => $e->getMessage()]);
             $this->stats['errors']++;
             $this->errors[] = $e->getMessage();
+            return false;
         }
     }
 
