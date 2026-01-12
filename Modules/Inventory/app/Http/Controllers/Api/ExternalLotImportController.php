@@ -439,7 +439,7 @@ class ExternalLotImportController extends Controller
                     'processed_rows' => $importProcess->processed_rows,
                     'successful_rows' => $importProcess->successful_rows,
                     'failed_rows' => $importProcess->failed_rows,
-                    'progress_percentage' => $importProcess->progress_percentage,
+                    'progress_percentage' => $importProcess->progress_percentage !== null ? (float) $importProcess->progress_percentage : null,
                     'errors' => $importProcess->errors,
                     'warnings' => $importProcess->warnings,
                     'summary' => $importProcess->summary,
