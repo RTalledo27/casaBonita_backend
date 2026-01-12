@@ -2,6 +2,8 @@
 
 namespace Modules\ServiceDesk\Repositories;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Security\Models\User;
 use Modules\ServiceDesk\Models\ServiceRequest;
@@ -10,10 +12,21 @@ class ServiceDeskDashRepository
 {
     public function getDashboardData($params = [])
     {
+        $cacheKey = 'servicedesk:dashboard:v1:' . sha1(json_encode($params));
+        $fresh = !empty($params['fresh']);
 
+        if (!$fresh) {
+            return Cache::remember($cacheKey, 60, fn () => $this->computeDashboardData($params));
+        }
 
-        Log::info('DASH_PARAMS:', $params);
+        return $this->computeDashboardData($params);
+    }
 
+    private function computeDashboardData(array $params): array
+    {
+        if (config('app.debug')) {
+            Log::info('DASH_PARAMS:', $params);
+        }
 
         // 1. Definir rango actual
         if (!empty($params['start']) && !empty($params['end'])) {
@@ -73,13 +86,7 @@ class ServiceDeskDashRepository
             : 0;
 
         // Tiempo promedio de resolución (minutos a horas)
-        $avgTimeNow = ServiceRequest::where('status', 'cerrado')
-            ->whereBetween('opened_at', [$dateFrom, $dateTo])
-            ->whereNotNull('opened_at')
-            ->whereNotNull('updated_at')
-            ->get()
-            ->map(fn($t) => $t->opened_at->diffInMinutes($t->updated_at))
-            ->avg() ?? 0;
+        $avgTimeNow = $this->avgResolutionMinutes($dateFrom, $dateTo);
 
         // KPIs periodo anterior (solo si hay fechas)
         $openTicketsLast = $lastFrom && $lastTo ? ServiceRequest::where('status', 'abierto')
@@ -91,13 +98,7 @@ class ServiceDeskDashRepository
             ->whereNotNull('sla_due_at')->whereColumn('updated_at', '<=', 'sla_due_at')->count() : 0;
         $slaPercentLast = $closedTicketsLast > 0 ? round(($slaRateLast / $closedTicketsLast) * 100, 1) : 0;
 
-        $avgTimeLast = $lastFrom && $lastTo ? ServiceRequest::where('status', 'cerrado')
-            ->whereBetween('opened_at', [$lastFrom, $lastTo])
-            ->whereNotNull('opened_at')
-            ->whereNotNull('updated_at')
-            ->get()
-            ->map(fn($t) => $t->opened_at->diffInMinutes($t->updated_at))
-            ->avg() ?? 0 : 0;
+        $avgTimeLast = $lastFrom && $lastTo ? $this->avgResolutionMinutes($lastFrom, $lastTo) : 0;
 
         // Variaciones
         $variationOpen = $openTicketsLast > 0
@@ -200,8 +201,10 @@ class ServiceDeskDashRepository
             ->get();
 
 
-        Log::info('Status Counts:', $statusCounts);
-        Log::info('Priority Counts:', $priorityCounts);
+        if (config('app.debug')) {
+            Log::info('Status Counts:', $statusCounts);
+            Log::info('Priority Counts:', $priorityCounts);
+        }
 
 
         // Return final
@@ -220,5 +223,37 @@ class ServiceDeskDashRepository
             'statusChartData'    => $statusChartData,
             'priorityChartData'  => $priorityChartData,
         ];
+    }
+
+    private function avgResolutionMinutes($dateFrom, $dateTo): float
+    {
+        $driver = DB::connection()->getDriverName();
+
+        $base = ServiceRequest::query()
+            ->where('status', 'cerrado')
+            ->whereBetween('opened_at', [$dateFrom, $dateTo])
+            ->whereNotNull('opened_at')
+            ->whereNotNull('updated_at');
+
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $value = $base->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, opened_at, updated_at)) as avg_minutes')->value('avg_minutes');
+            return (float) ($value ?? 0);
+        }
+
+        if ($driver === 'pgsql') {
+            $value = $base->selectRaw('AVG(EXTRACT(EPOCH FROM (updated_at - opened_at)) / 60) as avg_minutes')->value('avg_minutes');
+            return (float) ($value ?? 0);
+        }
+
+        if ($driver === 'sqlite') {
+            $value = $base->selectRaw('AVG((julianday(updated_at) - julianday(opened_at)) * 24 * 60) as avg_minutes')->value('avg_minutes');
+            return (float) ($value ?? 0);
+        }
+
+        $tickets = $base->get();
+        if ($tickets->isEmpty()) {
+            return 0.0;
+        }
+        return (float) ($tickets->map(fn ($t) => $t->opened_at->diffInMinutes($t->updated_at))->avg() ?? 0);
     }
 }
