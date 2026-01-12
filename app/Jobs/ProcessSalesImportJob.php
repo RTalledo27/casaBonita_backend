@@ -37,6 +37,7 @@ class ProcessSalesImportJob implements ShouldQueue
             $this->importProcess->update([
                 'status' => 'processing',
                 'started_at' => now(),
+                'progress_percentage' => 5,
                 'summary' => [
                     'startDate' => $startDate,
                     'endDate' => $endDate,
@@ -62,12 +63,14 @@ class ProcessSalesImportJob implements ShouldQueue
                 $processed = $total;
                 $successful = (int) ($stats['created'] ?? 0) + (int) ($stats['updated'] ?? 0);
                 $failed = (int) ($stats['errors'] ?? 0);
+                $progress = $total > 0 ? ($processed / $total) * 100 : 90;
 
                 $this->importProcess->update([
                     'total_rows' => $total,
                     'processed_rows' => $processed,
                     'successful_rows' => $successful,
                     'failed_rows' => $failed,
+                    'progress_percentage' => $progress,
                 ]);
             }
 
@@ -101,4 +104,3 @@ class ProcessSalesImportJob implements ShouldQueue
         }
     }
 }
-
