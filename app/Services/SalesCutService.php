@@ -102,6 +102,9 @@ class SalesCutService
         // Obtener cuotas pagadas en el día
         $payments = PaymentSchedule::whereDate('paid_date', $date->toDateString())
             ->where('status', 'pagada')
+            ->whereHas('contract', function ($q) {
+                $q->where('status', 'vigente');
+            })
             ->with(['contract.client', 'contract.advisor'])
             ->get();
 

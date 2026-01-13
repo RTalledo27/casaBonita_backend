@@ -80,6 +80,7 @@ class SalesCutCalculatorService
             })
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
+            ->where('c.status', 'vigente')
             ->select(
                 'c.contract_id',
                 'c.total_price',
@@ -109,7 +110,9 @@ class SalesCutCalculatorService
     {
         $payments = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
+            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
+            ->where('c.status', 'vigente')
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
@@ -159,15 +162,21 @@ class SalesCutCalculatorService
      */
     private function calculateBalances(string $startDate, string $endDate): array
     {
-        $cashBalance = DB::table('payments')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->where('method', 'efectivo')
-            ->sum('amount') ?? 0;
+        $cashBalance = DB::table('payments as p')
+            ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
+            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->whereBetween('p.payment_date', [$startDate, $endDate])
+            ->where('c.status', 'vigente')
+            ->where('p.method', 'efectivo')
+            ->sum('p.amount') ?? 0;
 
-        $bankBalance = DB::table('payments')
-            ->whereBetween('payment_date', [$startDate, $endDate])
-            ->whereIn('method', ['transferencia', 'tarjeta', 'yape', 'plin'])
-            ->sum('amount') ?? 0;
+        $bankBalance = DB::table('payments as p')
+            ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
+            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->whereBetween('p.payment_date', [$startDate, $endDate])
+            ->where('c.status', 'vigente')
+            ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
+            ->sum('p.amount') ?? 0;
 
         return [
             'cash' => $cashBalance,

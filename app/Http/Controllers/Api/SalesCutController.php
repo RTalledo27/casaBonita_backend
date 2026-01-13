@@ -455,8 +455,8 @@ class SalesCutController extends Controller
 
             // Crear items del corte (contratos)
             $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
-                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
                 ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+                ->where('c.status', 'vigente')
                 ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
                 ->get();
 
@@ -481,7 +481,9 @@ class SalesCutController extends Controller
             // Crear items de pagos
             $payments = \Illuminate\Support\Facades\DB::table('payments as p')
                 ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
+                ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
                 ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+                ->where('c.status', 'vigente')
                 ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
                 ->get();
 
