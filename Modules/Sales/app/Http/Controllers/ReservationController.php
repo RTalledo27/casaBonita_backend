@@ -36,10 +36,23 @@ class ReservationController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
 
-        return ReservationResource::collection($this->reservations->paginate());
+        $perPage = (int) $request->query('per_page', 15);
+        $perPage = max(1, min($perPage, 100));
+
+        $filters = $request->only([
+            'search',
+            'status',
+            'lot_id',
+            'client_id',
+            'advisor_id',
+            'reservation_date_from',
+            'reservation_date_to',
+        ]);
+
+        return ReservationResource::collection($this->reservations->paginate($perPage, $filters));
     }
 
     /**

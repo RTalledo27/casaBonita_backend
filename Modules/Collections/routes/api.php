@@ -95,7 +95,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
         ->name('collections.delete-schedule');
         
     Route::post('/schedules/{schedule_id}/mark-paid', [CollectionsController::class, 'markScheduleAsPaid'])
-        ->middleware('permission:collections.schedules.edit')
+        ->middleware('permission:collections.view')
         ->name('collections.mark-schedule-paid');
         
     Route::post('/schedules/{schedule_id}/mark-overdue', [CollectionsController::class, 'markScheduleAsOverdue'])

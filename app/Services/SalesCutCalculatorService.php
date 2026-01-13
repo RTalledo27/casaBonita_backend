@@ -91,33 +91,26 @@ class SalesCutCalculatorService
                 'c.advisor_id',
                 'c.sign_date',
                 'c.source',
+                'l.status as lot_status',
                 DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
                 DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name'),
                 DB::raw("LOWER(TRIM(COALESCE(
                     JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.units[0].status')),
                     JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.units[0].state')),
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit_status')),
                     JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit.status')),
                     JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit.state')),
                     JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status')),
                     JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.state')),
+                    l.status,
                     ''
                 ))) as logicware_status")
             )
             ->get();
 
         $classified = $contracts->map(function ($c) {
-            $status = (string) ($c->logicware_status ?? '');
-            $saleStage = 'vendido';
-
-            if (($c->source ?? null) === 'logicware') {
-                if (in_array($status, self::LOGICWARE_SOLD_STATUSES, true)) {
-                    $saleStage = 'vendido';
-                } elseif (in_array($status, self::LOGICWARE_RESERVED_STATUSES, true) || $status === '') {
-                    $saleStage = 'reservado';
-                } else {
-                    $saleStage = 'reservado';
-                }
-            }
+            $lotStatus = strtolower(trim((string) ($c->lot_status ?? '')));
+            $saleStage = $lotStatus === 'vendido' ? 'vendido' : 'reservado';
 
             $c->sale_stage = $saleStage;
             return $c;
@@ -149,18 +142,13 @@ class SalesCutCalculatorService
         $payments = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('lots as l', function ($join) {
+                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+            })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('payment_schedules as ps2')
-                    ->whereColumn('ps2.contract_id', 'c.contract_id')
-                    ->where('ps2.status', 'pagado')
-                    ->where(function ($qq) {
-                        $qq->where('ps2.type', 'inicial')
-                            ->orWhere('ps2.installment_number', 1);
-                    });
-            })
+            ->where('l.status', 'vendido')
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
@@ -213,36 +201,26 @@ class SalesCutCalculatorService
         $cashBalance = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('lots as l', function ($join) {
+                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+            })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('payment_schedules as ps2')
-                    ->whereColumn('ps2.contract_id', 'c.contract_id')
-                    ->where('ps2.status', 'pagado')
-                    ->where(function ($qq) {
-                        $qq->where('ps2.type', 'inicial')
-                            ->orWhere('ps2.installment_number', 1);
-                    });
-            })
+            ->where('l.status', 'vendido')
             ->where('p.method', 'efectivo')
             ->sum('p.amount') ?? 0;
 
         $bankBalance = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('lots as l', function ($join) {
+                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+            })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('payment_schedules as ps2')
-                    ->whereColumn('ps2.contract_id', 'c.contract_id')
-                    ->where('ps2.status', 'pagado')
-                    ->where(function ($qq) {
-                        $qq->where('ps2.type', 'inicial')
-                            ->orWhere('ps2.installment_number', 1);
-                    });
-            })
+            ->where('l.status', 'vendido')
             ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
             ->sum('p.amount') ?? 0;
 

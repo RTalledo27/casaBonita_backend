@@ -455,20 +455,13 @@ class SalesCutController extends Controller
 
             // Crear items del corte (contratos)
             $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
+                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+                ->leftJoin('lots as l', function ($join) {
+                    $join->on('l.lot_id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+                })
                 ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
                 ->where('c.status', 'vigente')
-                ->where(function ($q) {
-                    $q->whereExists(function ($q2) {
-                        $q2->select(\Illuminate\Support\Facades\DB::raw(1))
-                            ->from('payment_schedules as ps2')
-                            ->whereColumn('ps2.contract_id', 'c.contract_id')
-                            ->where('ps2.status', 'pagado')
-                            ->where(function ($qq) {
-                                $qq->where('ps2.type', 'inicial')
-                                    ->orWhere('ps2.installment_number', 1);
-                            });
-                    });
-                })
+                ->where('l.status', 'vendido')
                 ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
                 ->get();
 
@@ -494,18 +487,13 @@ class SalesCutController extends Controller
             $payments = \Illuminate\Support\Facades\DB::table('payments as p')
                 ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
                 ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+                ->leftJoin('lots as l', function ($join) {
+                    $join->on('l.lot_id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+                })
                 ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
                 ->where('c.status', 'vigente')
-                ->whereExists(function ($q) {
-                    $q->select(\Illuminate\Support\Facades\DB::raw(1))
-                        ->from('payment_schedules as ps2')
-                        ->whereColumn('ps2.contract_id', 'c.contract_id')
-                        ->where('ps2.status', 'pagado')
-                        ->where(function ($qq) {
-                            $qq->where('ps2.type', 'inicial')
-                                ->orWhere('ps2.installment_number', 1);
-                        });
-                })
+                ->where('l.status', 'vendido')
                 ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
                 ->get();
 

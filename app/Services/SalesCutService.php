@@ -69,12 +69,12 @@ class SalesCutService
     {
         $sales = Contract::whereDate('sign_date', $date->toDateString())
             ->where('status', 'vigente')
-            ->whereHas('paymentSchedules', function ($q) {
-                $q->where('status', 'pagado')
-                    ->where(function ($qq) {
-                        $qq->where('type', 'inicial')
-                            ->orWhere('installment_number', 1);
-                    });
+            ->where(function ($q) {
+                $q->whereHas('lot', function ($qq) {
+                    $qq->where('status', 'vendido');
+                })->orWhereHas('reservation.lot', function ($qq) {
+                    $qq->where('status', 'vendido');
+                });
             })
             ->with(['advisor', 'client', 'lot'])
             ->get();
@@ -111,12 +111,12 @@ class SalesCutService
             ->where('status', 'pagado')
             ->whereHas('contract', function ($q) {
                 $q->where('status', 'vigente');
-                $q->whereHas('paymentSchedules', function ($qq) {
-                    $qq->where('status', 'pagado')
-                        ->where(function ($q2) {
-                            $q2->where('type', 'inicial')
-                                ->orWhere('installment_number', 1);
-                        });
+                $q->where(function ($qq) {
+                    $qq->whereHas('lot', function ($q2) {
+                        $q2->where('status', 'vendido');
+                    })->orWhereHas('reservation.lot', function ($q2) {
+                        $q2->where('status', 'vendido');
+                    });
                 });
             })
             ->with(['contract.client', 'contract.advisor'])

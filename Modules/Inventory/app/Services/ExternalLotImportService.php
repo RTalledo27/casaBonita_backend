@@ -20,6 +20,8 @@ use Exception;
 class ExternalLotImportService
 {
     protected LogicwareApiService $apiService;
+    protected ?array $fullStockByUnitNumber = null;
+    protected bool $currentForceRefresh = false;
     protected array $stats = [
         'total' => 0,
         'created' => 0,
@@ -34,9 +36,86 @@ class ExternalLotImportService
         $this->apiService = $apiService;
     }
 
+    protected function normalizeUnitNumber(?string $unitNumber): ?string
+    {
+        if (!$unitNumber) {
+            return null;
+        }
+
+        $raw = strtoupper(trim($unitNumber));
+        if ($raw === '') {
+            return null;
+        }
+
+        $raw = str_replace([' ', '_'], ['', '-'], $raw);
+        $raw = preg_replace('/-+/', '-', $raw);
+
+        $parts = explode('-', $raw, 2);
+        if (count($parts) !== 2) {
+            return $raw;
+        }
+
+        $block = trim($parts[0]);
+        $lotPart = trim($parts[1]);
+        if ($block === '' || $lotPart === '') {
+            return $raw;
+        }
+
+        if (ctype_digit($lotPart)) {
+            $lotPart = (string) ((int) $lotPart);
+        }
+
+        return $block . '-' . $lotPart;
+    }
+
+    protected function ensureFullStockLoaded(bool $forceRefresh = false): void
+    {
+        if ($this->fullStockByUnitNumber !== null) {
+            return;
+        }
+
+        try {
+            $res = $this->apiService->getProperties([], $forceRefresh);
+            $units = $res['data']['data'] ?? $res['data'] ?? [];
+
+            $index = [];
+            if (is_array($units)) {
+                foreach ($units as $u) {
+                    $unitNumber = $this->normalizeUnitNumber((string) ($u['unitNumber'] ?? ''));
+                    if (!$unitNumber) {
+                        continue;
+                    }
+
+                    $status = strtolower(trim((string) ($u['status'] ?? '')));
+                    $index[$unitNumber] = $status;
+                }
+            }
+
+            $this->fullStockByUnitNumber = $index;
+        } catch (\Throwable $e) {
+            Log::warning('[ExternalLotImport] No se pudo cargar full stock (se continuará sin estado)', [
+                'error' => $e->getMessage(),
+            ]);
+            $this->fullStockByUnitNumber = [];
+        }
+    }
+
+    protected function getUnitStatusFromFullStock(?string $unitNumber, bool $forceRefresh = false): ?string
+    {
+        $this->ensureFullStockLoaded($forceRefresh);
+        $key = $this->normalizeUnitNumber($unitNumber);
+        if (!$key) {
+            return null;
+        }
+
+        return $this->fullStockByUnitNumber[$key] ?? null;
+    }
+
     public function importSalesWithProgress(\App\Models\AsyncImportProcess $importProcess, ?string $startDate = null, ?string $endDate = null, bool $forceRefresh = false): array
     {
         $this->resetStats();
+        $this->fullStockByUnitNumber = null;
+        $this->currentForceRefresh = $forceRefresh;
 
         try {
             Log::info('[ExternalLotImport] Iniciando importación de ventas con progreso', [
@@ -806,6 +885,7 @@ class ExternalLotImportService
             $unit = $document['units'][0] ?? null;
             $unitNumber = $unit['unitNumber'] ?? null;
             $lotId = null;
+            $fullStockStatus = $this->getUnitStatusFromFullStock($unitNumber, $this->currentForceRefresh);
 
             if ($unitNumber) {
                 $parsed = $this->parsePropertyCode($unitNumber);
@@ -817,6 +897,11 @@ class ExternalLotImportService
 
                     if ($lot) {
                         $lotId = $lot->lot_id;
+                        if ($fullStockStatus === 'vendido' || $fullStockStatus === 'reservado' || $fullStockStatus === 'disponible') {
+                            if ($lot->status !== $fullStockStatus) {
+                                $lot->update(['status' => $fullStockStatus]);
+                            }
+                        }
                     } else {
                         // Crear el lote si no existe - usando la misma lógica que los contratos
                         $unitPrice = $this->parseNumericValue($unit['unitPrice'] ?? $unit['basePrice'] ?? 0);
@@ -830,7 +915,7 @@ class ExternalLotImportService
                             'area_m2' => $this->parseNumericValue($unit['unitArea'] ?? 0),
                             'total_price' => $totalPrice, // 🔥 CORREGIDO: unitPrice - descuento
                             'currency' => strtoupper($unit['currency'] ?? 'PEN'),
-                            'status' => 'vendido', // Ya está vendido
+                            'status' => in_array($fullStockStatus, ['vendido', 'reservado', 'disponible'], true) ? $fullStockStatus : 'disponible',
                             'street_type_id' => $this->getDefaultStreetTypeId()
                         ];
                         $lot = \Modules\Inventory\Models\Lot::create($lotData);
@@ -849,6 +934,9 @@ class ExternalLotImportService
             $unit = $document['units'][0] ?? [];
             $financing = $document['financing'] ?? [];
             $unitStatus = strtolower(trim((string) ($unit['status'] ?? $unit['state'] ?? '')));
+            if ($unitStatus === '' && is_string($fullStockStatus) && $fullStockStatus !== '') {
+                $unitStatus = strtolower(trim($fullStockStatus));
+            }
             
             // Extraer datos financieros completos
             $basePrice = $this->parseNumericValue($unit['basePrice'] ?? 0); // 🔥 Precio Base
@@ -985,14 +1073,19 @@ class ExternalLotImportService
                 'currency' => $currency,
                 'status' => $isSale ? 'vigente' : 'pendiente_aprobacion',
                 'source' => 'logicware', // 🔥 Identificar fuente
-                'logicware_data' => json_encode($document) // 🔥 Guardar datos completos para re-linkeo futuro
+                'logicware_data' => json_encode(array_replace_recursive($document, [
+                    'unit_status' => $unitStatus ?: null,
+                    'units' => !empty($document['units']) && is_array($document['units']) ? array_replace_recursive($document['units'], [
+                        0 => ['status' => $unitStatus ?: null]
+                    ]) : $document['units'] ?? [],
+                ])) // 🔥 Guardar datos completos para re-linkeo futuro
             ];
 
             if ($existingContract) {
                 // 🔄 ACTUALIZAR CONTRATO EXISTENTE
                 // ⚠️ NO actualizamos reservation_id en contratos existentes para no violar constraint
                 unset($contractData['reservation_id']); // Remover reservation_id del update
-                if ($existingContract->status === 'vigente' && !$isSale) {
+                if (($existingContract->source ?? null) !== 'logicware' && $existingContract->status === 'vigente' && !$isSale) {
                     unset($contractData['status']);
                 }
                 $existingContract->update($contractData);
