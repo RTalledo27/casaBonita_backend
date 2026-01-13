@@ -261,6 +261,53 @@ class ExternalLotImportService
         ];
     }
 
+    public function importLotsFromFullStock(bool $forceRefresh = false, array $options = []): array
+    {
+        $this->resetStats();
+
+        try {
+            Log::info('[ExternalLotImport] Iniciando importación de lotes desde FULL STOCK', [
+                'force_refresh' => $forceRefresh
+            ]);
+
+            $properties = $this->apiService->getProperties([], $forceRefresh);
+            $units = $properties['data']['data'] ?? $properties['data'] ?? [];
+
+            if (!is_array($units)) {
+                throw new Exception('Formato de respuesta inesperado del API (full stock)');
+            }
+
+            $this->stats['total'] = count($units);
+
+            DB::beginTransaction();
+            try {
+                foreach ($units as $property) {
+                    if (is_array($property)) {
+                        $this->processProperty($property, $options);
+                    }
+                }
+                DB::commit();
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+
+        } catch (Exception $e) {
+            Log::error('[ExternalLotImport] Error en importación FULL STOCK', [
+                'error' => $e->getMessage()
+            ]);
+
+            $this->stats['errors']++;
+            $this->errors[] = $e->getMessage();
+        }
+
+        return [
+            'success' => $this->stats['errors'] === 0,
+            'stats' => $this->stats,
+            'errors' => $this->errors
+        ];
+    }
+
     /**
      * Procesar una propiedad individual del API
      * 
@@ -271,7 +318,7 @@ class ExternalLotImportService
     {
         try {
             // Extraer y validar el código (Ej: "E2-02")
-            $code = $property['code'] ?? null;
+            $code = $property['code'] ?? $property['unitNumber'] ?? $property['unit_number'] ?? null;
             
             if (!$code) {
                 Log::warning('[ExternalLotImport] Propiedad sin código', [
@@ -405,20 +452,14 @@ class ExternalLotImportService
      */
     protected function transformPropertyToLot(array $property, array $parsed, Manzana $manzana): array
     {
-        // Mapeo de estados del API externa a nuestros estados (solo 3 estados según tu BD)
-        $statusMap = [
-            'Disponible' => 'disponible',
-            'Bloqueado' => 'reservado',
-            'Vendido' => 'vendido',
-            'Reservado' => 'reservado',
-            'Available' => 'disponible',
-            'Reserved' => 'reservado',
-            'Sold' => 'vendido',
-            'Blocked' => 'reservado'
-        ];
-        
-        $externalStatus = $property['status'] ?? 'Disponible';
-        $status = $statusMap[$externalStatus] ?? 'disponible';
+        $externalStatusRaw = (string) ($property['status'] ?? $property['state'] ?? 'disponible');
+        $externalStatus = strtolower(trim($externalStatusRaw));
+
+        $status = match (true) {
+            in_array($externalStatus, ['vendido', 'sold', 'sale'], true) => 'vendido',
+            in_array($externalStatus, ['reservado', 'reserved', 'bloqueado', 'blocked'], true) => 'reservado',
+            default => 'disponible',
+        };
 
         // Extraer precios según estructura de Logicware
         $basePrice = $this->parseNumericValue($property['basePrice'] ?? $property['price'] ?? 0);
