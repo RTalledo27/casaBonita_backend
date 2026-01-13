@@ -80,9 +80,12 @@ class ExternalLotImportController extends Controller
     public function syncAll(Request $request): JsonResponse
     {
         try {
+            $forceRefresh = $request->boolean('force_refresh', false);
             Log::info('[ExternalLotImportController] Iniciando sincronización completa');
 
-            $result = $this->importService->importLots();
+            $result = $this->importService->importLots([
+                'force_refresh' => $forceRefresh,
+            ]);
 
             $statusCode = $result['success'] ? 200 : 500;
 

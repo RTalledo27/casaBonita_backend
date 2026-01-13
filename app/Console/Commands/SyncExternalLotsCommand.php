@@ -24,6 +24,7 @@ class SyncExternalLotsCommand extends Command
     protected $signature = 'lots:sync-external
                             {--code= : Código específico del lote a sincronizar (Ej: E2-02)}
                             {--test : Solo probar la conexión con el API sin importar datos}
+                            {--force_refresh : Forzar consulta real al API (consume cuota diaria)}
                             {--force : Forzar importación sin confirmación}';
 
     /**
@@ -153,22 +154,17 @@ class SyncExternalLotsCommand extends Command
      */
     protected function syncAllLots(): int
     {
-        $this->info('🔄 Sincronizando TODOS los lotes desde API externa');
+        $this->info('🔄 Sincronizando TODOS los lotes desde API externa (FULL STOCK)');
         $this->newLine();
 
         try {
-            // Obtener cantidad aproximada
             $this->info('  ⏳ Obteniendo información del API...');
-            $preview = $this->apiService->getAvailableProperties();
-            $total = isset($preview['data']) ? count($preview['data']) : 0;
-            
-            $this->info("  📊 Total de propiedades disponibles: {$total}");
-            $this->newLine();
+            $preview = $this->apiService->getProperties([], false);
+            $units = $preview['data']['data'] ?? $preview['data'] ?? [];
+            $total = is_array($units) ? count($units) : 0;
 
-            if ($total === 0) {
-                $this->warn('⚠️  No hay propiedades disponibles para importar');
-                return Command::SUCCESS;
-            }
+            $this->info("  📊 Total de propiedades encontradas: {$total}");
+            $this->newLine();
 
             if (!$this->option('force')) {
                 if (!$this->confirm("¿Desea importar {$total} lotes?", true)) {
@@ -187,6 +183,7 @@ class SyncExternalLotsCommand extends Command
             $progressBar->start();
 
             $result = $this->importService->importLots([
+                'force_refresh' => (bool)$this->option('force_refresh'),
                 'callback' => function() use ($progressBar) {
                     $progressBar->advance();
                 }

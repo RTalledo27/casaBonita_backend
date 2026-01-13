@@ -196,7 +196,8 @@ class LogicwareApiService
             $this->validateApiKey();
 
             // Clave de caché única por subdomain
-            $cacheKey = "logicware_stock_{$this->subdomain}";
+            $filtersKey = md5(json_encode($filters));
+            $cacheKey = "logicware_stock_{$this->subdomain}_{$filtersKey}";
             $cacheDuration = now()->addHours(6); // 6 horas de caché
 
             // Si NO se fuerza refresh, intentar obtener del caché

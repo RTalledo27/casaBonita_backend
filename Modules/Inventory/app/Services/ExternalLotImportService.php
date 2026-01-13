@@ -212,18 +212,20 @@ class ExternalLotImportService
     public function importLots(array $options = []): array
     {
         $this->resetStats();
+        $forceRefresh = (bool)($options['force_refresh'] ?? false);
         
         try {
             Log::info('[ExternalLotImport] Iniciando importación de lotes externos');
 
-            // Obtener propiedades del API
-            $properties = $this->apiService->getAvailableProperties();
+            // Obtener propiedades del API (FULL STOCK con caché)
+            $properties = $this->apiService->getProperties([], $forceRefresh);
+            $units = $properties['data']['data'] ?? $properties['data'] ?? [];
             
-            if (!isset($properties['data']) || !is_array($properties['data'])) {
+            if (!is_array($units)) {
                 throw new Exception('Formato de respuesta inesperado del API');
             }
 
-            $this->stats['total'] = count($properties['data']);
+            $this->stats['total'] = count($units);
             
             Log::info('[ExternalLotImport] Propiedades obtenidas', [
                 'total' => $this->stats['total']
@@ -232,7 +234,7 @@ class ExternalLotImportService
             DB::beginTransaction();
             
             try {
-                foreach ($properties['data'] as $property) {
+                foreach ($units as $property) {
                     $this->processProperty($property, $options);
                 }
                 
@@ -510,6 +512,17 @@ class ExternalLotImportService
                   ->first();
 
         if ($lot) {
+            if (isset($lotData['status'])) {
+                $incoming = strtolower(trim((string) $lotData['status']));
+                $current = strtolower(trim((string) $lot->status));
+
+                if ($current === 'vendido') {
+                    $lotData['status'] = 'vendido';
+                } elseif ($current === 'reservado' && $incoming === 'disponible') {
+                    $lotData['status'] = 'reservado';
+                }
+            }
+
             // Actualizar lote existente
             $lot->update($lotData);
             $this->stats['updated']++;
