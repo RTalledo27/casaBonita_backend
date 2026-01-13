@@ -70,13 +70,11 @@ class SalesCutCalculatorService
     {
         $contracts = DB::table('contracts as c')
             ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-            ->leftJoin('clients as cl', function($join) {
-                $join->on('c.client_id', '=', 'cl.client_id')
-                     ->orOn('r.client_id', '=', 'cl.client_id');
+            ->leftJoin('clients as cl', function ($join) {
+                $join->on('cl.client_id', '=', DB::raw('COALESCE(c.client_id, r.client_id)'));
             })
-            ->leftJoin('lots as l', function($join) {
-                $join->on('c.lot_id', '=', 'l.lot_id')
-                     ->orOn('r.lot_id', '=', 'l.lot_id');
+            ->leftJoin('lots as l', function ($join) {
+                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
             })
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
