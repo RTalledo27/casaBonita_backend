@@ -457,6 +457,7 @@ class SalesCutController extends Controller
             $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
                 ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
                 ->where('c.status', 'vigente')
+                ->whereNull('c.reservation_id')
                 ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
                 ->get();
 
@@ -484,6 +485,7 @@ class SalesCutController extends Controller
                 ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
                 ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
                 ->where('c.status', 'vigente')
+                ->whereNull('c.reservation_id')
                 ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
                 ->get();
 

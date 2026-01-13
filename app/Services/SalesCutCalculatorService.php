@@ -79,6 +79,7 @@ class SalesCutCalculatorService
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
+            ->whereNull('c.reservation_id')
             ->select(
                 'c.contract_id',
                 'c.total_price',
@@ -111,6 +112,7 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
+            ->whereNull('c.reservation_id')
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
@@ -165,6 +167,7 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
+            ->whereNull('c.reservation_id')
             ->where('p.method', 'efectivo')
             ->sum('p.amount') ?? 0;
 
@@ -173,6 +176,7 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
+            ->whereNull('c.reservation_id')
             ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
             ->sum('p.amount') ?? 0;
 

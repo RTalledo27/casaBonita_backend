@@ -69,6 +69,7 @@ class SalesCutService
     {
         $sales = Contract::whereDate('sign_date', $date->toDateString())
             ->where('status', 'vigente')
+            ->whereNull('reservation_id')
             ->with(['advisor', 'client', 'lot'])
             ->get();
 
