@@ -7,6 +7,9 @@ use Carbon\Carbon;
 
 class SalesCutCalculatorService
 {
+    private const LOGICWARE_SOLD_STATUSES = ['vendido', 'venta', 'sale', 'sold'];
+    private const LOGICWARE_RESERVED_STATUSES = ['reservado', 'reserva', 'separacion', 'separación', 'proforma', 'bloqueado', 'blocked'];
+
     /**
      * Calcular corte para un período específico
      * 
@@ -53,6 +56,8 @@ class SalesCutCalculatorService
             'total_sales_count' => $salesData['count'],
             'total_revenue' => $salesData['revenue'],
             'total_down_payments' => $salesData['down_payments'],
+            'reserved_sales_count' => $salesData['reserved_count'] ?? 0,
+            'reserved_revenue' => $salesData['reserved_revenue'] ?? 0,
             'total_payments_count' => $paymentsData['count'],
             'total_payments_received' => $paymentsData['amount'],
             'paid_installments_count' => $paymentsData['installments'],
@@ -79,35 +84,60 @@ class SalesCutCalculatorService
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('payment_schedules as ps')
-                    ->whereColumn('ps.contract_id', 'c.contract_id')
-                    ->where('ps.status', 'pagado')
-                    ->where(function ($qq) {
-                        $qq->where('ps.type', 'inicial')
-                            ->orWhere('ps.installment_number', 1);
-                    });
-            })
             ->select(
                 'c.contract_id',
                 'c.total_price',
                 'c.down_payment',
                 'c.advisor_id',
                 'c.sign_date',
+                'c.source',
                 DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
-                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name')
+                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name'),
+                DB::raw("LOWER(TRIM(COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.units[0].status')),
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.units[0].state')),
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit.status')),
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit.state')),
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status')),
+                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.state')),
+                    ''
+                ))) as logicware_status")
             )
             ->get();
 
-        $revenue = $contracts->sum('total_price') ?? 0;
-        $downPayments = $contracts->sum('down_payment') ?? 0;
+        $classified = $contracts->map(function ($c) {
+            $status = (string) ($c->logicware_status ?? '');
+            $saleStage = 'vendido';
+
+            if (($c->source ?? null) === 'logicware') {
+                if (in_array($status, self::LOGICWARE_SOLD_STATUSES, true)) {
+                    $saleStage = 'vendido';
+                } elseif (in_array($status, self::LOGICWARE_RESERVED_STATUSES, true) || $status === '') {
+                    $saleStage = 'reservado';
+                } else {
+                    $saleStage = 'reservado';
+                }
+            }
+
+            $c->sale_stage = $saleStage;
+            return $c;
+        });
+
+        $soldContracts = $classified->where('sale_stage', 'vendido')->values();
+        $reservedContracts = $classified->where('sale_stage', 'reservado')->values();
+
+        $revenue = $soldContracts->sum('total_price') ?? 0;
+        $downPayments = $soldContracts->sum('down_payment') ?? 0;
+        $reservedRevenue = $reservedContracts->sum('total_price') ?? 0;
 
         return [
-            'count' => $contracts->count(),
+            'count' => $soldContracts->count(),
             'revenue' => $revenue,
             'down_payments' => $downPayments,
-            'contracts' => $contracts,
+            'reserved_count' => $reservedContracts->count(),
+            'reserved_revenue' => $reservedRevenue,
+            'contracts' => $soldContracts,
+            'reserved_contracts' => $reservedContracts,
         ];
     }
 

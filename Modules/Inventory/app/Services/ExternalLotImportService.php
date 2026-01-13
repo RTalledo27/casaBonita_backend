@@ -848,6 +848,7 @@ class ExternalLotImportService
             // Construir datos del contrato
             $unit = $document['units'][0] ?? [];
             $financing = $document['financing'] ?? [];
+            $unitStatus = strtolower(trim((string) ($unit['status'] ?? $unit['state'] ?? '')));
             
             // Extraer datos financieros completos
             $basePrice = $this->parseNumericValue($unit['basePrice'] ?? 0); // 🔥 Precio Base
@@ -863,8 +864,10 @@ class ExternalLotImportService
             $funding = $this->parseNumericValue($financing['funding'] ?? 0);
             
             $currency = strtoupper($financing['currency'] ?? $unit['currency'] ?? 'PEN');
-            $docStatus = strtolower(trim((string) ($document['status'] ?? '')));
-            $isSale = !empty($document['saleStartDate']) || in_array($docStatus, ['venta', 'vendido', 'sold', 'sale', 'firmado', 'contrato'], true);
+            $docStatus = strtolower(trim((string) ($document['status'] ?? $document['state'] ?? '')));
+            $isSale = in_array($unitStatus, ['vendido', 'venta', 'sale', 'sold'], true)
+                || !empty($document['saleStartDate'])
+                || in_array($docStatus, ['venta', 'vendido', 'sold', 'sale', 'firmado', 'contrato'], true);
             $saleDate = $document['saleStartDate']
                 ?? $document['saleDate']
                 ?? $document['sale_date']
