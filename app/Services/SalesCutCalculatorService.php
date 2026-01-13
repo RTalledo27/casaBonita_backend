@@ -79,7 +79,16 @@ class SalesCutCalculatorService
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereNull('c.reservation_id')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('payment_schedules as ps')
+                    ->whereColumn('ps.contract_id', 'c.contract_id')
+                    ->where('ps.status', 'pagado')
+                    ->where(function ($qq) {
+                        $qq->where('ps.type', 'inicial')
+                            ->orWhere('ps.installment_number', 1);
+                    });
+            })
             ->select(
                 'c.contract_id',
                 'c.total_price',
@@ -112,7 +121,16 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereNull('c.reservation_id')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('payment_schedules as ps2')
+                    ->whereColumn('ps2.contract_id', 'c.contract_id')
+                    ->where('ps2.status', 'pagado')
+                    ->where(function ($qq) {
+                        $qq->where('ps2.type', 'inicial')
+                            ->orWhere('ps2.installment_number', 1);
+                    });
+            })
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
@@ -167,7 +185,16 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereNull('c.reservation_id')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('payment_schedules as ps2')
+                    ->whereColumn('ps2.contract_id', 'c.contract_id')
+                    ->where('ps2.status', 'pagado')
+                    ->where(function ($qq) {
+                        $qq->where('ps2.type', 'inicial')
+                            ->orWhere('ps2.installment_number', 1);
+                    });
+            })
             ->where('p.method', 'efectivo')
             ->sum('p.amount') ?? 0;
 
@@ -176,7 +203,16 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->whereNull('c.reservation_id')
+            ->whereExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('payment_schedules as ps2')
+                    ->whereColumn('ps2.contract_id', 'c.contract_id')
+                    ->where('ps2.status', 'pagado')
+                    ->where(function ($qq) {
+                        $qq->where('ps2.type', 'inicial')
+                            ->orWhere('ps2.installment_number', 1);
+                    });
+            })
             ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
             ->sum('p.amount') ?? 0;
 

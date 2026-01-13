@@ -863,7 +863,14 @@ class ExternalLotImportService
             $funding = $this->parseNumericValue($financing['funding'] ?? 0);
             
             $currency = strtoupper($financing['currency'] ?? $unit['currency'] ?? 'PEN');
-            $saleDate = $document['saleStartDate'] ?? $document['proformaStartDate'] ?? now()->toDateString();
+            $docStatus = strtolower(trim((string) ($document['status'] ?? '')));
+            $isSale = !empty($document['saleStartDate']) || in_array($docStatus, ['venta', 'vendido', 'sold', 'sale', 'firmado', 'contrato'], true);
+            $saleDate = $document['saleStartDate']
+                ?? $document['saleDate']
+                ?? $document['sale_date']
+                ?? $document['proformaStartDate']
+                ?? $document['separationStartDate']
+                ?? now()->toDateString();
             $termMonths = (int)($financing['financingInstallments'] ?? 12);
             $monthlyPayment = $financingAmount > 0 && $termMonths > 0 ? ($financingAmount / $termMonths) : 0;
 
@@ -973,7 +980,7 @@ class ExternalLotImportService
                 'term_months' => $termMonths,
                 'monthly_payment' => $this->parseNumericValue($monthlyPayment) ?? 0,
                 'currency' => $currency,
-                'status' => 'vigente',
+                'status' => $isSale ? 'vigente' : 'pendiente_aprobacion',
                 'source' => 'logicware', // 🔥 Identificar fuente
                 'logicware_data' => json_encode($document) // 🔥 Guardar datos completos para re-linkeo futuro
             ];
@@ -982,6 +989,9 @@ class ExternalLotImportService
                 // 🔄 ACTUALIZAR CONTRATO EXISTENTE
                 // ⚠️ NO actualizamos reservation_id en contratos existentes para no violar constraint
                 unset($contractData['reservation_id']); // Remover reservation_id del update
+                if ($existingContract->status === 'vigente' && !$isSale) {
+                    unset($contractData['status']);
+                }
                 $existingContract->update($contractData);
                 $contract = $existingContract;
                 $this->stats['updated']++;

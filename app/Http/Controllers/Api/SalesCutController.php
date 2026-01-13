@@ -457,7 +457,18 @@ class SalesCutController extends Controller
             $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
                 ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
                 ->where('c.status', 'vigente')
-                ->whereNull('c.reservation_id')
+                ->where(function ($q) {
+                    $q->whereExists(function ($q2) {
+                        $q2->select(\Illuminate\Support\Facades\DB::raw(1))
+                            ->from('payment_schedules as ps2')
+                            ->whereColumn('ps2.contract_id', 'c.contract_id')
+                            ->where('ps2.status', 'pagado')
+                            ->where(function ($qq) {
+                                $qq->where('ps2.type', 'inicial')
+                                    ->orWhere('ps2.installment_number', 1);
+                            });
+                    });
+                })
                 ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
                 ->get();
 
@@ -485,7 +496,16 @@ class SalesCutController extends Controller
                 ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
                 ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
                 ->where('c.status', 'vigente')
-                ->whereNull('c.reservation_id')
+                ->whereExists(function ($q) {
+                    $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                        ->from('payment_schedules as ps2')
+                        ->whereColumn('ps2.contract_id', 'c.contract_id')
+                        ->where('ps2.status', 'pagado')
+                        ->where(function ($qq) {
+                            $qq->where('ps2.type', 'inicial')
+                                ->orWhere('ps2.installment_number', 1);
+                        });
+                })
                 ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
                 ->get();
 
