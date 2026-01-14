@@ -143,19 +143,28 @@ class SalesCutCalculatorService
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('clients as cl', function ($join) {
+                $join->on('cl.client_id', '=', DB::raw('COALESCE(c.client_id, r.client_id)'));
+            })
             ->leftJoin('lots as l', function ($join) {
                 $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
             })
+            ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
             ->where('l.status', 'vendido')
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
+                'c.contract_number',
                 'p.amount',
                 'p.payment_date',
                 'p.method as payment_method',
-                'ps.installment_number'
+                'ps.installment_number',
+                'ps.type as installment_type',
+                'ps.due_date',
+                DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
+                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name')
             )
             ->get();
 
@@ -167,6 +176,61 @@ class SalesCutCalculatorService
             'amount' => $amount,
             'installments' => $installments,
             'payments' => $payments,
+        ];
+    }
+
+    private function calculateCollectionsAlerts(string $endDate): array
+    {
+        $end = Carbon::parse($endDate)->endOfDay();
+        $soonEnd = Carbon::parse($endDate)->addDays(7)->endOfDay();
+
+        $overdueBase = DB::table('payment_schedules as ps')
+            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('lots as l', function ($join) {
+                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+            })
+            ->where('c.status', 'vigente')
+            ->where('l.status', 'vendido')
+            ->where('ps.status', '!=', 'pagado')
+            ->whereNotNull('ps.due_date')
+            ->whereDate('ps.due_date', '<=', $end->toDateString())
+            ->where(function ($q) {
+                $q->whereNull('ps.type')->orWhere('ps.type', '!=', 'bono_bpp');
+            });
+
+        $overdueCount = (clone $overdueBase)->count();
+        $overdueAmount = (clone $overdueBase)->sum('ps.amount') ?? 0;
+
+        $dueSoonBase = DB::table('payment_schedules as ps')
+            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
+            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
+            ->leftJoin('lots as l', function ($join) {
+                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
+            })
+            ->where('c.status', 'vigente')
+            ->where('l.status', 'vendido')
+            ->where('ps.status', '!=', 'pagado')
+            ->whereNotNull('ps.due_date')
+            ->whereDate('ps.due_date', '>', $end->toDateString())
+            ->whereDate('ps.due_date', '<=', $soonEnd->toDateString())
+            ->where(function ($q) {
+                $q->whereNull('ps.type')->orWhere('ps.type', '!=', 'bono_bpp');
+            });
+
+        $dueSoonCount = (clone $dueSoonBase)->count();
+        $dueSoonAmount = (clone $dueSoonBase)->sum('ps.amount') ?? 0;
+
+        return [
+            'overdue' => [
+                'count' => (int)$overdueCount,
+                'amount' => (float)$overdueAmount,
+            ],
+            'due_soon' => [
+                'count' => (int)$dueSoonCount,
+                'amount' => (float)$dueSoonAmount,
+                'days' => 7,
+            ],
         ];
     }
 
@@ -290,10 +354,32 @@ class SalesCutCalculatorService
             ->values()
             ->all();
 
+        // Top 10 pagos
+        $topPayments = $payments->sortByDesc('amount')
+            ->take(10)
+            ->map(function($payment) {
+                return [
+                    'payment_id' => $payment->payment_id,
+                    'contract_id' => $payment->contract_id,
+                    'contract_number' => $payment->contract_number ?? null,
+                    'client_name' => $payment->client_name ?? null,
+                    'lot_name' => $payment->lot_name ?? null,
+                    'amount' => $payment->amount,
+                    'date' => $payment->payment_date,
+                    'method' => $payment->payment_method ?? null,
+                    'installment_number' => $payment->installment_number ?? null,
+                    'installment_type' => $payment->installment_type ?? null,
+                ];
+            })->values()->all();
+
+        $alerts = $this->calculateCollectionsAlerts($endDate);
+
         return [
             'top_sales' => $topSales,
             'sales_by_advisor' => $salesByAdvisor,
             'payments_by_method' => $paymentsByMethod,
+            'top_payments' => $topPayments,
+            'collections_alerts' => $alerts,
         ];
     }
 
