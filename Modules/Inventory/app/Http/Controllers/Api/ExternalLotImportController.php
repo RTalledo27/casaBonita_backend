@@ -81,10 +81,12 @@ class ExternalLotImportController extends Controller
     {
         try {
             $forceRefresh = $request->boolean('force_refresh', false);
+            $debugRawResponse = $request->boolean('debug_raw_response', false);
             Log::info('[ExternalLotImportController] Iniciando sincronización completa');
 
             $result = $this->importService->importLots([
                 'force_refresh' => $forceRefresh,
+                'debug_raw_response' => $debugRawResponse,
             ]);
 
             $statusCode = $result['success'] ? 200 : 500;
@@ -121,7 +123,9 @@ class ExternalLotImportController extends Controller
     public function syncByCode(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'code' => 'required|string|max:50'
+            'code' => 'required|string|max:50',
+            'force_refresh' => 'sometimes|boolean',
+            'debug_raw_response' => 'sometimes|boolean',
         ]);
 
         if ($validator->fails()) {
@@ -134,12 +138,17 @@ class ExternalLotImportController extends Controller
 
         try {
             $code = $request->input('code');
+            $forceRefresh = $request->boolean('force_refresh', false);
+            $debugRawResponse = $request->boolean('debug_raw_response', false);
             
             Log::info('[ExternalLotImportController] Sincronizando lote por código', [
                 'code' => $code
             ]);
 
-            $result = $this->importService->syncLotByCode($code);
+            $result = $this->importService->syncLotByCode($code, [
+                'force_refresh' => $forceRefresh,
+                'debug_raw_response' => $debugRawResponse,
+            ]);
 
             $statusCode = $result['success'] ? 200 : 500;
 
@@ -196,12 +205,14 @@ class ExternalLotImportController extends Controller
         try {
             $limit = $request->input('limit', 10);
             $forceRefresh = $request->boolean('force_refresh', false);
+            $debugRawResponse = $request->boolean('debug_raw_response', false);
             
             Log::info('[ExternalLotImportController] Obteniendo vista previa', [
-                'force_refresh' => $forceRefresh
+                'force_refresh' => $forceRefresh,
+                'debug_raw_response' => $debugRawResponse,
             ]);
 
-            $properties = $this->apiService->getAvailableProperties($forceRefresh);
+            $properties = $this->apiService->getAvailableProperties($forceRefresh, $debugRawResponse);
             
             $preview = [];
             if (isset($properties['data'])) {

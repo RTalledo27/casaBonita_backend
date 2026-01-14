@@ -34,10 +34,15 @@ class ContractController extends Controller
     public function index(Request $request)
     {
         $perPage = $request->get('per_page', 15);
+        $withFinancingRaw = $request->get('with_financing', true);
+        $withFinancing = filter_var($withFinancingRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($withFinancing === null) {
+            $withFinancing = true;
+        }
         $filters = [
             'search' => $request->get('search'),
             'status' => $request->get('status'),
-            'with_financing' => $request->get('with_financing', true), // Default to contracts with financing
+            'with_financing' => $withFinancing,
         ];
 
         return ContractResource::collection(

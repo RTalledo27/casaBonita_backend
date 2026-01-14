@@ -8,6 +8,9 @@ use Modules\Sales\Models\Contract;
 use Modules\Inventory\Models\Lot;
 use App\Services\LogicwareApiService;
 use App\Services\LogicwareContractImporter;
+use Modules\Sales\Models\LogicwarePayment;
+use Modules\Sales\Models\PaymentSchedule;
+use Carbon\Carbon;
 
 class LogicwareWebhookHandler
 {
@@ -30,6 +33,9 @@ class LogicwareWebhookHandler
     {
         $eventType = $payload['eventType'];
         $data = $payload['data'] ?? [];
+        $data['_messageId'] = $payload['messageId'] ?? null;
+        $data['_correlationId'] = $payload['correlationId'] ?? null;
+        $data['_eventTimestamp'] = $payload['eventTimestamp'] ?? null;
         $sourceId = $payload['sourceId'] ?? null;
 
         Log::info("📥 Manejando evento webhook: {$eventType}", [
@@ -184,6 +190,8 @@ class LogicwareWebhookHandler
                         $correlative
                     );
 
+                    $this->storeLogicwarePayment($data, $sourceId, $contract);
+
                     return [
                         'action' => 'payment_created',
                         'contract_id' => $contract->id,
@@ -211,6 +219,89 @@ class LogicwareWebhookHandler
                 'error' => $e->getMessage()
             ]);
             throw $e;
+        }
+    }
+
+    protected function storeLogicwarePayment(array $data, $sourceId, Contract $contract): void
+    {
+        try {
+            $messageId = $data['_messageId'] ?? null;
+            $correlationId = $data['_correlationId'] ?? null;
+            $eventTs = $data['_eventTimestamp'] ?? null;
+
+            $externalPaymentNumber =
+                $data['payment_number']
+                ?? $data['paymentNumber']
+                ?? $data['pay_number']
+                ?? $data['number']
+                ?? $data['payment_id']
+                ?? $data['paymentId']
+                ?? null;
+
+            $installmentNumber = isset($data['installmentNumber']) ? (int) $data['installmentNumber'] : (isset($data['installment_number']) ? (int) $data['installment_number'] : null);
+            $scheduleDetId = $data['scheduleDetId'] ?? $data['schedule_det_id'] ?? null;
+
+            $schedule = null;
+            if ($scheduleDetId) {
+                $schedule = PaymentSchedule::where('contract_id', $contract->contract_id)
+                    ->where('logicware_schedule_det_id', $scheduleDetId)
+                    ->first();
+            }
+            if (!$schedule && $installmentNumber) {
+                $schedule = PaymentSchedule::where('contract_id', $contract->contract_id)
+                    ->where('installment_number', $installmentNumber)
+                    ->first();
+            }
+
+            $paymentDateRaw = $data['payment_date'] ?? $data['paymentDate'] ?? $data['date'] ?? $eventTs ?? null;
+            $paymentDate = $paymentDateRaw ? Carbon::parse($paymentDateRaw) : null;
+
+            $amountRaw = $data['amount'] ?? $data['total'] ?? $data['value'] ?? 0;
+            $amount = is_numeric($amountRaw) ? (float) $amountRaw : (float) preg_replace('/[^0-9.\-]/', '', (string) $amountRaw);
+
+            $method = $data['method'] ?? $data['payment_method'] ?? $data['paymentMethod'] ?? null;
+            $bankName = $data['bank'] ?? $data['bank_name'] ?? $data['bankName'] ?? null;
+            $referenceNumber = $data['reference_number'] ?? $data['referenceNumber'] ?? $data['ref'] ?? $data['reference'] ?? null;
+            $status = $data['status'] ?? null;
+            $userName = $data['user'] ?? $data['user_name'] ?? $data['userName'] ?? null;
+            $currency = $data['currency'] ?? $contract->currency ?? null;
+
+            $uniqueExt = $externalPaymentNumber ? (string) $externalPaymentNumber : null;
+            if (!$messageId && !$uniqueExt && !$sourceId) {
+                return;
+            }
+
+            $query = LogicwarePayment::query();
+            if ($messageId) $query->where('message_id', $messageId);
+            if ($uniqueExt) $query->where('external_payment_number', $uniqueExt);
+            if (!$uniqueExt && $sourceId) $query->where('source_id', (string) $sourceId);
+
+            $exists = $query->exists();
+            if ($exists) return;
+
+            LogicwarePayment::create([
+                'message_id' => $messageId,
+                'correlation_id' => $correlationId,
+                'source_id' => $sourceId ? (string) $sourceId : null,
+                'contract_id' => $contract->contract_id,
+                'schedule_id' => $schedule?->schedule_id,
+                'installment_number' => $installmentNumber,
+                'external_payment_number' => $uniqueExt,
+                'payment_date' => $paymentDate,
+                'amount' => $amount,
+                'currency' => $currency,
+                'method' => $method,
+                'bank_name' => $bankName,
+                'reference_number' => $referenceNumber,
+                'status' => $status,
+                'user_name' => is_string($userName) ? $userName : null,
+                'raw' => $data,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('⚠️ No se pudo guardar detalle de pago Logicware', [
+                'error' => $e->getMessage(),
+                'sourceId' => $sourceId,
+            ]);
         }
     }
 

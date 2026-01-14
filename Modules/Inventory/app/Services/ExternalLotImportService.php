@@ -7,6 +7,7 @@ use Modules\Inventory\Models\Lot;
 use Modules\Inventory\Models\Manzana;
 use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Inventory\Models\ManzanaFinancingRule;
+use Modules\Inventory\Models\StreetType;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Exception;
@@ -22,6 +23,7 @@ class ExternalLotImportService
     protected LogicwareApiService $apiService;
     protected ?array $fullStockByUnitNumber = null;
     protected bool $currentForceRefresh = false;
+    protected array $currentOptions = [];
     protected array $stats = [
         'total' => 0,
         'created' => 0,
@@ -68,15 +70,16 @@ class ExternalLotImportService
         return $block . '-' . $lotPart;
     }
 
-    protected function ensureFullStockLoaded(bool $forceRefresh = false): void
+    protected function ensureFullStockLoaded(bool $forceRefresh = false, bool $debugRawResponse = false): void
     {
         if ($this->fullStockByUnitNumber !== null) {
             return;
         }
 
         try {
-            $res = $this->apiService->getProperties([], $forceRefresh);
+            $res = $this->apiService->getProperties([], $forceRefresh, $debugRawResponse);
             $units = $res['data']['data'] ?? $res['data'] ?? [];
+            
 
             $index = [];
             if (is_array($units)) {
@@ -102,7 +105,7 @@ class ExternalLotImportService
 
     protected function getUnitStatusFromFullStock(?string $unitNumber, bool $forceRefresh = false): ?string
     {
-        $this->ensureFullStockLoaded($forceRefresh);
+        $this->ensureFullStockLoaded($forceRefresh, (bool) ($this->currentOptions['debug_raw_response'] ?? false));
         $key = $this->normalizeUnitNumber($unitNumber);
         if (!$key) {
             return null;
@@ -213,12 +216,13 @@ class ExternalLotImportService
     {
         $this->resetStats();
         $forceRefresh = (bool)($options['force_refresh'] ?? false);
+        $this->currentOptions = $options;
         
         try {
             Log::info('[ExternalLotImport] Iniciando importación de lotes externos');
 
             // Obtener propiedades del API (FULL STOCK con caché)
-            $properties = $this->apiService->getProperties([], $forceRefresh);
+            $properties = $this->apiService->getProperties([], $forceRefresh, (bool) ($options['debug_raw_response'] ?? false));
             $units = $properties['data']['data'] ?? $properties['data'] ?? [];
             
             if (!is_array($units)) {
@@ -266,13 +270,14 @@ class ExternalLotImportService
     public function importLotsFromFullStock(bool $forceRefresh = false, array $options = []): array
     {
         $this->resetStats();
+        $this->currentOptions = $options;
 
         try {
             Log::info('[ExternalLotImport] Iniciando importación de lotes desde FULL STOCK', [
                 'force_refresh' => $forceRefresh
             ]);
 
-            $properties = $this->apiService->getProperties([], $forceRefresh);
+            $properties = $this->apiService->getProperties([], $forceRefresh, (bool) ($options['debug_raw_response'] ?? false));
             $units = $properties['data']['data'] ?? $properties['data'] ?? [];
 
             if (!is_array($units)) {
@@ -480,7 +485,7 @@ class ExternalLotImportService
             'total_price' => $totalPrice, // 🔥 Precio final = unitPrice - descuento
             'currency' => strtoupper($property['currency'] ?? 'PEN'),
             'status' => $status,
-            'street_type_id' => $this->getDefaultStreetTypeId(),
+            'street_type_id' => $this->resolveStreetTypeId($property),
             
             // Campos de sincronización con API externa
             'external_id' => $property['id'] ?? null,
@@ -512,6 +517,16 @@ class ExternalLotImportService
                   ->first();
 
         if ($lot) {
+            $defaultStreetTypeId = $this->getDefaultStreetTypeId();
+            if (
+                isset($lotData['street_type_id']) &&
+                (int) $lotData['street_type_id'] === (int) $defaultStreetTypeId &&
+                !empty($lot->street_type_id) &&
+                (int) $lot->street_type_id !== (int) $defaultStreetTypeId
+            ) {
+                unset($lotData['street_type_id']);
+            }
+
             if (isset($lotData['status'])) {
                 $incoming = strtolower(trim((string) $lotData['status']));
                 $current = strtolower(trim((string) $lot->status));
@@ -616,40 +631,110 @@ class ExternalLotImportService
      */
     protected function getDefaultStreetTypeId(): int
     {
-        // Buscar o crear un tipo de calle por defecto
-        $streetType = DB::table('street_types')
-            ->where('name', 'Sin Especificar')
-            ->orWhere('name', 'like', '%defecto%')
-            ->orWhere('name', 'like', '%default%')
-            ->first();
-        
-        if ($streetType) {
-            return $streetType->street_type_id;
+        return (int) StreetType::firstOrCreate(['name' => 'Sin Especificar'])->street_type_id;
+    }
+
+    protected function resolveStreetTypeId(array $property): int
+    {
+        $value = $this->extractStreetTypeName($property);
+        if (!$value) {
+            return $this->getDefaultStreetTypeId();
         }
-        
-        // Si no existe, obtener el primer tipo de calle disponible
-        $firstStreetType = DB::table('street_types')
-            ->orderBy('street_type_id')
-            ->first();
-        
-        if ($firstStreetType) {
-            Log::info('[ExternalLotImport] Usando primer tipo de calle como default', [
-                'street_type_id' => $firstStreetType->street_type_id,
-                'name' => $firstStreetType->name ?? 'N/A'
-            ]);
-            return $firstStreetType->street_type_id;
+
+        $normalized = $this->normalizeStreetTypeName($value);
+        if ($normalized === '') {
+            return $this->getDefaultStreetTypeId();
         }
-        
-        // Si no hay ninguno, crear uno por defecto
-        $newStreetTypeId = DB::table('street_types')->insertGetId([
-            'name' => 'Sin Especificar'
-        ]);
-        
-        Log::info('[ExternalLotImport] Tipo de calle por defecto creado', [
-            'street_type_id' => $newStreetTypeId
-        ]);
-        
-        return $newStreetTypeId;
+
+        $mapped = $this->mapStreetTypeSynonym($normalized);
+        $target = $mapped ?: $this->titleizeStreetType($normalized);
+
+        $existing = StreetType::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($target)])
+            ->first();
+
+        if ($existing) {
+            return (int) $existing->street_type_id;
+        }
+
+        return (int) StreetType::firstOrCreate(['name' => $target])->street_type_id;
+    }
+
+    protected function extractStreetTypeName(array $property): ?string
+    {
+        $unitModel = $property['unitModel'] ?? $property['unit_model'] ?? null;
+        $unitModelName = null;
+        if (is_array($unitModel)) {
+            $unitModelName = $unitModel['modName'] ?? $unitModel['name'] ?? null;
+        }
+
+        $candidates = [
+            $property['street_type'] ?? null,
+            $property['streetType'] ?? null,
+            $property['streetTypeName'] ?? null,
+            $property['road_type'] ?? null,
+            $property['roadType'] ?? null,
+            $property['ubicacion'] ?? null,
+            $property['UBICACIÓN'] ?? null,
+            $unitModelName,
+        ];
+
+        $address = $property['address'] ?? null;
+        if (is_array($address)) {
+            $candidates[] = $address['street_type'] ?? null;
+            $candidates[] = $address['streetType'] ?? null;
+            $candidates[] = $address['roadType'] ?? null;
+        }
+
+        foreach ($candidates as $c) {
+            if (is_array($c)) {
+                $c = $c['name'] ?? ($c['label'] ?? null);
+            }
+            if (is_string($c)) {
+                $c = trim($c);
+                if ($c !== '') return $c;
+            }
+        }
+
+        return null;
+    }
+
+    protected function normalizeStreetTypeName(string $value): string
+    {
+        $v = trim($value);
+        $v = preg_replace('/\s+/', ' ', $v);
+        $v = mb_strtolower($v);
+        $v = str_replace(['.', ',', ';', ':', '-', '_', '/', '\\'], ' ', $v);
+        $v = preg_replace('/\s+/', ' ', $v);
+
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $v);
+        if (is_string($ascii) && $ascii !== '') {
+            $v = $ascii;
+        }
+
+        return trim($v);
+    }
+
+    protected function mapStreetTypeSynonym(string $normalized): ?string
+    {
+        $n = trim($normalized);
+
+        if (preg_match('/^(av|avd|avda|avenida)\b/', $n)) return 'Avenida';
+        if (preg_match('/^(cl|calle)\b/', $n)) return 'Calle';
+        if (preg_match('/^(jr|jiron|jiron)\b/', $n)) return 'Jirón';
+        if (preg_match('/^(psj|pje|pasaje)\b/', $n)) return 'Pasaje';
+        if (preg_match('/^(peatonal)\b/', $n)) return 'Peatonal';
+        if (preg_match('/^(boulevard|bulevar)\b/', $n)) return 'Boulevard';
+
+        return null;
+    }
+
+    protected function titleizeStreetType(string $normalized): string
+    {
+        $n = trim($normalized);
+        if ($n === '') return $n;
+        $words = array_map(fn ($w) => $w === '' ? '' : mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), explode(' ', $n));
+        return implode(' ', $words);
     }
 
     /**
@@ -665,6 +750,7 @@ class ExternalLotImportService
             'errors' => 0
         ];
         $this->errors = [];
+        $this->currentOptions = [];
     }
 
     /**
@@ -686,15 +772,22 @@ class ExternalLotImportService
      * @param string $code Código del lote (Ej: "E2-02")
      * @return array
      */
-    public function syncLotByCode(string $code): array
+    public function syncLotByCode(string $code, array $options = []): array
     {
         try {
+            $this->currentOptions = $options;
+            $forceRefresh = (bool) ($options['force_refresh'] ?? false);
+
             Log::info('[ExternalLotImport] Sincronizando lote individual', [
                 'code' => $code
             ]);
 
             // Buscar la propiedad en el API
-            $properties = $this->apiService->getProperties(['code' => $code]);
+            $properties = $this->apiService->getProperties(
+                ['code' => $code],
+                $forceRefresh,
+                (bool) ($options['debug_raw_response'] ?? false)
+            );
             
             if (!isset($properties['data']) || empty($properties['data'])) {
                 throw new Exception("Lote no encontrado en API externa: {$code}");

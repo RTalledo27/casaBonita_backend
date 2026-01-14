@@ -100,16 +100,40 @@ class LogicwareLotImportController extends Controller
         try {
             $projectCode = $request->input('projectCode', 'casabonita');
             $forceRefresh = $request->boolean('forceRefresh', false);
+            $enrichFullStockCache = $request->boolean('enrich_full_stock_cache', true);
 
             Log::info('[LogicwareLotImportController] Previsualizando stock de stage', [
                 'stageId' => $stageId,
-                'projectCode' => $projectCode
+                'projectCode' => $projectCode,
+                'enrich_full_stock_cache' => $enrichFullStockCache,
             ]);
 
-            $stock = $this->logicwareApi->getStockByStage($projectCode, $stageId, $forceRefresh);
+            $debugRawResponse = $request->boolean('debugRawResponse', false);
+            $stock = $this->logicwareApi->getStockByStage($projectCode, $stageId, $forceRefresh, $debugRawResponse);
+
+            $units = $stock['data'] ?? [];
+            if ($enrichFullStockCache && is_array($units)) {
+                $fullStockIndex = $this->logicwareApi->getFullStockIndexFromCache();
+                if (!empty($fullStockIndex)) {
+                    $units = array_map(function ($u) use ($fullStockIndex) {
+                        if (!is_array($u) || empty($u['code'])) return $u;
+                        $key = strtoupper(trim((string) $u['code']));
+                        $key = str_replace([' ', '_'], ['', '-'], $key);
+                        $key = preg_replace('/-+/', '-', $key);
+                        $full = $fullStockIndex[$key] ?? null;
+                        if (!is_array($full)) return $u;
+                        foreach (['unitModel', 'unit_model', 'modelName', 'streetType', 'streetTypeName', 'street_type', 'roadType', 'road_type', 'ubicacion', 'UBICACIÓN'] as $field) {
+                            if (!array_key_exists($field, $u) && array_key_exists($field, $full)) {
+                                $u[$field] = $full[$field];
+                            }
+                        }
+                        return $u;
+                    }, $units);
+                }
+            }
 
             // Enriquecer datos con información de importabilidad
-            $enrichedData = $this->enrichStockData($stock['data'] ?? []);
+            $enrichedData = $this->enrichStockData($units);
 
             return response()->json([
                 'success' => true,
@@ -171,7 +195,10 @@ class LogicwareLotImportController extends Controller
                 'options.create_templates' => 'sometimes|boolean',
                 'options.update_templates' => 'sometimes|boolean',
                 'options.update_status' => 'sometimes|boolean',
-                'options.force_refresh' => 'sometimes|boolean'
+                'options.force_refresh' => 'sometimes|boolean',
+                'options.debug_raw_response' => 'sometimes|boolean',
+                'options.debug_payload' => 'sometimes|boolean',
+                'options.enrich_full_stock_cache' => 'sometimes|boolean',
             ]);
 
             if ($validator->fails()) {
@@ -192,7 +219,10 @@ class LogicwareLotImportController extends Controller
                 'create_templates' => true,
                 'update_templates' => true,
                 'update_status' => false,
-                'force_refresh' => false
+                'force_refresh' => false,
+                'debug_raw_response' => false,
+                'debug_payload' => false,
+                'enrich_full_stock_cache' => true,
             ], $options);
 
             Log::info('[LogicwareLotImportController] ⚡ Iniciando importación de stage', [
@@ -203,7 +233,7 @@ class LogicwareLotImportController extends Controller
 
             // Realizar importación
             $result = $this->importService->importLotsByStage($projectCode, $stageId, $options);
-
+            
             $statusCode = $result['success'] ? 200 : 500;
 
             return response()->json($result, $statusCode);

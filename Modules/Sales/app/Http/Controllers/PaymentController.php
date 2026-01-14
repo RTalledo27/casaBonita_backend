@@ -31,6 +31,16 @@ class PaymentController extends Controller
 
     protected function buildLedgerQuery(Carbon $start, Carbon $end)
     {
+        $logicwarePaymentAgg = DB::table('logicware_payments')
+            ->select(
+                'schedule_id',
+                DB::raw('MAX(method) as method'),
+                DB::raw('MAX(bank_name) as bank_name'),
+                DB::raw('MAX(reference_number) as reference_number')
+            )
+            ->whereNotNull('schedule_id')
+            ->groupBy('schedule_id');
+
         $paymentAgg = DB::table('payments')
             ->select(
                 'schedule_id',
@@ -70,6 +80,7 @@ class PaymentController extends Controller
                 DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name'),
                 'p.amount',
                 'p.method',
+                DB::raw('NULL as bank_name'),
                 'p.reference',
                 DB::raw('CASE WHEN p.voucher_path IS NULL OR p.voucher_path = "" THEN 0 ELSE 1 END as has_voucher'),
                 DB::raw('p.payment_date as date'),
@@ -82,6 +93,9 @@ class PaymentController extends Controller
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->leftJoinSub($paymentAgg, 'pa', function ($join) {
                 $join->on('pa.schedule_id', '=', 'ps.schedule_id');
+            })
+            ->leftJoinSub($logicwarePaymentAgg, 'lpa', function ($join) {
+                $join->on('lpa.schedule_id', '=', 'ps.schedule_id');
             })
             ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
             ->leftJoin('clients as cl', function ($join) {
@@ -110,8 +124,9 @@ class PaymentController extends Controller
                 DB::raw('COALESCE(c.lot_id, r.lot_id) as lot_id'),
                 DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name'),
                 DB::raw('COALESCE(ps.logicware_paid_amount, ps.amount) as amount'),
-                DB::raw("COALESCE(NULLIF(pa.method, ''), NULL) as method"),
-                DB::raw('NULL as reference'),
+                DB::raw("COALESCE(NULLIF(lpa.method, ''), NULL) as method"),
+                DB::raw("COALESCE(NULLIF(lpa.bank_name, ''), NULL) as bank_name"),
+                DB::raw("COALESCE(NULLIF(lpa.reference_number, ''), NULL) as reference"),
                 DB::raw('0 as has_voucher'),
                 DB::raw('ps.paid_date as date'),
                 'ps.installment_number',
@@ -142,6 +157,7 @@ class PaymentController extends Controller
                 DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name'),
                 DB::raw('COALESCE(r.deposit_amount, 0) as amount'),
                 DB::raw("COALESCE(NULLIF(r.deposit_method, ''), NULL) as method"),
+                DB::raw('NULL as bank_name'),
                 DB::raw("COALESCE(NULLIF(r.deposit_reference, ''), NULL) as reference"),
                 DB::raw('0 as has_voucher'),
                 DB::raw('r.deposit_paid_at as date'),
