@@ -44,6 +44,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
         Route::get('schedules/metrics', [PaymentScheduleController::class, 'getMetrics']);
         Route::get('payments/ledger', [PaymentController::class, 'ledger']);
         Route::get('payments/summary', [PaymentController::class, 'summary']);
+        Route::post('payments/{payment}/voucher', [PaymentController::class, 'uploadVoucher']);
+        Route::get('payments/{payment}/voucher', [PaymentController::class, 'downloadVoucher']);
         Route::apiResource('payments',     PaymentController::class);
         Route::post('contract-approvals/{approval}/approve', [ContractApprovalController::class, 'approve']);
         Route::post('contract-approvals/{approval}/reject',  [ContractApprovalController::class, 'reject']);

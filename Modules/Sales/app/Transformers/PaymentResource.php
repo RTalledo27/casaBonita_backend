@@ -20,6 +20,8 @@ class PaymentResource extends JsonResource
             'amount'          => $this->amount,
             'method'          => $this->method,
             'reference'       => $this->reference,
+            'has_voucher'     => !empty($this->voucher_path),
+            'voucher_url'     => !empty($this->voucher_path) ? url("/api/v1/sales/payments/{$this->payment_id}/voucher") : null,
             'schedule'        => new PaymentScheduleResource($this->whenLoaded('schedule')),
             //'journal_entry'   => new JournalEntryResource($this->whenLoaded('journalEntry')),
         ];

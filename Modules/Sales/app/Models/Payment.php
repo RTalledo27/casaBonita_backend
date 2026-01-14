@@ -28,7 +28,8 @@ class Payment extends Model
         'payment_date',
         'amount',
         'method',
-        'reference'
+        'reference',
+        'voucher_path'
     ];
 
     // protected static function newFactory(): PaymentFactory

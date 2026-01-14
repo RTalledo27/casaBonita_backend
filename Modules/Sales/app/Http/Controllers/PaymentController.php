@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Modules\Sales\Http\Requests\PaymentRequest;
 use Modules\Sales\Http\Requests\UpdatePaymentRequest;
 use Modules\Sales\Models\Payment;
@@ -22,9 +23,9 @@ class PaymentController extends Controller
         private PusherNotifier $pusher
     ) {
         $this->middleware('auth:sanctum');
-        $this->middleware('permission:sales.payments.view')->only(['index', 'show', 'ledger', 'summary']);
+        $this->middleware('permission:sales.payments.view')->only(['index', 'show', 'ledger', 'summary', 'downloadVoucher']);
         $this->middleware('permission:sales.payments.store')->only('store');
-        $this->middleware('permission:sales.payments.update')->only('update');
+        $this->middleware('permission:sales.payments.update')->only(['update', 'uploadVoucher']);
         $this->middleware('permission:sales.payments.destroy')->only('destroy');
     }
 
@@ -70,6 +71,7 @@ class PaymentController extends Controller
                 'p.amount',
                 'p.method',
                 'p.reference',
+                DB::raw('CASE WHEN p.voucher_path IS NULL OR p.voucher_path = "" THEN 0 ELSE 1 END as has_voucher'),
                 DB::raw('p.payment_date as date'),
                 'ps.installment_number',
                 'ps.type as installment_type',
@@ -110,6 +112,7 @@ class PaymentController extends Controller
                 DB::raw('COALESCE(ps.logicware_paid_amount, ps.amount) as amount'),
                 DB::raw("COALESCE(NULLIF(pa.method, ''), NULL) as method"),
                 DB::raw('NULL as reference'),
+                DB::raw('0 as has_voucher'),
                 DB::raw('ps.paid_date as date'),
                 'ps.installment_number',
                 'ps.type as installment_type',
@@ -140,6 +143,7 @@ class PaymentController extends Controller
                 DB::raw('COALESCE(r.deposit_amount, 0) as amount'),
                 DB::raw("COALESCE(NULLIF(r.deposit_method, ''), NULL) as method"),
                 DB::raw("COALESCE(NULLIF(r.deposit_reference, ''), NULL) as reference"),
+                DB::raw('0 as has_voucher'),
                 DB::raw('r.deposit_paid_at as date'),
                 DB::raw('NULL as installment_number'),
                 DB::raw('NULL as installment_type'),
@@ -350,5 +354,60 @@ class PaymentController extends Controller
                 ],
             ],
         ]);
+    }
+
+    public function uploadVoucher(Request $request, Payment $payment)
+    {
+        $request->validate([
+            'voucher' => 'required|file|mimes:jpg,jpeg,png,pdf|max:10240',
+        ]);
+
+        $file = $request->file('voucher');
+        if (!$file) {
+            return response()->json(['message' => 'Archivo voucher no encontrado'], 422);
+        }
+
+        DB::beginTransaction();
+        try {
+            if (!empty($payment->voucher_path)) {
+                Storage::disk('public')->delete($payment->voucher_path);
+            }
+
+            $path = Storage::disk('public')->putFile('payments/vouchers', $file);
+            $payment->voucher_path = $path;
+            $payment->save();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Voucher subido correctamente',
+                'data' => [
+                    'payment_id' => $payment->payment_id,
+                    'has_voucher' => true,
+                    'voucher_url' => url("/api/v1/sales/payments/{$payment->payment_id}/voucher"),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al subir voucher',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function downloadVoucher(Request $request, Payment $payment)
+    {
+        if (empty($payment->voucher_path)) {
+            return response()->json(['message' => 'Este pago no tiene voucher'], 404);
+        }
+
+        if (!Storage::disk('public')->exists($payment->voucher_path)) {
+            return response()->json(['message' => 'Voucher no encontrado en almacenamiento'], 404);
+        }
+
+        return Storage::disk('public')->download($payment->voucher_path);
     }
 }
