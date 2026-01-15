@@ -333,6 +333,14 @@ class LogicwareLotImportService
 
         if (($options['update_status'] ?? false) && isset($unit['status'])) {
             $newStatus = $this->mapStatus((string) $unit['status']);
+            if ($newStatus !== 'vendido') {
+                $hasActiveReservation = $lot->reservations()
+                    ->whereIn('status', ['activa', 'convertida'])
+                    ->exists();
+                if ($hasActiveReservation) {
+                    $newStatus = 'reservado';
+                }
+            }
             if ($lot->status !== $newStatus) {
                 $updates['status'] = $newStatus;
             }
@@ -488,8 +496,8 @@ class LogicwareLotImportService
             'sold' => 'vendido',
             'reservado' => 'reservado',
             'reserved' => 'reservado',
-            'bloqueado' => 'reservado',
-            'blocked' => 'reservado',
+            'bloqueado' => 'bloqueado',
+            'blocked' => 'bloqueado',
         ];
 
         return $statusMap[$normalized] ?? 'disponible';

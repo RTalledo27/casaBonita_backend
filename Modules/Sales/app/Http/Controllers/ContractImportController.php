@@ -99,9 +99,7 @@ class ContractImportController extends Controller
             Log::info('ContractImportController::importAsync - Usuario obtenido', [
                 'user_exists' => $user !== null,
                 'user_id' => $user ? $user->id : null,
-                'user_email' => $user ? $user->email : null,
                 'auth_guard' => config('auth.defaults.guard'),
-                'request_headers' => $request->headers->all()
             ]);
             
             if (!$user) {

@@ -70,6 +70,32 @@ class ExternalLotImportService
         return $block . '-' . $lotPart;
     }
 
+    protected function normalizeExternalLotStatus(?string $rawStatus): string
+    {
+        $s = strtolower(trim((string) $rawStatus));
+        if ($s === '') {
+            return 'disponible';
+        }
+
+        if (in_array($s, ['vendido', 'sold', 'sale'], true)) {
+            return 'vendido';
+        }
+
+        if (in_array($s, ['bloqueado', 'blocked'], true)) {
+            return 'bloqueado';
+        }
+
+        if (in_array($s, ['reservado', 'reserved'], true)) {
+            return 'reservado';
+        }
+
+        if (in_array($s, ['disponible', 'available', 'libre', 'free'], true)) {
+            return 'disponible';
+        }
+
+        return 'disponible';
+    }
+
     protected function ensureFullStockLoaded(bool $forceRefresh = false, bool $debugRawResponse = false): void
     {
         if ($this->fullStockByUnitNumber !== null) {
@@ -89,7 +115,7 @@ class ExternalLotImportService
                         continue;
                     }
 
-                    $status = strtolower(trim((string) ($u['status'] ?? '')));
+                    $status = $this->normalizeExternalLotStatus($u['status'] ?? null);
                     $index[$unitNumber] = $status;
                 }
             }
@@ -459,15 +485,7 @@ class ExternalLotImportService
      */
     protected function transformPropertyToLot(array $property, array $parsed, Manzana $manzana): array
     {
-        $externalStatusRaw = (string) ($property['status'] ?? $property['state'] ?? 'disponible');
-        $externalStatus = strtolower(trim($externalStatusRaw));
-
-        $status = match (true) {
-            in_array($externalStatus, ['vendido', 'sold', 'sale'], true) => 'vendido',
-            in_array($externalStatus, ['bloqueado', 'blocked'], true) => 'bloqueado',
-            in_array($externalStatus, ['reservado', 'reserved'], true) => 'reservado',
-            default => 'disponible',
-        };
+        $status = $this->normalizeExternalLotStatus($property['status'] ?? $property['state'] ?? null);
 
         // Extraer precios según estructura de Logicware
         $basePrice = $this->parseNumericValue($property['basePrice'] ?? $property['price'] ?? 0);
@@ -534,12 +552,17 @@ class ExternalLotImportService
 
                 if ($current === 'vendido') {
                     $lotData['status'] = 'vendido';
-                } elseif (in_array($current, ['reservado', 'bloqueado'], true) && $incoming === 'disponible') {
+                } else {
                     $hasActiveReservation = $lot->reservations()
                         ->whereIn('status', ['activa', 'convertida'])
                         ->exists();
+
                     if ($hasActiveReservation) {
-                        $lotData['status'] = $current;
+                        $lotData['status'] = 'reservado';
+                    } elseif (in_array($incoming, ['disponible', 'reservado', 'bloqueado', 'vendido'], true)) {
+                        $lotData['status'] = $incoming;
+                    } else {
+                        $lotData['status'] = 'disponible';
                     }
                 }
             }
@@ -1086,9 +1109,9 @@ class ExternalLotImportService
             // Construir datos del contrato
             $unit = $document['units'][0] ?? [];
             $financing = $document['financing'] ?? [];
-            $unitStatus = strtolower(trim((string) ($unit['status'] ?? $unit['state'] ?? '')));
+            $unitStatus = $this->normalizeExternalLotStatus($unit['status'] ?? $unit['state'] ?? null);
             if ($unitStatus === '' && is_string($fullStockStatus) && $fullStockStatus !== '') {
-                $unitStatus = strtolower(trim($fullStockStatus));
+                $unitStatus = $this->normalizeExternalLotStatus($fullStockStatus);
             }
             
             // Extraer datos financieros completos

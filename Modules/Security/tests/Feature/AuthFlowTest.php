@@ -34,12 +34,45 @@ class AuthFlowTest extends TestCase
         User::factory()->create(['username' => 'admin', 'password_hash' => bcrypt('Secret@123')]);
 
         $response = $this->postJson('/api/v1/security/login', [
-            'username' => 'admin@erp.com',
+            'username' => 'admin',
             'password' => 'WrongPassword',
         ]);
 
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['username']);
+    }
+
+    /** @test */
+    public function blocked_user_cannot_login()
+    {
+        User::factory()->create([
+            'username' => 'blocked',
+            'password_hash' => bcrypt('Secret@123'),
+            'status' => 'blocked',
+        ]);
+
+        $response = $this->postJson('/api/v1/security/login', [
+            'username' => 'blocked',
+            'password' => 'Secret@123',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['username']);
+    }
+
+    /** @test */
+    public function login_is_rate_limited()
+    {
+        User::factory()->create(['username' => 'admin', 'password_hash' => bcrypt('Secret@123')]);
+
+        for ($i = 0; $i < 6; $i++) {
+            $response = $this->postJson('/api/v1/security/login', [
+                'username' => 'admin',
+                'password' => 'WrongPassword',
+            ]);
+        }
+
+        $response->assertStatus(429);
     }
 
     /** @test */

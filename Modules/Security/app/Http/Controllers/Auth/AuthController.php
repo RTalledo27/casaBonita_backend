@@ -52,6 +52,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (($user->status ?? 'active') !== 'active') {
+            throw ValidationException::withMessages([
+                'username' => ['Usuario bloqueado.'],
+            ]);
+        }
+
         // Actualizamos el último login
         $user->update(['last_login_at' => now()]);
 
@@ -105,7 +111,10 @@ class AuthController extends Controller
             'Sesión cerrada'
         );
         
-        $request->user()->currentAccessToken()->delete();
+        $token = $request->user()?->currentAccessToken();
+        if ($token) {
+            $token->delete();
+        }
 
         return response()->json(['message' => 'Sesión cerrada correctamente.']);
     }
@@ -174,6 +183,15 @@ class AuthController extends Controller
             'must_change_password' => false,
             'password_changed_at' => now(),
         ]);
+
+        $user->tokens()
+            ->where('id', '!=', $request->user()->currentAccessToken()?->id)
+            ->delete();
+
+        UserSession::where('user_id', $user->user_id)
+            ->whereNull('ended_at')
+            ->where('session_id', '!=', UserSession::getActiveSession($user->user_id)?->session_id)
+            ->update(['ended_at' => now()]);
 
         return response()->json([
             'message' => 'Contraseña actualizada correctamente.',

@@ -14,7 +14,9 @@ Route::get('ping', fn () => ['ok' => true]); // prueba rápida: GET /api/v1/secu
 
 Route::prefix('v1')->group(function () {
     // Login (sin token)
-    Route::post('security/login', [AuthController::class, 'login'])->name('login');
+    Route::post('security/login', [AuthController::class, 'login'])
+        ->middleware('throttle:5,1')
+        ->name('login');
     Route::middleware('auth:sanctum')
         ->prefix('security')
         ->group(function () {

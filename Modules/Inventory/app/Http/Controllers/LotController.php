@@ -111,7 +111,19 @@ class LotController extends Controller
         try {
             DB::beginTransaction();
 
-            $this->repository->update($lot, $request->validated());
+            $data = $request->validated();
+            if (($data['status'] ?? null) === 'disponible') {
+                $hasActiveReservation = $lot->reservations()
+                    ->whereIn('status', ['activa', 'convertida'])
+                    ->exists();
+                if ($hasActiveReservation) {
+                    return response()->json([
+                        'message' => 'No se puede liberar un lote con una reserva activa. Primero cancela/expira la reserva.',
+                    ], 409);
+                }
+            }
+
+            $this->repository->update($lot, $data);
 
             DB::commit();
 
