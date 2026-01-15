@@ -591,6 +591,49 @@ class CollectionsController extends Controller
                 $schedules = $contract->paymentSchedules;
                 $totalSchedules = $schedules->count();
                 $paidSchedules = $schedules->where('status', 'pagado')->count();
+
+                $separationScheduleIds = [];
+                $depositAmount = (float) ($contract->reservation?->deposit_amount ?? 0);
+                $initialSchedules = $schedules->filter(function ($s) {
+                    return ($s->type ?? null) === 'inicial';
+                })->values();
+
+                foreach ($initialSchedules as $s) {
+                    $notes = strtolower((string) ($s->notes ?? ''));
+                    if (str_contains($notes, 'separ') || str_contains($notes, 'reserva') || str_contains($notes, 'sep')) {
+                        $separationScheduleIds[] = (int) $s->schedule_id;
+                    }
+                }
+
+                if ($depositAmount > 0) {
+                    foreach ($initialSchedules as $s) {
+                        $scheduleAmount = (float) ($s->amount ?? 0);
+                        if (abs($depositAmount - $scheduleAmount) < 0.01) {
+                            $separationScheduleIds[] = (int) $s->schedule_id;
+                        }
+                    }
+                }
+
+                if (empty($separationScheduleIds) && $initialSchedules->count() >= 2) {
+                    $downPayment = (float) ($contract->down_payment ?? 0);
+                    $sumInitial = (float) $initialSchedules->sum('amount');
+                    $minInitial = $initialSchedules->sortBy([
+                        fn ($a, $b) => ((float) ($a->amount ?? 0)) <=> ((float) ($b->amount ?? 0)),
+                        fn ($a, $b) => ((string) ($a->due_date ?? '')) <=> ((string) ($b->due_date ?? '')),
+                        fn ($a, $b) => ((int) $a->schedule_id) <=> ((int) $b->schedule_id),
+                    ])->first();
+
+                    if ($minInitial) {
+                        $minAmount = (float) ($minInitial->amount ?? 0);
+                        if ($downPayment > 0 && abs($sumInitial - $downPayment) < 0.05 && $minAmount > 0 && $minAmount < (float) $initialSchedules->max('amount')) {
+                            $separationScheduleIds[] = (int) $minInitial->schedule_id;
+                        } elseif ($minAmount > 0 && abs($minAmount - 100.0) < 0.01) {
+                            $separationScheduleIds[] = (int) $minInitial->schedule_id;
+                        }
+                    }
+                }
+
+                $separationScheduleIds = array_values(array_unique($separationScheduleIds));
                 
                 // Calcular cuotas vencidas dinámicamente
                 $overdueSchedules = $schedules->filter(function($schedule) {
@@ -659,7 +702,7 @@ class CollectionsController extends Controller
                     'overdue_amount' => $overdueAmount,
                     'payment_rate' => round($paymentRate, 2),
                     'next_due_date' => $nextDueSchedule ? $nextDueSchedule->due_date : null,
-                    'schedules' => $schedules->map(function($schedule) {
+                    'schedules' => $schedules->map(function($schedule) use ($separationScheduleIds) {
                         // Determinar el estado real basado en la fecha de vencimiento
                         $actualStatus = $schedule->status;
                         $isOverdue = $schedule->due_date < now() && $schedule->status != 'pagado';
@@ -672,6 +715,11 @@ class CollectionsController extends Controller
                             $currentDate = \Carbon\Carbon::now()->startOfDay();
                             $daysOverdue = $currentDate->diffInDays($dueDate);
                         }
+
+                        $typeLabel = null;
+                        if (($schedule->type ?? null) === 'inicial' && in_array((int) $schedule->schedule_id, $separationScheduleIds, true)) {
+                            $typeLabel = 'Separación';
+                        }
                         
                         return [
                             'schedule_id' => $schedule->schedule_id,
@@ -681,6 +729,7 @@ class CollectionsController extends Controller
                             'status' => $actualStatus,
                             'notes' => $schedule->notes,
                             'type' => $schedule->type,
+                            'type_label' => $typeLabel,
                             'is_overdue' => $isOverdue,
                             'days_overdue' => $daysOverdue
                         ];

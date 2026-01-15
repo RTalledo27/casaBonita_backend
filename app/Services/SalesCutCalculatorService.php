@@ -9,6 +9,18 @@ class SalesCutCalculatorService
 {
     private const LOGICWARE_SOLD_STATUSES = ['vendido', 'venta', 'sale', 'sold'];
     private const LOGICWARE_RESERVED_STATUSES = ['reservado', 'reserva', 'separacion', 'separación', 'proforma', 'bloqueado', 'blocked'];
+    private const SALES_CONTRACT_STATUSES = ['vigente'];
+    private const PAYMENT_CONTRACT_STATUSES = ['vigente', 'pendiente_aprobacion', 'resuelto'];
+
+    public static function salesContractStatuses(): array
+    {
+        return self::SALES_CONTRACT_STATUSES;
+    }
+
+    public static function paymentContractStatuses(): array
+    {
+        return self::PAYMENT_CONTRACT_STATUSES;
+    }
 
     /**
      * Calcular corte para un período específico
@@ -25,6 +37,8 @@ class SalesCutCalculatorService
 
         // Calcular ventas (contratos firmados en el período)
         $salesData = $this->calculateSales($startDateStr, $endDateStr);
+
+        $reservationsData = $this->calculateReservations($startDateStr, $endDateStr);
         
         // Calcular pagos (pagos realizados en el período)
         $paymentsData = $this->calculatePayments($startDateStr, $endDateStr);
@@ -56,8 +70,9 @@ class SalesCutCalculatorService
             'total_sales_count' => $salesData['count'],
             'total_revenue' => $salesData['revenue'],
             'total_down_payments' => $salesData['down_payments'],
-            'reserved_sales_count' => $salesData['reserved_count'] ?? 0,
-            'reserved_revenue' => $salesData['reserved_revenue'] ?? 0,
+            'reservations_count' => $reservationsData['count'],
+            'separation_total' => $reservationsData['separation_total'],
+            'converted_reservations' => $reservationsData['converted'],
             'total_payments_count' => $paymentsData['count'],
             'total_payments_received' => $paymentsData['amount'],
             'paid_installments_count' => $paymentsData['installments'],
@@ -83,7 +98,7 @@ class SalesCutCalculatorService
             })
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
-            ->where('c.status', 'vigente')
+            ->whereIn('c.status', self::SALES_CONTRACT_STATUSES)
             ->select(
                 'c.contract_id',
                 'c.total_price',
@@ -108,29 +123,31 @@ class SalesCutCalculatorService
             )
             ->get();
 
-        $classified = $contracts->map(function ($c) {
-            $lotStatus = strtolower(trim((string) ($c->lot_status ?? '')));
-            $saleStage = $lotStatus === 'vendido' ? 'vendido' : 'reservado';
-
-            $c->sale_stage = $saleStage;
-            return $c;
-        });
-
-        $soldContracts = $classified->where('sale_stage', 'vendido')->values();
-        $reservedContracts = $classified->where('sale_stage', 'reservado')->values();
-
-        $revenue = $soldContracts->sum('total_price') ?? 0;
-        $downPayments = $soldContracts->sum('down_payment') ?? 0;
-        $reservedRevenue = $reservedContracts->sum('total_price') ?? 0;
+        $revenue = $contracts->sum('total_price') ?? 0;
+        $downPayments = $contracts->sum('down_payment') ?? 0;
 
         return [
-            'count' => $soldContracts->count(),
+            'count' => $contracts->count(),
             'revenue' => $revenue,
             'down_payments' => $downPayments,
-            'reserved_count' => $reservedContracts->count(),
-            'reserved_revenue' => $reservedRevenue,
-            'contracts' => $soldContracts,
-            'reserved_contracts' => $reservedContracts,
+            'contracts' => $contracts,
+        ];
+    }
+
+    private function calculateReservations(string $startDate, string $endDate): array
+    {
+        $base = DB::table('reservations as r')
+            ->leftJoin('contracts as c', 'r.reservation_id', '=', 'c.reservation_id')
+            ->whereBetween('r.reservation_date', [$startDate, $endDate]);
+
+        $count = (clone $base)->count();
+        $separationTotal = (clone $base)->sum('r.deposit_amount') ?? 0;
+        $converted = (clone $base)->whereNotNull('c.contract_id')->where('c.status', 'vigente')->count();
+
+        return [
+            'count' => (int) $count,
+            'separation_total' => (float) $separationTotal,
+            'converted' => (int) $converted,
         ];
     }
 
@@ -151,8 +168,7 @@ class SalesCutCalculatorService
             })
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
-            ->where('c.status', 'vigente')
-            ->where('l.status', 'vendido')
+            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
@@ -190,8 +206,7 @@ class SalesCutCalculatorService
             ->leftJoin('lots as l', function ($join) {
                 $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
             })
-            ->where('c.status', 'vigente')
-            ->where('l.status', 'vendido')
+            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
             ->where('ps.status', '!=', 'pagado')
             ->whereNotNull('ps.due_date')
             ->whereDate('ps.due_date', '<=', $end->toDateString())
@@ -208,8 +223,7 @@ class SalesCutCalculatorService
             ->leftJoin('lots as l', function ($join) {
                 $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
             })
-            ->where('c.status', 'vigente')
-            ->where('l.status', 'vendido')
+            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
             ->where('ps.status', '!=', 'pagado')
             ->whereNotNull('ps.due_date')
             ->whereDate('ps.due_date', '>', $end->toDateString())
@@ -270,8 +284,7 @@ class SalesCutCalculatorService
                 $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
             })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
-            ->where('c.status', 'vigente')
-            ->where('l.status', 'vendido')
+            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
             ->where('p.method', 'efectivo')
             ->sum('p.amount') ?? 0;
 
@@ -283,8 +296,7 @@ class SalesCutCalculatorService
                 $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
             })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
-            ->where('c.status', 'vigente')
-            ->where('l.status', 'vendido')
+            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
             ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
             ->sum('p.amount') ?? 0;
 

@@ -74,10 +74,36 @@ class ContractRepository
             $query->where('status', $filters['status']);
         }
 
+        if (!empty($filters['advisor_id'])) {
+            $query->where('advisor_id', (int) $filters['advisor_id']);
+        }
+
+        if (!empty($filters['sign_date_from'])) {
+            $query->whereDate('sign_date', '>=', $filters['sign_date_from']);
+        }
+
+        if (!empty($filters['sign_date_to'])) {
+            $query->whereDate('sign_date', '<=', $filters['sign_date_to']);
+        }
+
         // Apply financing filter (contracts with financing_amount > 0)
         if (($filters['with_financing'] ?? false) === true) {
             $query->where('financing_amount', '>', 0);
         }
+
+        $sortBy = $filters['sort_by'] ?? 'sign_date';
+        $sortDir = $filters['sort_dir'] ?? 'desc';
+        $allowedSortBy = [
+            'sign_date' => 'sign_date',
+            'contract_number' => 'contract_number',
+            'total_price' => 'total_price',
+            'status' => 'status',
+            'financing_amount' => 'financing_amount',
+            'created_at' => 'created_at',
+        ];
+        $sortColumn = $allowedSortBy[$sortBy] ?? 'sign_date';
+        $direction = in_array(strtolower((string) $sortDir), ['asc', 'desc'], true) ? strtolower((string) $sortDir) : 'desc';
+        $query->orderBy($sortColumn, $direction);
 
         return $query->paginate($perPage);
     }

@@ -464,7 +464,8 @@ class ExternalLotImportService
 
         $status = match (true) {
             in_array($externalStatus, ['vendido', 'sold', 'sale'], true) => 'vendido',
-            in_array($externalStatus, ['reservado', 'reserved', 'bloqueado', 'blocked'], true) => 'reservado',
+            in_array($externalStatus, ['bloqueado', 'blocked'], true) => 'bloqueado',
+            in_array($externalStatus, ['reservado', 'reserved'], true) => 'reservado',
             default => 'disponible',
         };
 
@@ -533,8 +534,13 @@ class ExternalLotImportService
 
                 if ($current === 'vendido') {
                     $lotData['status'] = 'vendido';
-                } elseif ($current === 'reservado' && $incoming === 'disponible') {
-                    $lotData['status'] = 'reservado';
+                } elseif (in_array($current, ['reservado', 'bloqueado'], true) && $incoming === 'disponible') {
+                    $hasActiveReservation = $lot->reservations()
+                        ->whereIn('status', ['activa', 'convertida'])
+                        ->exists();
+                    if ($hasActiveReservation) {
+                        $lotData['status'] = $current;
+                    }
                 }
             }
 
@@ -1044,7 +1050,7 @@ class ExternalLotImportService
 
                     if ($lot) {
                         $lotId = $lot->lot_id;
-                        if ($fullStockStatus === 'vendido' || $fullStockStatus === 'reservado' || $fullStockStatus === 'disponible') {
+                        if ($fullStockStatus === 'vendido' || $fullStockStatus === 'reservado' || $fullStockStatus === 'bloqueado' || $fullStockStatus === 'disponible') {
                             if ($lot->status !== $fullStockStatus) {
                                 $lot->update(['status' => $fullStockStatus]);
                             }
@@ -1062,7 +1068,7 @@ class ExternalLotImportService
                             'area_m2' => $this->parseNumericValue($unit['unitArea'] ?? 0),
                             'total_price' => $totalPrice, // 🔥 CORREGIDO: unitPrice - descuento
                             'currency' => strtoupper($unit['currency'] ?? 'PEN'),
-                            'status' => in_array($fullStockStatus, ['vendido', 'reservado', 'disponible'], true) ? $fullStockStatus : 'disponible',
+                            'status' => in_array($fullStockStatus, ['vendido', 'reservado', 'bloqueado', 'disponible'], true) ? $fullStockStatus : 'disponible',
                             'street_type_id' => $this->getDefaultStreetTypeId()
                         ];
                         $lot = \Modules\Inventory\Models\Lot::create($lotData);
@@ -1640,7 +1646,7 @@ class ExternalLotImportService
                     : null,
                 'amount' => $payment,
                 'type' => $type,
-                'description' => $inst['label'] ?? null
+                'notes' => $inst['label'] ?? null
             ];
 
             if ($existingSchedule) {

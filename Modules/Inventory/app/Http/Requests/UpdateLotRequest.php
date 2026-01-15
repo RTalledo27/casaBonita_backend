@@ -19,7 +19,7 @@ class UpdateLotRequest extends FormRequest
             'area_construction_m2' => 'nullable|numeric',
             'total_price'          => 'sometimes|numeric',
             'currency'             => 'sometimes|string|size:3',
-            'status'               => 'sometimes|in:disponible,reservado,vendido',
+            'status'               => 'sometimes|in:disponible,reservado,bloqueado,vendido',
             // Financial fields removed - now handled by Contract requests
         ];
     }

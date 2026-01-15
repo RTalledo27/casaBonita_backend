@@ -27,7 +27,7 @@ class PaymentScheduleController extends Controller
         private PusherNotifier $pusher
     ) {
         $this->middleware('auth:sanctum')->except(['getReport', 'generateReport']);
-        $this->middleware('permission:sales.schedules.index')->except(['getReport', 'generateReport']);
+        $this->middleware('permission:sales.schedules.index')->except(['getReport', 'generateReport', 'getContractSchedules']);
         $this->middleware('permission:sales.schedules.store')->only(['store', 'generateIntelligentSchedule']);
         $this->middleware('permission:sales.schedules.update')->only('update');
         $this->middleware('permission:sales.schedules.destroy')->only('destroy');
@@ -478,6 +478,8 @@ class PaymentScheduleController extends Controller
     public function getContractSchedules(Request $request, Contract $contract)
     {
         try {
+            $this->authorize('view', $contract);
+
             $schedules = $contract->paymentSchedules()
                 ->when($request->get('status'), function($query, $status) {
                     return $query->where('status', $status);
