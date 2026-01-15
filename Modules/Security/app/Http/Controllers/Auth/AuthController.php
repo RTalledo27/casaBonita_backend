@@ -184,18 +184,21 @@ class AuthController extends Controller
             'password_changed_at' => now(),
         ]);
 
-        $user->tokens()
-            ->where('id', '!=', $request->user()->currentAccessToken()?->id)
-            ->delete();
+        $user->tokens()->delete();
+        $token = $user->createToken('auth_token')->plainTextToken;
 
-        UserSession::where('user_id', $user->user_id)
-            ->whereNull('ended_at')
-            ->where('session_id', '!=', UserSession::getActiveSession($user->user_id)?->session_id)
-            ->update(['ended_at' => now()]);
+        UserActivityLog::log(
+            $user->user_id,
+            UserActivityLog::ACTION_PASSWORD_CHANGED,
+            'Contraseña cambiada'
+        );
 
         return response()->json([
             'message' => 'Contraseña actualizada correctamente.',
             'must_change_password' => false,
+            'token' => $token,
+            'expiresIn' => 86400,
+            'user' => new UserResource($user->fresh(['roles.permissions', 'permissions'])),
         ]);
     }
 

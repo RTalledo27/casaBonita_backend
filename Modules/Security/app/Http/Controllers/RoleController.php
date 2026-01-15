@@ -3,6 +3,7 @@
 namespace Modules\Security\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
@@ -80,6 +81,20 @@ class RoleController extends Controller
         // Limpiar el caché de permisos después de crear
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
+        $actor = $request->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_ROLE_CREATED,
+                'Rol creado',
+                [
+                    'role_id' => $role->role_id,
+                    'role_name' => $role->name,
+                    'permissions_count' => $role->permissions()->count(),
+                ]
+            );
+        }
+
         //pusher:
         $pusher = $this->pusherInstance();
         // Solo enviar información mínima para evitar exceder el límite de Pusher (10KB)
@@ -135,11 +150,27 @@ class RoleController extends Controller
      */
     public function update(RoleRequest $request, Role $role)
     {
+        $beforeName = $role->name;
         $role->update(['name' => $request->name]);
         $role->syncPermissions($request->permissions);
 
         // Limpiar el caché de permisos después de actualizar
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        $actor = $request->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_ROLE_UPDATED,
+                'Rol actualizado',
+                [
+                    'role_id' => $role->role_id,
+                    'from' => $beforeName,
+                    'to' => $role->name,
+                    'permissions_count' => $role->permissions()->count(),
+                ]
+            );
+        }
 
         $pusher = $this->pusherInstance();
         // Solo enviar información mínima para evitar exceder el límite de Pusher (10KB)
@@ -186,6 +217,20 @@ class RoleController extends Controller
         // Limpiar el caché de permisos después de sincronizar
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
+        $actor = $request->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_ROLE_PERMISSIONS_UPDATED,
+                'Permisos de rol actualizados',
+                [
+                    'role_id' => $role->role_id,
+                    'role_name' => $role->name,
+                    'permissions_count' => $role->permissions()->count(),
+                ]
+            );
+        }
+
         return response()->json([
             'message' => 'Permisos asignados correctamente',
             'permissions' => $role->permissions->pluck('name')
@@ -206,6 +251,19 @@ class RoleController extends Controller
         $roleData = (new RoleResource($role->load('permissions')))->toArray(request());
 
         $role->delete();
+
+        $actor = request()->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_ROLE_DELETED,
+                'Rol eliminado',
+                [
+                    'role_id' => $roleData['role_id'] ?? null,
+                    'role_name' => $roleData['name'] ?? null,
+                ]
+            );
+        }
 
         $pusher = $this->pusherInstance();
         $pusher->trigger('role-channel', 'deleted', [

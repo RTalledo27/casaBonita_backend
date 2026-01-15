@@ -38,6 +38,19 @@ class UserActivityLog extends Model
     public const ACTION_REPORT_EXPORTED = 'report_exported';
     public const ACTION_DATA_IMPORTED = 'data_imported';
     public const ACTION_DATA_EXPORTED = 'data_exported';
+    public const ACTION_SECURITY_USER_CREATED = 'security_user_created';
+    public const ACTION_SECURITY_USER_UPDATED = 'security_user_updated';
+    public const ACTION_SECURITY_USER_DELETED = 'security_user_deleted';
+    public const ACTION_SECURITY_USER_ROLES_UPDATED = 'security_user_roles_updated';
+    public const ACTION_SECURITY_USER_STATUS_UPDATED = 'security_user_status_updated';
+    public const ACTION_SECURITY_USER_PASSWORD_RESET = 'security_user_password_reset';
+    public const ACTION_SECURITY_ROLE_CREATED = 'security_role_created';
+    public const ACTION_SECURITY_ROLE_UPDATED = 'security_role_updated';
+    public const ACTION_SECURITY_ROLE_DELETED = 'security_role_deleted';
+    public const ACTION_SECURITY_ROLE_PERMISSIONS_UPDATED = 'security_role_permissions_updated';
+    public const ACTION_SECURITY_PERMISSION_CREATED = 'security_permission_created';
+    public const ACTION_SECURITY_PERMISSION_UPDATED = 'security_permission_updated';
+    public const ACTION_SECURITY_PERMISSION_DELETED = 'security_permission_deleted';
 
     /**
      * Relación con el usuario
@@ -97,6 +110,19 @@ class UserActivityLog extends Model
             self::ACTION_REPORT_EXPORTED => 'Reporte exportado',
             self::ACTION_DATA_IMPORTED => 'Datos importados',
             self::ACTION_DATA_EXPORTED => 'Datos exportados',
+            self::ACTION_SECURITY_USER_CREATED => 'Usuario creado',
+            self::ACTION_SECURITY_USER_UPDATED => 'Usuario actualizado',
+            self::ACTION_SECURITY_USER_DELETED => 'Usuario eliminado',
+            self::ACTION_SECURITY_USER_ROLES_UPDATED => 'Roles de usuario actualizados',
+            self::ACTION_SECURITY_USER_STATUS_UPDATED => 'Estado de usuario actualizado',
+            self::ACTION_SECURITY_USER_PASSWORD_RESET => 'Contraseña de usuario restablecida',
+            self::ACTION_SECURITY_ROLE_CREATED => 'Rol creado',
+            self::ACTION_SECURITY_ROLE_UPDATED => 'Rol actualizado',
+            self::ACTION_SECURITY_ROLE_DELETED => 'Rol eliminado',
+            self::ACTION_SECURITY_ROLE_PERMISSIONS_UPDATED => 'Permisos de rol actualizados',
+            self::ACTION_SECURITY_PERMISSION_CREATED => 'Permiso creado',
+            self::ACTION_SECURITY_PERMISSION_UPDATED => 'Permiso actualizado',
+            self::ACTION_SECURITY_PERMISSION_DELETED => 'Permiso eliminado',
             default => ucfirst(str_replace('_', ' ', $this->action))
         };
     }

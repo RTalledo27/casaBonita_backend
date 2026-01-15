@@ -3,6 +3,7 @@
 namespace Modules\Security\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Modules\Security\Transformers\PermissionResource;
@@ -48,15 +49,49 @@ class PermissionController extends Controller
             'name' => 'required|string|unique:permissions,name,' . $permission->id,
         ]);
 
+        $beforeName = $permission->name;
         $permission->update([
             'name' => $request->name,
         ]);
+
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        $actor = $request->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_PERMISSION_UPDATED,
+                'Permiso actualizado',
+                [
+                    'permission_id' => $permission->id,
+                    'from' => $beforeName,
+                    'to' => $permission->name,
+                ]
+            );
+        }
 
         return new PermissionResource($permission);
     }
     public function destroy(Permission $permission)
     {
+        $permissionId = $permission->id;
+        $permissionName = $permission->name;
         $permission->delete();
+
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        $actor = request()->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_PERMISSION_DELETED,
+                'Permiso eliminado',
+                [
+                    'permission_id' => $permissionId,
+                    'permission_name' => $permissionName,
+                ]
+            );
+        }
 
         return response()->json([
             'message' => 'Permission deleted',
@@ -73,6 +108,21 @@ class PermissionController extends Controller
             'name' => $request->name,
             'guard_name' => 'sanctum',
         ]);
+
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        $actor = $request->user();
+        if ($actor) {
+            UserActivityLog::log(
+                $actor->user_id,
+                UserActivityLog::ACTION_SECURITY_PERMISSION_CREATED,
+                'Permiso creado',
+                [
+                    'permission_id' => $permission->id,
+                    'permission_name' => $permission->name,
+                ]
+            );
+        }
 
         return (new PermissionResource($permission))
             ->response()
