@@ -3,7 +3,6 @@
 namespace Modules\Security\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Models\UserActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Modules\Security\Http\Requests\StoreUserRequest;
@@ -60,7 +59,6 @@ class UserController extends Controller
         $this->middleware('permission:security.users.destroy')->only(['destroy']);
         $this->middleware('permission:security.users.change-password')->only(['changePassword']);
         $this->middleware('permission:security.users.toggle-status')->only(['toggleStatus']);
-        $this->middleware('permission:security.users.update')->only(['syncRoles']);
 
         $this->repository = $repository;
     }
@@ -132,17 +130,6 @@ class UserController extends Controller
             $data['created_by'] = $request->user()->user_id;
 
             DB::commit();
-
-            UserActivityLog::log(
-                $request->user()->user_id,
-                UserActivityLog::ACTION_SECURITY_USER_CREATED,
-                'Usuario creado',
-                [
-                    'target_user_id' => $user->user_id,
-                    'target_username' => $user->username,
-                    'roles' => $user->getRoleNames()->toArray(),
-                ]
-            );
 
             try {
                 $plainPassword = $request->input('password') ?: Str::random(12);
@@ -243,7 +230,6 @@ class UserController extends Controller
         try {
             DB::beginTransaction();
 
-            $before = $user->only(['username', 'first_name', 'last_name', 'email', 'phone', 'status', 'position', 'department', 'address']);
             $oldEmail = $user->email;
 
             $data = $request->validated();
@@ -260,7 +246,6 @@ class UserController extends Controller
                 $user->must_change_password = true;
                 $user->password_changed_at = null;
                 $user->save();
-                $user->tokens()->delete();
 
                 $loginUrl = config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:4200')) . '/login';
                 if (config('clicklab.email_via_api')) {
@@ -301,20 +286,6 @@ class UserController extends Controller
 
             DB::commit();
 
-            $after = $user->fresh()->only(['username', 'first_name', 'last_name', 'email', 'phone', 'status', 'position', 'department', 'address']);
-            $changed = array_keys(array_diff_assoc($after, $before));
-            UserActivityLog::log(
-                $request->user()->user_id,
-                UserActivityLog::ACTION_SECURITY_USER_UPDATED,
-                'Usuario actualizado',
-                [
-                    'target_user_id' => $user->user_id,
-                    'target_username' => $user->username,
-                    'changed_fields' => $changed,
-                    'roles' => $user->getRoleNames()->toArray(),
-                ]
-            );
-
             //PUSHER
             $pusher = $this->pusherInstance();
             $pusher->trigger('user-channel', 'updated', [
@@ -351,22 +322,11 @@ class UserController extends Controller
         try {
             
             $userData = (new UserResource($user->fresh('roles')))->toArray(request());
-            $actor = request()->user();
             
             $this->repository->delete($user);
 
-            if ($actor) {
-                UserActivityLog::log(
-                    $actor->user_id,
-                    UserActivityLog::ACTION_SECURITY_USER_DELETED,
-                    'Usuario eliminado',
-                    [
-                        'target_user_id' => $userData['id'] ?? null,
-                        'target_username' => $userData['username'] ?? null,
-                        'target_email' => $userData['email'] ?? null,
-                    ]
-                );
-            }
+
+
 
             $pusher = $this->pusherInstance();
             $pusher->trigger('user-channel', 'deleted', [
@@ -419,20 +379,6 @@ class UserController extends Controller
             'must_change_password' => false, // Ya cambió la contraseña
             'password_changed_at' => now(),
         ]);
-        $user->tokens()->delete();
-
-        $actor = $request->user();
-        if ($actor) {
-            UserActivityLog::log(
-                $actor->user_id,
-                UserActivityLog::ACTION_SECURITY_USER_PASSWORD_RESET,
-                'Contraseña restablecida',
-                [
-                    'target_user_id' => $user->user_id,
-                    'target_username' => $user->username,
-                ]
-            );
-        }
 
         return response()->json([
             'message' => 'Contraseña actualizada correctamente',
@@ -453,57 +399,10 @@ class UserController extends Controller
     {
         $user->status = $user->status === 'active' ? 'blocked' : 'active';
         $user->save();
-        if ($user->status === 'blocked') {
-            $user->tokens()->delete();
-        }
-
-        $actor = request()->user();
-        if ($actor) {
-            UserActivityLog::log(
-                $actor->user_id,
-                UserActivityLog::ACTION_SECURITY_USER_STATUS_UPDATED,
-                'Estado de usuario actualizado',
-                [
-                    'target_user_id' => $user->user_id,
-                    'target_username' => $user->username,
-                    'status' => $user->status,
-                ]
-            );
-        }
 
         return response()->json([
             'message' => 'Estado actualizado correctamente',
             'status' => $user->status
-        ]);
-    }
-
-    public function syncRoles(Request $request, User $user)
-    {
-        $request->validate([
-            'roles' => 'required|array',
-            'roles.*' => 'exists:roles,name',
-        ]);
-
-        $user->syncRoles($request->input('roles'));
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
-
-        $actor = $request->user();
-        if ($actor) {
-            UserActivityLog::log(
-                $actor->user_id,
-                UserActivityLog::ACTION_SECURITY_USER_ROLES_UPDATED,
-                'Roles de usuario actualizados',
-                [
-                    'target_user_id' => $user->user_id,
-                    'target_username' => $user->username,
-                    'roles' => $user->getRoleNames()->toArray(),
-                ]
-            );
-        }
-
-        return response()->json([
-            'message' => 'Roles actualizados correctamente',
-            'roles' => $user->getRoleNames(),
         ]);
     }
 

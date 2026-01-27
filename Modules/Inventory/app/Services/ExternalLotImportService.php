@@ -23,7 +23,6 @@ class ExternalLotImportService
     protected LogicwareApiService $apiService;
     protected ?array $fullStockByUnitNumber = null;
     protected bool $currentForceRefresh = false;
-    protected array $currentOptions = [];
     protected array $stats = [
         'total' => 0,
         'created' => 0,
@@ -70,40 +69,14 @@ class ExternalLotImportService
         return $block . '-' . $lotPart;
     }
 
-    protected function normalizeExternalLotStatus(?string $rawStatus): string
-    {
-        $s = strtolower(trim((string) $rawStatus));
-        if ($s === '') {
-            return 'disponible';
-        }
-
-        if (in_array($s, ['vendido', 'sold', 'sale'], true)) {
-            return 'vendido';
-        }
-
-        if (in_array($s, ['bloqueado', 'blocked'], true)) {
-            return 'bloqueado';
-        }
-
-        if (in_array($s, ['reservado', 'reserved'], true)) {
-            return 'reservado';
-        }
-
-        if (in_array($s, ['disponible', 'available', 'libre', 'free'], true)) {
-            return 'disponible';
-        }
-
-        return 'disponible';
-    }
-
-    protected function ensureFullStockLoaded(bool $forceRefresh = false, bool $debugRawResponse = false): void
+    protected function ensureFullStockLoaded(bool $forceRefresh = false): void
     {
         if ($this->fullStockByUnitNumber !== null) {
             return;
         }
 
         try {
-            $res = $this->apiService->getProperties([], $forceRefresh, $debugRawResponse);
+            $res = $this->apiService->getProperties([], $forceRefresh);
             $units = $res['data']['data'] ?? $res['data'] ?? [];
             
 
@@ -115,7 +88,7 @@ class ExternalLotImportService
                         continue;
                     }
 
-                    $status = $this->normalizeExternalLotStatus($u['status'] ?? null);
+                    $status = strtolower(trim((string) ($u['status'] ?? '')));
                     $index[$unitNumber] = $status;
                 }
             }
@@ -131,7 +104,7 @@ class ExternalLotImportService
 
     protected function getUnitStatusFromFullStock(?string $unitNumber, bool $forceRefresh = false): ?string
     {
-        $this->ensureFullStockLoaded($forceRefresh, (bool) ($this->currentOptions['debug_raw_response'] ?? false));
+        $this->ensureFullStockLoaded($forceRefresh);
         $key = $this->normalizeUnitNumber($unitNumber);
         if (!$key) {
             return null;
@@ -242,13 +215,12 @@ class ExternalLotImportService
     {
         $this->resetStats();
         $forceRefresh = (bool)($options['force_refresh'] ?? false);
-        $this->currentOptions = $options;
         
         try {
             Log::info('[ExternalLotImport] Iniciando importación de lotes externos');
 
             // Obtener propiedades del API (FULL STOCK con caché)
-            $properties = $this->apiService->getProperties([], $forceRefresh, (bool) ($options['debug_raw_response'] ?? false));
+            $properties = $this->apiService->getProperties([], $forceRefresh);
             $units = $properties['data']['data'] ?? $properties['data'] ?? [];
             
             if (!is_array($units)) {
@@ -296,14 +268,13 @@ class ExternalLotImportService
     public function importLotsFromFullStock(bool $forceRefresh = false, array $options = []): array
     {
         $this->resetStats();
-        $this->currentOptions = $options;
 
         try {
             Log::info('[ExternalLotImport] Iniciando importación de lotes desde FULL STOCK', [
                 'force_refresh' => $forceRefresh
             ]);
 
-            $properties = $this->apiService->getProperties([], $forceRefresh, (bool) ($options['debug_raw_response'] ?? false));
+            $properties = $this->apiService->getProperties([], $forceRefresh);
             $units = $properties['data']['data'] ?? $properties['data'] ?? [];
 
             if (!is_array($units)) {
@@ -485,7 +456,14 @@ class ExternalLotImportService
      */
     protected function transformPropertyToLot(array $property, array $parsed, Manzana $manzana): array
     {
-        $status = $this->normalizeExternalLotStatus($property['status'] ?? $property['state'] ?? null);
+        $externalStatusRaw = (string) ($property['status'] ?? $property['state'] ?? 'disponible');
+        $externalStatus = strtolower(trim($externalStatusRaw));
+
+        $status = match (true) {
+            in_array($externalStatus, ['vendido', 'sold', 'sale'], true) => 'vendido',
+            in_array($externalStatus, ['reservado', 'reserved', 'bloqueado', 'blocked'], true) => 'reservado',
+            default => 'disponible',
+        };
 
         // Extraer precios según estructura de Logicware
         $basePrice = $this->parseNumericValue($property['basePrice'] ?? $property['price'] ?? 0);
@@ -552,18 +530,8 @@ class ExternalLotImportService
 
                 if ($current === 'vendido') {
                     $lotData['status'] = 'vendido';
-                } else {
-                    $hasActiveReservation = $lot->reservations()
-                        ->whereIn('status', ['activa', 'convertida'])
-                        ->exists();
-
-                    if ($hasActiveReservation) {
-                        $lotData['status'] = 'reservado';
-                    } elseif (in_array($incoming, ['disponible', 'reservado', 'bloqueado', 'vendido'], true)) {
-                        $lotData['status'] = $incoming;
-                    } else {
-                        $lotData['status'] = 'disponible';
-                    }
+                } elseif ($current === 'reservado' && $incoming === 'disponible') {
+                    $lotData['status'] = 'reservado';
                 }
             }
 
@@ -779,7 +747,6 @@ class ExternalLotImportService
             'errors' => 0
         ];
         $this->errors = [];
-        $this->currentOptions = [];
     }
 
     /**
@@ -801,22 +768,15 @@ class ExternalLotImportService
      * @param string $code Código del lote (Ej: "E2-02")
      * @return array
      */
-    public function syncLotByCode(string $code, array $options = []): array
+    public function syncLotByCode(string $code): array
     {
         try {
-            $this->currentOptions = $options;
-            $forceRefresh = (bool) ($options['force_refresh'] ?? false);
-
             Log::info('[ExternalLotImport] Sincronizando lote individual', [
                 'code' => $code
             ]);
 
             // Buscar la propiedad en el API
-            $properties = $this->apiService->getProperties(
-                ['code' => $code],
-                $forceRefresh,
-                (bool) ($options['debug_raw_response'] ?? false)
-            );
+            $properties = $this->apiService->getProperties(['code' => $code]);
             
             if (!isset($properties['data']) || empty($properties['data'])) {
                 throw new Exception("Lote no encontrado en API externa: {$code}");
@@ -1073,7 +1033,7 @@ class ExternalLotImportService
 
                     if ($lot) {
                         $lotId = $lot->lot_id;
-                        if ($fullStockStatus === 'vendido' || $fullStockStatus === 'reservado' || $fullStockStatus === 'bloqueado' || $fullStockStatus === 'disponible') {
+                        if ($fullStockStatus === 'vendido' || $fullStockStatus === 'reservado' || $fullStockStatus === 'disponible') {
                             if ($lot->status !== $fullStockStatus) {
                                 $lot->update(['status' => $fullStockStatus]);
                             }
@@ -1091,7 +1051,7 @@ class ExternalLotImportService
                             'area_m2' => $this->parseNumericValue($unit['unitArea'] ?? 0),
                             'total_price' => $totalPrice, // 🔥 CORREGIDO: unitPrice - descuento
                             'currency' => strtoupper($unit['currency'] ?? 'PEN'),
-                            'status' => in_array($fullStockStatus, ['vendido', 'reservado', 'bloqueado', 'disponible'], true) ? $fullStockStatus : 'disponible',
+                            'status' => in_array($fullStockStatus, ['vendido', 'reservado', 'disponible'], true) ? $fullStockStatus : 'disponible',
                             'street_type_id' => $this->getDefaultStreetTypeId()
                         ];
                         $lot = \Modules\Inventory\Models\Lot::create($lotData);
@@ -1109,9 +1069,9 @@ class ExternalLotImportService
             // Construir datos del contrato
             $unit = $document['units'][0] ?? [];
             $financing = $document['financing'] ?? [];
-            $unitStatus = $this->normalizeExternalLotStatus($unit['status'] ?? $unit['state'] ?? null);
+            $unitStatus = strtolower(trim((string) ($unit['status'] ?? $unit['state'] ?? '')));
             if ($unitStatus === '' && is_string($fullStockStatus) && $fullStockStatus !== '') {
-                $unitStatus = $this->normalizeExternalLotStatus($fullStockStatus);
+                $unitStatus = strtolower(trim($fullStockStatus));
             }
             
             // Extraer datos financieros completos
@@ -1669,7 +1629,7 @@ class ExternalLotImportService
                     : null,
                 'amount' => $payment,
                 'type' => $type,
-                'notes' => $inst['label'] ?? null
+                'description' => $inst['label'] ?? null
             ];
 
             if ($existingSchedule) {

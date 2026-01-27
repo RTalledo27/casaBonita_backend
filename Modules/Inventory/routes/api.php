@@ -5,8 +5,6 @@ use Modules\Inventory\Http\Controllers\InventoryController;
 use Modules\Inventory\Http\Controllers\LotController;
 use Modules\Inventory\Http\Controllers\LotMediaController;
 use Modules\Inventory\Http\Controllers\ManzanaController;
-use Modules\Inventory\Http\Controllers\ManzanaFinancingRuleController;
-use Modules\Inventory\Http\Controllers\ManzanaFinancingRuleImportController;
 use Modules\Inventory\Http\Controllers\StreetTypeController;
 use Modules\Inventory\Http\Controllers\LotImportController;
 use Modules\Inventory\Http\Controllers\Api\ExternalLotImportController;
@@ -16,14 +14,10 @@ Route::middleware(['auth:sanctum'])->prefix('v1/inventory')->group(function () {
     
     // Ruta pública para descargar template (sin middleware de auth)
     Route::withoutMiddleware(['auth:sanctum'])->get('lot-import/template', [LotImportController::class, 'downloadTemplate'])->name('lot-import.template');
-    Route::withoutMiddleware(['auth:sanctum'])->get('manzana-financing-rules/template', [ManzanaFinancingRuleImportController::class, 'downloadTemplate']);
     
     // Inventory specific routes with additional middleware
     Route::middleware(['check.password.change'])->group(function () {
         Route::apiResource('manzanas',      ManzanaController::class);
-        Route::apiResource('manzana-financing-rules', ManzanaFinancingRuleController::class);
-        Route::post('manzana-financing-rules/import', [ManzanaFinancingRuleImportController::class, 'import'])
-            ->middleware('permission:inventory.manzanas.update');
         Route::apiResource('street-types', StreetTypeController::class);
         Route::apiResource('lots',        LotController::class);
         Route::apiResource('lot-media',   LotMediaController::class);
@@ -66,7 +60,6 @@ Route::middleware(['auth:sanctum'])->prefix('v1/inventory')->group(function () {
             Route::get('/daily-limit-status', [ExternalLotImportController::class, 'getDailyLimitStatus'])->name('external-lot-import.daily-limit-status');
             Route::get('/sales', [ExternalLotImportController::class, 'sales'])->name('external-lot-import.sales');
             Route::post('/sales/import', [ExternalLotImportController::class, 'importSales'])->name('external-lot-import.sales.import');
-            Route::get('/sales/import/async/{id}/status', [ExternalLotImportController::class, 'getSalesImportStatus'])->name('external-lot-import.sales.import.status');
         });
     });
 });

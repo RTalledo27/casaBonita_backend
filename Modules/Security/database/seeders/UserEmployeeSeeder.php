@@ -39,7 +39,7 @@ class UserEmployeeSeeder extends Seeder
                 ['user_id' => $adminUser->user_id],
                 [
                     'employee_code' => 'EMPADMIN',
-                    'employee_type' => 'administrativo',
+                    'employee_type' => 'analista_de_administracion',
                     'hire_date' => now(),
                     'base_salary' => 5000,
                     'employment_status' => 'activo'
@@ -80,4 +80,3 @@ class UserEmployeeSeeder extends Seeder
         }
     }
 }
-

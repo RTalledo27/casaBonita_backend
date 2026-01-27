@@ -9,8 +9,6 @@ use Modules\Inventory\Services\ExternalLotImportService;
 use App\Services\LogicwareApiService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use App\Models\AsyncImportProcess;
-use App\Jobs\ProcessSalesImportJob;
 
 /**
  * Controlador para importación de lotes desde API externa
@@ -80,14 +78,9 @@ class ExternalLotImportController extends Controller
     public function syncAll(Request $request): JsonResponse
     {
         try {
-            $forceRefresh = $request->boolean('force_refresh', false);
-            $debugRawResponse = $request->boolean('debug_raw_response', false);
             Log::info('[ExternalLotImportController] Iniciando sincronización completa');
 
-            $result = $this->importService->importLots([
-                'force_refresh' => $forceRefresh,
-                'debug_raw_response' => $debugRawResponse,
-            ]);
+            $result = $this->importService->importLots();
 
             $statusCode = $result['success'] ? 200 : 500;
 
@@ -123,9 +116,7 @@ class ExternalLotImportController extends Controller
     public function syncByCode(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'code' => 'required|string|max:50',
-            'force_refresh' => 'sometimes|boolean',
-            'debug_raw_response' => 'sometimes|boolean',
+            'code' => 'required|string|max:50'
         ]);
 
         if ($validator->fails()) {
@@ -138,17 +129,12 @@ class ExternalLotImportController extends Controller
 
         try {
             $code = $request->input('code');
-            $forceRefresh = $request->boolean('force_refresh', false);
-            $debugRawResponse = $request->boolean('debug_raw_response', false);
             
             Log::info('[ExternalLotImportController] Sincronizando lote por código', [
                 'code' => $code
             ]);
 
-            $result = $this->importService->syncLotByCode($code, [
-                'force_refresh' => $forceRefresh,
-                'debug_raw_response' => $debugRawResponse,
-            ]);
+            $result = $this->importService->syncLotByCode($code);
 
             $statusCode = $result['success'] ? 200 : 500;
 
@@ -205,14 +191,12 @@ class ExternalLotImportController extends Controller
         try {
             $limit = $request->input('limit', 10);
             $forceRefresh = $request->boolean('force_refresh', false);
-            $debugRawResponse = $request->boolean('debug_raw_response', false);
             
             Log::info('[ExternalLotImportController] Obteniendo vista previa', [
-                'force_refresh' => $forceRefresh,
-                'debug_raw_response' => $debugRawResponse,
+                'force_refresh' => $forceRefresh
             ]);
 
-            $properties = $this->apiService->getAvailableProperties($forceRefresh, $debugRawResponse);
+            $properties = $this->apiService->getAvailableProperties($forceRefresh);
             
             $preview = [];
             if (isset($properties['data'])) {
@@ -288,24 +272,11 @@ class ExternalLotImportController extends Controller
 
             $sales = $this->apiService->getSales($startDate, $endDate, $forceRefresh);
 
-            $items = $sales['data'] ?? [];
-            $totalClients = is_array($items) ? count($items) : 0;
-            $totalDocuments = 0;
-            if (is_array($items)) {
-                foreach ($items as $c) {
-                    if (!empty($c['documents']) && is_array($c['documents'])) {
-                        $totalDocuments += count($c['documents']);
-                    }
-                }
-            }
-
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'total_clients' => $totalClients,
-                    'total_documents' => $totalDocuments,
-                    'total' => $totalClients,
-                    'items' => $items,
+                    'total' => isset($sales['data']) ? count($sales['data']) : 0,
+                    'items' => $sales['data'] ?? [],
                     'cached_at' => $sales['cached_at'] ?? null,
                     'cache_expires_at' => $sales['cache_expires_at'] ?? null,
                 ]
@@ -337,16 +308,21 @@ class ExternalLotImportController extends Controller
     public function importSales(Request $request): JsonResponse
     {
         try {
+            // Aumentar tiempo de ejecución para importaciones grandes
+            set_time_limit(600); // 10 minutos
+            ini_set('max_execution_time', '600');
+            ini_set('memory_limit', '512M');
+            
             $startDate = $request->input('startDate');
             $endDate = $request->input('endDate');
             $forceRefresh = $request->boolean('force_refresh', false);
-            $async = $request->boolean('async', true);
 
-            Log::info('[ExternalLotImportController] Importando ventas', [
+            Log::info('[ExternalLotImportController] Importando ventas (timeout extendido a 600s)', [
                 'start' => $startDate, 
                 'end' => $endDate, 
                 'force' => $forceRefresh,
-                'async' => $async,
+                'memory_limit' => ini_get('memory_limit'),
+                'max_execution_time' => ini_get('max_execution_time')
             ]);
 
             // Validar fechas
@@ -363,45 +339,6 @@ class ExternalLotImportController extends Controller
                     'message' => 'Fecha de fin inválida'
                 ], 400);
             }
-
-            if ($async) {
-                $user = $request->user();
-                $userId = $user?->user_id ?? $user?->id;
-
-                $importProcess = AsyncImportProcess::create([
-                    'type' => 'logicware_sales_import',
-                    'status' => 'pending',
-                    'file_name' => 'logicware_sales_import',
-                    'file_path' => 'N/A',
-                    'user_id' => $userId,
-                    'summary' => [
-                        'startDate' => $startDate,
-                        'endDate' => $endDate,
-                        'force_refresh' => $forceRefresh,
-                    ],
-                ]);
-
-                ProcessSalesImportJob::dispatch($importProcess, [
-                    'startDate' => $startDate,
-                    'endDate' => $endDate,
-                    'force_refresh' => $forceRefresh,
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Importación iniciada. Procesando en segundo plano.',
-                    'data' => [
-                        'process_id' => $importProcess->id,
-                        'status' => $importProcess->status,
-                        'status_url' => url('/api/v1/inventory/external-lot-import/sales/import/async/' . $importProcess->id . '/status'),
-                    ],
-                ], 202);
-            }
-
-            // Modo síncrono (solo si async=false)
-            set_time_limit(600);
-            ini_set('max_execution_time', '600');
-            ini_set('memory_limit', '512M');
 
             $result = $this->importService->importSales($startDate, $endDate, $forceRefresh);
 
@@ -421,57 +358,6 @@ class ExternalLotImportController extends Controller
                     'file' => $e->getFile(),
                     'line' => $e->getLine()
                 ] : null
-            ], 500);
-        }
-    }
-
-    /**
-     * Estado de importación asíncrona de ventas
-     * GET /api/v1/inventory/external-lot-import/sales/import/async/{id}/status
-     */
-    public function getSalesImportStatus(int $id): JsonResponse
-    {
-        try {
-            $importProcess = AsyncImportProcess::findOrFail($id);
-
-            $user = request()->user();
-            $userId = $user?->user_id ?? $user?->id;
-            if ($importProcess->user_id && $userId && (int) $importProcess->user_id !== (int) $userId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No tienes permisos para acceder a este proceso'
-                ], 403);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'id' => $importProcess->id,
-                    'type' => $importProcess->type,
-                    'status' => $importProcess->status,
-                    'total_rows' => $importProcess->total_rows,
-                    'processed_rows' => $importProcess->processed_rows,
-                    'successful_rows' => $importProcess->successful_rows,
-                    'failed_rows' => $importProcess->failed_rows,
-                    'progress_percentage' => $importProcess->progress_percentage !== null ? (float) $importProcess->progress_percentage : null,
-                    'errors' => $importProcess->errors,
-                    'warnings' => $importProcess->warnings,
-                    'summary' => $importProcess->summary,
-                    'started_at' => $importProcess->started_at,
-                    'completed_at' => $importProcess->completed_at,
-                    'created_at' => $importProcess->created_at,
-                    'updated_at' => $importProcess->updated_at,
-                ]
-            ]);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Proceso de importación no encontrado'
-            ], 404);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error al obtener estado: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -10,7 +10,7 @@ use Modules\Sales\Http\Requests\ContractApprovalActionRequest;
 use Modules\Sales\Models\ContractApproval;
 use Modules\Sales\Repositories\ContractApprovalRepository;
 use Modules\Sales\Transformers\ContractApprovalResource;
-use Modules\Services\PusherNotifier;
+use Modules\services\PusherNotifier;
 
 class ContractApprovalController extends Controller
 {

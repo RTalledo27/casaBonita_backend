@@ -10,7 +10,7 @@ use Modules\Inventory\Http\Requests\ManzanaRequest;
 use Modules\Inventory\Models\Manzana;
 use Modules\Inventory\Repositories\ManzanaRepository;
 use Modules\Inventory\Transformers\ManzanaResource;
-use Modules\Services\PusherNotifier;
+use Modules\services\PusherNotifier;
 use Pusher\Pusher;
 
 class ManzanaController extends Controller

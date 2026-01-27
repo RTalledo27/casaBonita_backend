@@ -27,44 +27,28 @@ class ContractRepository
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('contract_number', 'LIKE', "%{$search}%")
+                  // Búsqueda en campos directos del contrato
+                  ->orWhere('client_name', 'LIKE', "%{$search}%")
+                  ->orWhere('client_email', 'LIKE', "%{$search}%")
+                  ->orWhere('client_phone', 'LIKE', "%{$search}%")
                   // Búsqueda en cliente directo (contratos sin reserva)
                   ->orWhereHas('client', function ($clientQuery) use ($search) {
                       $clientQuery->where('first_name', 'LIKE', "%{$search}%")
                                   ->orWhere('last_name', 'LIKE', "%{$search}%")
                                   ->orWhere('email', 'LIKE', "%{$search}%")
-                                  ->orWhereRaw('CAST(primary_phone AS CHAR) LIKE ?', ["%{$search}%"])
-                                  ->orWhereRaw('CAST(secondary_phone AS CHAR) LIKE ?', ["%{$search}%"])
-                                  ->orWhere('doc_number', 'LIKE', "%{$search}%");
+                                  ->orWhere('phone', 'LIKE', "%{$search}%")
+                                  ->orWhere('document_number', 'LIKE', "%{$search}%");
                   })
                   // Búsqueda en lote directo (contratos sin reserva)
                   ->orWhereHas('lot', function ($lotQuery) use ($search) {
-                      $lotQuery->whereRaw('CAST(num_lot AS CHAR) LIKE ?', ["%{$search}%"])
-                               ->orWhereHas('manzana', function ($manzanaQuery) use ($search) {
-                                   $manzanaQuery->where('name', 'LIKE', "%{$search}%");
-                               })
-                               ->orWhere('external_code', 'LIKE', "%{$search}%");
+                      $lotQuery->where('lot_number', 'LIKE', "%{$search}%")
+                               ->orWhere('block', 'LIKE', "%{$search}%");
                   })
-                  // Búsqueda en reserva (contratos con reserva) → cliente/lote por relación
-                  ->orWhereHas('reservation.client', function ($reservationClientQuery) use ($search) {
-                      $reservationClientQuery->where('first_name', 'LIKE', "%{$search}%")
-                                             ->orWhere('last_name', 'LIKE', "%{$search}%")
-                                             ->orWhere('email', 'LIKE', "%{$search}%")
-                                             ->orWhereRaw('CAST(primary_phone AS CHAR) LIKE ?', ["%{$search}%"])
-                                             ->orWhereRaw('CAST(secondary_phone AS CHAR) LIKE ?', ["%{$search}%"])
-                                             ->orWhere('doc_number', 'LIKE', "%{$search}%");
-                  })
-                  ->orWhereHas('reservation.lot', function ($reservationLotQuery) use ($search) {
-                      $reservationLotQuery->whereRaw('CAST(num_lot AS CHAR) LIKE ?', ["%{$search}%"])
-                                          ->orWhereHas('manzana', function ($reservationManzanaQuery) use ($search) {
-                                              $reservationManzanaQuery->where('name', 'LIKE', "%{$search}%");
-                                          })
-                                          ->orWhere('external_code', 'LIKE', "%{$search}%");
-                  })
-                  // Búsqueda en asesor
-                  ->orWhereHas('advisor.user', function ($advisorUserQuery) use ($search) {
-                      $advisorUserQuery->where('first_name', 'LIKE', "%{$search}%")
-                                      ->orWhere('last_name', 'LIKE', "%{$search}%")
-                                      ->orWhere('email', 'LIKE', "%{$search}%");
+                  // Búsqueda en reserva (contratos con reserva)
+                  ->orWhereHas('reservation', function ($reservationQuery) use ($search) {
+                      $reservationQuery->where('client_name', 'LIKE', "%{$search}%")
+                                      ->orWhere('client_email', 'LIKE', "%{$search}%")
+                                      ->orWhere('client_phone', 'LIKE', "%{$search}%");
                   });
             });
         }
@@ -74,36 +58,10 @@ class ContractRepository
             $query->where('status', $filters['status']);
         }
 
-        if (!empty($filters['advisor_id'])) {
-            $query->where('advisor_id', (int) $filters['advisor_id']);
-        }
-
-        if (!empty($filters['sign_date_from'])) {
-            $query->whereDate('sign_date', '>=', $filters['sign_date_from']);
-        }
-
-        if (!empty($filters['sign_date_to'])) {
-            $query->whereDate('sign_date', '<=', $filters['sign_date_to']);
-        }
-
         // Apply financing filter (contracts with financing_amount > 0)
-        if (($filters['with_financing'] ?? false) === true) {
+        if (!empty($filters['with_financing'])) {
             $query->where('financing_amount', '>', 0);
         }
-
-        $sortBy = $filters['sort_by'] ?? 'sign_date';
-        $sortDir = $filters['sort_dir'] ?? 'desc';
-        $allowedSortBy = [
-            'sign_date' => 'sign_date',
-            'contract_number' => 'contract_number',
-            'total_price' => 'total_price',
-            'status' => 'status',
-            'financing_amount' => 'financing_amount',
-            'created_at' => 'created_at',
-        ];
-        $sortColumn = $allowedSortBy[$sortBy] ?? 'sign_date';
-        $direction = in_array(strtolower((string) $sortDir), ['asc', 'desc'], true) ? strtolower((string) $sortDir) : 'desc';
-        $query->orderBy($sortColumn, $direction);
 
         return $query->paginate($perPage);
     }

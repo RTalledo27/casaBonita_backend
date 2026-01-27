@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Security\Http\Controllers\Auth\AuthController;
+use Modules\Security\Http\Controllers\ActivityLogController;
 use Modules\Security\Http\Controllers\NotificationController;
 use Modules\Security\Http\Controllers\PermissionController;
 use Modules\Security\Http\Controllers\RoleController;
@@ -14,9 +15,7 @@ Route::get('ping', fn () => ['ok' => true]); // prueba rápida: GET /api/v1/secu
 
 Route::prefix('v1')->group(function () {
     // Login (sin token)
-    Route::post('security/login', [AuthController::class, 'login'])
-        ->middleware('throttle:5,1')
-        ->name('login');
+    Route::post('security/login', [AuthController::class, 'login'])->name('login');
     Route::middleware('auth:sanctum')
         ->prefix('security')
         ->group(function () {
@@ -28,6 +27,8 @@ Route::prefix('v1')->group(function () {
 
             // Rutas que SÍ requieren cambio de contraseña obligatorio
             Route::middleware('check.password.change')->group(function () {
+                Route::get('activity-logs', [ActivityLogController::class, 'index']);
+
                 // Usuarios
                 Route::apiResource('users', UserController::class);
                 Route::post('users/{user}/roles',          [UserController::class, 'syncRoles']);

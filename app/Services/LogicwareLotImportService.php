@@ -38,19 +38,12 @@ class LogicwareLotImportService
             'update_templates' => true,
             'update_status' => false,
             'force_refresh' => false,
-            'enrich_full_stock_cache' => true,
-            'update_street_type' => true,
         ], $options);
 
         DB::beginTransaction();
 
         try {
-            $stockData = $this->logicwareApi->getStockByStage(
-                $projectCode,
-                $stageId,
-                (bool) ($options['force_refresh'] ?? false),
-                (bool) ($options['debug_raw_response'] ?? false),
-            );
+            $stockData = $this->logicwareApi->getStockByStage($projectCode, $stageId, (bool) $options['force_refresh']);
             $units = $stockData['data'] ?? null;
             if (!is_array($units)) {
                 throw new Exception('Respuesta inválida del API de LogicWare');
@@ -58,21 +51,8 @@ class LogicwareLotImportService
 
             $this->stats['total'] = count($units);
 
-            $fullStockIndex = [];
-            if (($options['enrich_full_stock_cache'] ?? true) === true) {
-                $fullStockIndex = $this->logicwareApi->getFullStockIndexFromCache();
-                if (empty($fullStockIndex)) {
-                    $this->warnings[] = [
-                        'warning' => 'No hay caché de full-stock disponible para enriquecer',
-                    ];
-                }
-            }
-
             foreach ($units as $index => $unit) {
                 try {
-                    if (!empty($fullStockIndex) && isset($unit['code']) && is_string($unit['code'])) {
-                        $unit = $this->enrichUnitFromFullStockCache($unit, $fullStockIndex);
-                    }
                     $this->processUnit($unit, $options);
                 } catch (Exception $e) {
                     $this->stats['errors']++;
@@ -140,7 +120,6 @@ class LogicwareLotImportService
 
         if ($existingLot) {
             if (!($options['update_existing'] ?? false)) {
-                $this->maybeUpdateStreetType($existingLot, $unit, $options);
                 $this->stats['skipped']++;
                 return;
             }
@@ -152,84 +131,6 @@ class LogicwareLotImportService
 
         $this->createLot($manzana, $unit, $parsed, $options);
         $this->stats['created']++;
-    }
-
-    protected function maybeUpdateStreetType(Lot $lot, array $unit, array $options): void
-    {
-        if (($options['update_street_type'] ?? true) !== true) {
-            return;
-        }
-
-        $defaultStreetTypeId = (int) StreetType::firstOrCreate(['name' => 'Sin Especificar'])->street_type_id;
-        if ((int) $lot->street_type_id !== $defaultStreetTypeId) {
-            return;
-        }
-
-        $streetTypeId = $this->resolveStreetTypeId($unit);
-        if ((int) $streetTypeId === $defaultStreetTypeId) {
-            return;
-        }
-
-        $lot->update(['street_type_id' => (int) $streetTypeId]);
-    }
-
-    protected function enrichUnitFromFullStockCache(array $unit, array $fullStockIndex): array
-    {
-        $code = $unit['code'] ?? null;
-        if (!is_string($code) || trim($code) === '') {
-            return $unit;
-        }
-
-        $key = $this->normalizeUnitCode($code);
-        $full = $fullStockIndex[$key] ?? null;
-        if (!is_array($full)) {
-            return $unit;
-        }
-
-        $copyIfMissing = [
-            'unitModel',
-            'unit_model',
-            'modelName',
-            'street_type',
-            'streetType',
-            'streetTypeName',
-            'roadType',
-            'road_type',
-            'ubicacion',
-            'UBICACIÓN',
-        ];
-
-        foreach ($copyIfMissing as $field) {
-            if (!array_key_exists($field, $unit) && array_key_exists($field, $full)) {
-                $unit[$field] = $full[$field];
-            }
-        }
-
-        if (empty($unit['unitModel']) && empty($unit['unit_model'])) {
-            $fullUnitModel = $full['unitModel'] ?? $full['unit_model'] ?? null;
-            if ($fullUnitModel) {
-                $unit['unitModel'] = $fullUnitModel;
-            }
-        }
-
-        if (empty($unit['modelName'])) {
-            $modelName = null;
-            $fullUnitModel = $full['unitModel'] ?? $full['unit_model'] ?? null;
-            if (is_array($fullUnitModel)) {
-                $modelName = $fullUnitModel['modName'] ?? ($fullUnitModel['modelName'] ?? ($fullUnitModel['name'] ?? null));
-            }
-            $unit['modelName'] = $full['modelName'] ?? $modelName;
-        }
-
-        return $unit;
-    }
-
-    protected function normalizeUnitCode(string $code): string
-    {
-        $raw = strtoupper(trim($code));
-        $raw = str_replace([' ', '_'], ['', '-'], $raw);
-        $raw = preg_replace('/-+/', '-', $raw);
-        return trim($raw);
     }
 
     protected function parseUnitCode(string $code): ?array
@@ -302,16 +203,6 @@ class LogicwareLotImportService
     {
         $updates = [];
 
-        if (($options['update_street_type'] ?? true) === true) {
-            $defaultStreetTypeId = (int) StreetType::firstOrCreate(['name' => 'Sin Especificar'])->street_type_id;
-            $streetTypeId = $this->resolveStreetTypeId($unit);
-            if ((int) $lot->street_type_id !== (int) $streetTypeId) {
-                if ((int) $streetTypeId !== $defaultStreetTypeId || (int) $lot->street_type_id === $defaultStreetTypeId) {
-                    $updates['street_type_id'] = (int) $streetTypeId;
-                }
-            }
-        }
-
         if (isset($unit['area']) && (float) $lot->area_m2 !== (float) $unit['area']) {
             $updates['area_m2'] = (float) $unit['area'];
         }
@@ -333,14 +224,6 @@ class LogicwareLotImportService
 
         if (($options['update_status'] ?? false) && isset($unit['status'])) {
             $newStatus = $this->mapStatus((string) $unit['status']);
-            if ($newStatus !== 'vendido') {
-                $hasActiveReservation = $lot->reservations()
-                    ->whereIn('status', ['activa', 'convertida'])
-                    ->exists();
-                if ($hasActiveReservation) {
-                    $newStatus = 'reservado';
-                }
-            }
             if ($lot->status !== $newStatus) {
                 $updates['status'] = $newStatus;
             }
@@ -437,19 +320,7 @@ class LogicwareLotImportService
 
     protected function resolveStreetTypeId(array $unit): int
     {
-        $unitModel = $unit['unitModel'] ?? $unit['unit_model'] ?? null;
-        $unitModelName = null;
-        if (is_array($unitModel)) {
-            $unitModelName = $unitModel['modName'] ?? ($unitModel['modelName'] ?? ($unitModel['name'] ?? null));
-        }
-
-        $name = $unit['street_type']
-            ?? $unit['streetType']
-            ?? $unit['streetTypeName']
-            ?? $unit['roadType']
-            ?? ($unit['modelName'] ?? null)
-            ?? $unitModelName
-            ?? null;
+        $name = $unit['street_type'] ?? $unit['streetType'] ?? $unit['streetTypeName'] ?? $unit['roadType'] ?? null;
         if (is_array($name)) {
             $name = $name['name'] ?? ($name['label'] ?? null);
         }
@@ -476,8 +347,6 @@ class LogicwareLotImportService
         elseif (preg_match('/^(cl|calle)\b/', $normalized)) $mapped = 'Calle';
         elseif (preg_match('/^(jr|jiron)\b/', $normalized)) $mapped = 'Jirón';
         elseif (preg_match('/^(psj|pje|pasaje)\b/', $normalized)) $mapped = 'Pasaje';
-        elseif (preg_match('/^(peatonal)\b/', $normalized)) $mapped = 'Peatonal';
-        elseif (preg_match('/^(boulevard|bulevar)\b/', $normalized)) $mapped = 'Boulevard';
 
         $target = $mapped ?: implode(' ', array_map(fn($w) => $w === '' ? '' : mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), explode(' ', $normalized)));
         if ($target === '') $target = 'Sin Especificar';
@@ -496,8 +365,8 @@ class LogicwareLotImportService
             'sold' => 'vendido',
             'reservado' => 'reservado',
             'reserved' => 'reservado',
-            'bloqueado' => 'bloqueado',
-            'blocked' => 'bloqueado',
+            'bloqueado' => 'reservado',
+            'blocked' => 'reservado',
         ];
 
         return $statusMap[$normalized] ?? 'disponible';

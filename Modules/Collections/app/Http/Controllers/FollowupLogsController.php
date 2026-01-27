@@ -4,7 +4,6 @@ namespace Modules\Collections\app\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\DB;
 use Modules\Collections\app\Models\FollowupLog;
 use Modules\Collections\app\Models\Followup;
 
@@ -34,23 +33,6 @@ class FollowupLogsController extends Controller
             'notes' => 'nullable|string',
             'logged_at' => 'nullable|date',
         ]);
-
-        if (empty($data['employee_id'])) {
-            $user = $request->user();
-            if ($user) {
-                $employeeId = DB::table('employees')->where('user_id', $user->user_id)->value('employee_id');
-                if ($employeeId) {
-                    $data['employee_id'] = (int) $employeeId;
-                }
-            }
-        }
-
-        if (empty($data['employee_id']) && !empty($data['followup_id'])) {
-            $employeeId = DB::table('collection_followups')->where('followup_id', $data['followup_id'])->value('assigned_employee_id');
-            if ($employeeId) {
-                $data['employee_id'] = (int) $employeeId;
-            }
-        }
 
         if (empty($data['logged_at'])) {
             $data['logged_at'] = now();

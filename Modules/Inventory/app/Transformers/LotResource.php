@@ -22,36 +22,6 @@ class LotResource extends JsonResource
             'total_price'          => $this->total_price,  // Precio base del lote
             'currency'             => $this->currency,
             'status'               => $this->status,
-            'external_id'          => $this->external_id,
-            'external_code'        => $this->external_code,
-            'external_sync_at'     => $this->external_sync_at,
-            'external'             => [
-                'source' => $this->external_data['source'] ?? null,
-                'frontage' => $this->external_data['unit']['frontage'] ?? null,
-                'depth' => $this->external_data['unit']['depth'] ?? null,
-                'dimensions' => $this->external_data['unit']['dimensions'] ?? null,
-                'orientation' => $this->external_data['unit']['orientation'] ?? null,
-                'is_corner' => $this->external_data['unit']['isCorner'] ?? null,
-                'price_per_sqm' => $this->external_data['unit']['pricePerSqm'] ?? null,
-                'remarks' => $this->external_data['unit']['remarks'] ?? null,
-                'unit' => $request->boolean('include_external_data') ? ($this->external_data['unit'] ?? null) : null,
-            ],
-            'financial_template'   => $this->whenLoaded('financialTemplate', function () {
-                return [
-                    'precio_lista' => $this->financialTemplate->precio_lista,
-                    'descuento' => $this->financialTemplate->descuento,
-                    'precio_venta' => $this->financialTemplate->precio_venta,
-                    'precio_contado' => $this->financialTemplate->precio_contado,
-                    'cuota_inicial' => $this->financialTemplate->cuota_inicial,
-                    'ci_fraccionamiento' => $this->financialTemplate->ci_fraccionamiento,
-                    'cuota_balon' => $this->financialTemplate->cuota_balon,
-                    'bono_bpp' => $this->financialTemplate->bono_bpp,
-                    'installments_24' => $this->financialTemplate->installments_24,
-                    'installments_40' => $this->financialTemplate->installments_40,
-                    'installments_44' => $this->financialTemplate->installments_44,
-                    'installments_55' => $this->financialTemplate->installments_55,
-                ];
-            }),
             // Campos financieros removidos: funding, BPP, BFH, initial_quota
             
             // Relaciones

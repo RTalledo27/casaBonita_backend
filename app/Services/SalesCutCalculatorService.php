@@ -7,21 +7,6 @@ use Carbon\Carbon;
 
 class SalesCutCalculatorService
 {
-    private const LOGICWARE_SOLD_STATUSES = ['vendido', 'venta', 'sale', 'sold'];
-    private const LOGICWARE_RESERVED_STATUSES = ['reservado', 'reserva', 'separacion', 'separación', 'proforma', 'bloqueado', 'blocked'];
-    private const SALES_CONTRACT_STATUSES = ['vigente'];
-    private const PAYMENT_CONTRACT_STATUSES = ['vigente', 'pendiente_aprobacion', 'resuelto'];
-
-    public static function salesContractStatuses(): array
-    {
-        return self::SALES_CONTRACT_STATUSES;
-    }
-
-    public static function paymentContractStatuses(): array
-    {
-        return self::PAYMENT_CONTRACT_STATUSES;
-    }
-
     /**
      * Calcular corte para un período específico
      * 
@@ -37,8 +22,6 @@ class SalesCutCalculatorService
 
         // Calcular ventas (contratos firmados en el período)
         $salesData = $this->calculateSales($startDateStr, $endDateStr);
-
-        $reservationsData = $this->calculateReservations($startDateStr, $endDateStr);
         
         // Calcular pagos (pagos realizados en el período)
         $paymentsData = $this->calculatePayments($startDateStr, $endDateStr);
@@ -70,9 +53,6 @@ class SalesCutCalculatorService
             'total_sales_count' => $salesData['count'],
             'total_revenue' => $salesData['revenue'],
             'total_down_payments' => $salesData['down_payments'],
-            'reservations_count' => $reservationsData['count'],
-            'separation_total' => $reservationsData['separation_total'],
-            'converted_reservations' => $reservationsData['converted'],
             'total_payments_count' => $paymentsData['count'],
             'total_payments_received' => $paymentsData['amount'],
             'paid_installments_count' => $paymentsData['installments'],
@@ -98,28 +78,33 @@ class SalesCutCalculatorService
             })
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
-            ->whereIn('c.status', self::SALES_CONTRACT_STATUSES)
+            ->where('c.status', 'vigente')
+            ->where(function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('c.source', 'logicware')
+                        ->where(function ($q2) {
+                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
+                        });
+                })->orWhere(function ($qq) {
+                    $qq->where(function ($q2) {
+                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
+                    })->whereNotNull('c.pdf_path')
+                        ->where('c.pdf_path', '!=', '');
+                });
+            })
             ->select(
                 'c.contract_id',
                 'c.total_price',
                 'c.down_payment',
                 'c.advisor_id',
                 'c.sign_date',
-                'c.source',
-                'l.status as lot_status',
                 DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
-                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name'),
-                DB::raw("LOWER(TRIM(COALESCE(
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.units[0].status')),
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.units[0].state')),
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit_status')),
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit.status')),
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.unit.state')),
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status')),
-                    JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.state')),
-                    l.status,
-                    ''
-                ))) as logicware_status")
+                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name')
             )
             ->get();
 
@@ -134,23 +119,6 @@ class SalesCutCalculatorService
         ];
     }
 
-    private function calculateReservations(string $startDate, string $endDate): array
-    {
-        $base = DB::table('reservations as r')
-            ->leftJoin('contracts as c', 'r.reservation_id', '=', 'c.reservation_id')
-            ->whereBetween('r.reservation_date', [$startDate, $endDate]);
-
-        $count = (clone $base)->count();
-        $separationTotal = (clone $base)->sum('r.deposit_amount') ?? 0;
-        $converted = (clone $base)->whereNotNull('c.contract_id')->where('c.status', 'vigente')->count();
-
-        return [
-            'count' => (int) $count,
-            'separation_total' => (float) $separationTotal,
-            'converted' => (int) $converted,
-        ];
-    }
-
     /**
      * Calcular pagos del período
      */
@@ -159,28 +127,33 @@ class SalesCutCalculatorService
         $payments = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-            ->leftJoin('clients as cl', function ($join) {
-                $join->on('cl.client_id', '=', DB::raw('COALESCE(c.client_id, r.client_id)'));
-            })
-            ->leftJoin('lots as l', function ($join) {
-                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-            })
-            ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
-            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
+            ->where('c.status', 'vigente')
+            ->where(function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('c.source', 'logicware')
+                        ->where(function ($q2) {
+                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
+                        });
+                })->orWhere(function ($qq) {
+                    $qq->where(function ($q2) {
+                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
+                    })->whereNotNull('c.pdf_path')
+                        ->where('c.pdf_path', '!=', '');
+                });
+            })
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
-                'c.contract_number',
                 'p.amount',
                 'p.payment_date',
                 'p.method as payment_method',
-                'ps.installment_number',
-                'ps.type as installment_type',
-                'ps.due_date',
-                DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
-                DB::raw('CONCAT(COALESCE(m.name, ""), " - Lote ", COALESCE(l.num_lot, "")) as lot_name')
+                'ps.installment_number'
             )
             ->get();
 
@@ -192,59 +165,6 @@ class SalesCutCalculatorService
             'amount' => $amount,
             'installments' => $installments,
             'payments' => $payments,
-        ];
-    }
-
-    private function calculateCollectionsAlerts(string $endDate): array
-    {
-        $end = Carbon::parse($endDate)->endOfDay();
-        $soonEnd = Carbon::parse($endDate)->addDays(7)->endOfDay();
-
-        $overdueBase = DB::table('payment_schedules as ps')
-            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-            ->leftJoin('lots as l', function ($join) {
-                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-            })
-            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
-            ->where('ps.status', '!=', 'pagado')
-            ->whereNotNull('ps.due_date')
-            ->whereDate('ps.due_date', '<=', $end->toDateString())
-            ->where(function ($q) {
-                $q->whereNull('ps.type')->orWhere('ps.type', '!=', 'bono_bpp');
-            });
-
-        $overdueCount = (clone $overdueBase)->count();
-        $overdueAmount = (clone $overdueBase)->sum('ps.amount') ?? 0;
-
-        $dueSoonBase = DB::table('payment_schedules as ps')
-            ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-            ->leftJoin('lots as l', function ($join) {
-                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-            })
-            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
-            ->where('ps.status', '!=', 'pagado')
-            ->whereNotNull('ps.due_date')
-            ->whereDate('ps.due_date', '>', $end->toDateString())
-            ->whereDate('ps.due_date', '<=', $soonEnd->toDateString())
-            ->where(function ($q) {
-                $q->whereNull('ps.type')->orWhere('ps.type', '!=', 'bono_bpp');
-            });
-
-        $dueSoonCount = (clone $dueSoonBase)->count();
-        $dueSoonAmount = (clone $dueSoonBase)->sum('ps.amount') ?? 0;
-
-        return [
-            'overdue' => [
-                'count' => (int)$overdueCount,
-                'amount' => (float)$overdueAmount,
-            ],
-            'due_soon' => [
-                'count' => (int)$dueSoonCount,
-                'amount' => (float)$dueSoonAmount,
-                'days' => 7,
-            ],
         ];
     }
 
@@ -279,24 +199,52 @@ class SalesCutCalculatorService
         $cashBalance = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-            ->leftJoin('lots as l', function ($join) {
-                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-            })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
-            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
+            ->where('c.status', 'vigente')
+            ->where(function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('c.source', 'logicware')
+                        ->where(function ($q2) {
+                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
+                        });
+                })->orWhere(function ($qq) {
+                    $qq->where(function ($q2) {
+                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
+                    })->whereNotNull('c.pdf_path')
+                        ->where('c.pdf_path', '!=', '');
+                });
+            })
             ->where('p.method', 'efectivo')
             ->sum('p.amount') ?? 0;
 
         $bankBalance = DB::table('payments as p')
             ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-            ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-            ->leftJoin('lots as l', function ($join) {
-                $join->on('l.lot_id', '=', DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-            })
             ->whereBetween('p.payment_date', [$startDate, $endDate])
-            ->whereIn('c.status', self::PAYMENT_CONTRACT_STATUSES)
+            ->where('c.status', 'vigente')
+            ->where(function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('c.source', 'logicware')
+                        ->where(function ($q2) {
+                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
+                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
+                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
+                        });
+                })->orWhere(function ($qq) {
+                    $qq->where(function ($q2) {
+                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
+                    })->whereNotNull('c.pdf_path')
+                        ->where('c.pdf_path', '!=', '');
+                });
+            })
             ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
             ->sum('p.amount') ?? 0;
 
@@ -366,32 +314,10 @@ class SalesCutCalculatorService
             ->values()
             ->all();
 
-        // Top 10 pagos
-        $topPayments = $payments->sortByDesc('amount')
-            ->take(10)
-            ->map(function($payment) {
-                return [
-                    'payment_id' => $payment->payment_id,
-                    'contract_id' => $payment->contract_id,
-                    'contract_number' => $payment->contract_number ?? null,
-                    'client_name' => $payment->client_name ?? null,
-                    'lot_name' => $payment->lot_name ?? null,
-                    'amount' => $payment->amount,
-                    'date' => $payment->payment_date,
-                    'method' => $payment->payment_method ?? null,
-                    'installment_number' => $payment->installment_number ?? null,
-                    'installment_type' => $payment->installment_type ?? null,
-                ];
-            })->values()->all();
-
-        $alerts = $this->calculateCollectionsAlerts($endDate);
-
         return [
             'top_sales' => $topSales,
             'sales_by_advisor' => $salesByAdvisor,
             'payments_by_method' => $paymentsByMethod,
-            'top_payments' => $topPayments,
-            'collections_alerts' => $alerts,
         ];
     }
 

@@ -31,9 +31,7 @@ class SalesReportsController extends Controller
         ]);
 
         try {
-            if (config('app.debug')) {
-                \Log::info('Get all sales request:', $request->all());
-            }
+            \Log::info('Get all sales request:', $request->all());
             
             $sales = $this->salesReportsService->getAllSales(
                 $request->input('date_from'),
@@ -71,9 +69,7 @@ class SalesReportsController extends Controller
         ]);
 
         try {
-            if (config('app.debug')) {
-                \Log::info('Dashboard request received:', $request->all());
-            }
+            \Log::info('Dashboard request received:', $request->all());
             
             $data = $this->salesReportsService->getDashboardData(
                 $request->input('date_from'),
@@ -82,9 +78,7 @@ class SalesReportsController extends Controller
                 $request->input('project_id')
             );
 
-            if (config('app.debug')) {
-                \Log::info('Dashboard response data:', $data);
-            }
+            \Log::info('Dashboard response data:', $data);
 
             return response()->json([
                 'success' => true,
@@ -92,9 +86,7 @@ class SalesReportsController extends Controller
             ]);
         } catch (\Exception $e) {
             \Log::error('Dashboard error: ' . $e->getMessage());
-            if (config('app.debug')) {
-                \Log::error('Dashboard error trace: ' . $e->getTraceAsString());
-            }
+            \Log::error('Dashboard error trace: ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al obtener datos del dashboard: ' . $e->getMessage()

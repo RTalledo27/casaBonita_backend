@@ -3,7 +3,6 @@
 namespace Modules\Sales\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class PaymentRequest extends FormRequest
 {
@@ -14,11 +13,9 @@ class PaymentRequest extends FormRequest
     {
         return [
             'method'           => 'required|in:transferencia,efectivo,tarjeta',
-            'schedule_id' => [
-                'required',
-                'exists:payment_schedules,schedule_id',
-                Rule::unique('payments', 'schedule_id'),
-            ],
+            'reference'        => 'nullable|string|max:60',
+
+            'schedule_id' => 'required|exists:payment_schedules,schedule_id',
             'journal_entry_id' => 'nullable|exists:journal_entries,journal_entry_id', // Puede ser nulo si se crea después
             'payment_date' => 'required|date',
             'amount' => 'required|numeric|min:0',

@@ -6,7 +6,6 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
-use Illuminate\Auth\AuthenticationException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withProviders([
@@ -45,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Add CORS middleware for API routes
         $middleware->api([
             \Illuminate\Http\Middleware\HandleCors::class,
+            \App\Http\Middleware\AuditRequestMiddleware::class,
         ]);
         
         // Enable CORS for all routes
@@ -62,15 +62,5 @@ return Application::configure(basePath: dirname(__DIR__))
         // Agregar middleware global para manejar errores de ZipArchive
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(function (AuthenticationException $e, $request) {
-            $path = ltrim((string) $request->path(), '/');
-            if (str_starts_with($path, 'api/')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No autenticado',
-                ], 401);
-            }
-
-            return null;
-        });
+        //
     })->create();

@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Exception;
 
 /**
@@ -190,14 +190,13 @@ class LogicwareApiService
      * @return array
      * @throws Exception
      */
-    public function getProperties(array $filters = [], bool $forceRefresh = false, bool $debugRawResponse = false): array
+    public function getProperties(array $filters = [], bool $forceRefresh = false): array
     {
         try {
             $this->validateApiKey();
 
             // Clave de caché única por subdomain
-            $filtersKey = md5(json_encode($filters));
-            $cacheKey = "logicware_stock_{$this->subdomain}_{$filtersKey}";
+            $cacheKey = "logicware_stock_{$this->subdomain}";
             $cacheDuration = now()->addHours(6); // 6 horas de caché
 
             // Si NO se fuerza refresh, intentar obtener del caché
@@ -209,14 +208,6 @@ class LogicwareApiService
                     'total' => isset($cachedData['data']) ? count($cachedData['data']) : 0,
                     'cached_at' => $cachedData['cached_at'] ?? 'unknown'
                 ]);
-
-                if ($debugRawResponse) {
-                    Log::warning('[LogicwareAPI] debug_raw_response solicitado, pero se usó caché (activa forceRefresh para ver respuesta real)', [
-                        'cache_key' => $cacheKey,
-                        'filters' => $filters,
-                        'subdomain' => $this->subdomain,
-                    ]);
-                }
 
                 return $cachedData;
             }
@@ -276,34 +267,6 @@ class LogicwareApiService
                     'url' => $url
                 ]);
                 throw new Exception("Error al obtener unidades: HTTP {$response->status()} - " . $response->body());
-            }
-
-            if ($debugRawResponse) {
-                $rawBody = $response->body();
-                try {
-                    $dir = storage_path('logs/logicware');
-                    if (!is_dir($dir)) {
-                        @mkdir($dir, 0755, true);
-                    }
-
-                    $fileName = 'full_stock_raw_' . $this->subdomain . '_' . now()->format('Ymd_His') . '.json';
-                    $filePath = $dir . DIRECTORY_SEPARATOR . $fileName;
-                    @file_put_contents($filePath, $rawBody);
-
-                    Log::info('[LogicwareAPI] FULL STOCK RAW (exacto) guardado', [
-                        'bytes' => strlen($rawBody),
-                        'file' => $filePath,
-                        'filters' => $filters,
-                    ]);
-
-                    Log::info('[LogicwareAPI] FULL STOCK RAW (exacto) body', [
-                        'raw' => $rawBody,
-                    ]);
-                } catch (\Throwable $e) {
-                    Log::warning('[LogicwareAPI] No se pudo guardar/loguear FULL STOCK RAW', [
-                        'error' => $e->getMessage(),
-                    ]);
-                }
             }
 
             $data = $response->json();
@@ -438,11 +401,11 @@ class LogicwareApiService
      * @return array
      * @throws Exception
      */
-    public function getAvailableProperties(bool $forceRefresh = false, bool $debugRawResponse = false): array
+    public function getAvailableProperties(bool $forceRefresh = false): array
     {
         return $this->getProperties([
             'status' => 'available'
-        ], $forceRefresh, $debugRawResponse);
+        ], $forceRefresh);
     }
 
     /**
@@ -657,13 +620,12 @@ class LogicwareApiService
      * @return array
      * @throws Exception
      */
-    public function getFullStockData(bool $forceRefresh = false, bool $debugRawResponse = false): array
+    public function getFullStockData(bool $forceRefresh = false): array
     {
         try {
             $this->validateApiKey();
 
             $cacheKey = "logicware_full_stock_{$this->subdomain}";
-            $indexCacheKey = "logicware_full_stock_index_{$this->subdomain}";
             $cacheDuration = now()->addHours(6); // 6 horas de caché
 
             // Verificar caché primero (a menos que se fuerce refresh)
@@ -673,12 +635,6 @@ class LogicwareApiService
                     'cache_key' => $cacheKey,
                     'total_units' => isset($cachedData['data']) ? count($cachedData['data']) : 0
                 ]);
-                if ($debugRawResponse) {
-                    Log::warning('[LogicwareAPI] debug_raw_response solicitado, pero se usó caché (activa force_refresh=1 para ver respuesta real)', [
-                        'cache_key' => $cacheKey,
-                        'subdomain' => $this->subdomain,
-                    ]);
-                }
                 return $cachedData;
             }
 
@@ -707,41 +663,6 @@ class LogicwareApiService
                 ->withHeaders($this->getAuthHeaders())
                 ->get($url);
 
-            if ($debugRawResponse) {
-                $rawBody = $response->body();
-                try {
-                    $dir = storage_path('logs/logicware');
-                    if (!is_dir($dir)) {
-                        @mkdir($dir, 0755, true);
-                    }
-
-                    $fileName = 'full_stock_raw_' . $this->subdomain . '_' . now()->format('Ymd_His') . '.json';
-                    $filePath = $dir . DIRECTORY_SEPARATOR . $fileName;
-                    @file_put_contents($filePath, $rawBody);
-
-                    Log::info('[LogicwareAPI] FULL STOCK RAW guardado', [
-                        'bytes' => strlen($rawBody),
-                        'file' => $filePath,
-                    ]);
-
-                    $chunkSize = 5000;
-                    $length = strlen($rawBody);
-                    $parts = (int) ceil($length / $chunkSize);
-                    for ($i = 0; $i < $parts; $i++) {
-                        $chunk = substr($rawBody, $i * $chunkSize, $chunkSize);
-                        Log::debug('[LogicwareAPI] FULL STOCK RAW body chunk', [
-                            'part' => $i + 1,
-                            'parts' => $parts,
-                            'chunk' => $chunk,
-                        ]);
-                    }
-                } catch (\Throwable $e) {
-                    Log::warning('[LogicwareAPI] No se pudo guardar/loguear FULL STOCK RAW', [
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-
             if (!$response->successful()) {
                 // Si es error 429 (rate limit), intentar usar datos en caché aunque estén expirados
                 if ($response->status() === 429) {
@@ -768,16 +689,6 @@ class LogicwareApiService
             }
 
             $data = $response->json();
-
-            $units = $data['data'] ?? null;
-            if (is_array($units)) {
-                $index = $this->buildFullStockIndex($units);
-                Cache::put($indexCacheKey, $index, $cacheDuration);
-                Log::info('[LogicwareAPI] ✅ Index de full stock guardado en caché', [
-                    'cache_key' => $indexCacheKey,
-                    'total_units' => count($index),
-                ]);
-            }
             
             // Agregar metadata
             $data['cached_at'] = now()->toDateTimeString();
@@ -814,84 +725,6 @@ class LogicwareApiService
             ]);
             throw $e;
         }
-    }
-
-    public function getFullStockCache(): ?array
-    {
-        $cacheKey = "logicware_full_stock_{$this->subdomain}";
-        $cached = Cache::get($cacheKey);
-        return is_array($cached) ? $cached : null;
-    }
-
-    public function getFullStockIndexFromCache(): array
-    {
-        $indexCacheKey = "logicware_full_stock_index_{$this->subdomain}";
-        $cachedIndex = Cache::get($indexCacheKey);
-        if (is_array($cachedIndex)) {
-            return $cachedIndex;
-        }
-
-        $cached = $this->getFullStockCache();
-        if (!$cached) {
-            return [];
-        }
-
-        $units = [];
-        $data = $cached['data'] ?? null;
-        if (is_array($data) && array_keys($data) === range(0, count($data) - 1)) {
-            $units = $data;
-        } elseif (is_array($data) && isset($data['data']) && is_array($data['data'])) {
-            $units = $data['data'];
-        }
-
-        $index = [];
-        foreach ($units as $u) {
-            if (!is_array($u)) continue;
-            $code = $u['code'] ?? $u['unitNumber'] ?? $u['unit_number'] ?? null;
-            if (!is_string($code) || trim($code) === '') continue;
-            $key = $this->normalizeUnitCode($code);
-            $index[$key] = $u;
-        }
-
-        return $index;
-    }
-
-    protected function buildFullStockIndex(array $units): array
-    {
-        $index = [];
-        foreach ($units as $u) {
-            if (!is_array($u)) continue;
-            $code = $u['code'] ?? $u['unitNumber'] ?? $u['unit_number'] ?? null;
-            if (!is_string($code) || trim($code) === '') continue;
-            $key = $this->normalizeUnitCode($code);
-            $unitModel = $u['unitModel'] ?? $u['unit_model'] ?? null;
-            $modelName = null;
-            if (is_array($unitModel)) {
-                $modelName = $unitModel['modName'] ?? ($unitModel['modelName'] ?? ($unitModel['name'] ?? null));
-            }
-
-            $index[$key] = [
-                'code' => $u['code'] ?? $code,
-                'unitNumber' => $u['unitNumber'] ?? $u['unit_number'] ?? null,
-                'modelName' => $u['modelName'] ?? $modelName,
-                'unitModel' => $unitModel,
-                'street_type' => $u['street_type'] ?? null,
-                'streetType' => $u['streetType'] ?? null,
-                'streetTypeName' => $u['streetTypeName'] ?? null,
-                'roadType' => $u['roadType'] ?? ($u['road_type'] ?? null),
-                'ubicacion' => $u['ubicacion'] ?? ($u['UBICACIÓN'] ?? null),
-            ];
-        }
-
-        return $index;
-    }
-
-    protected function normalizeUnitCode(string $code): string
-    {
-        $raw = strtoupper(trim($code));
-        $raw = str_replace([' ', '_'], ['', '-'], $raw);
-        $raw = preg_replace('/-+/', '-', $raw);
-        return trim($raw);
     }
 
     /**
@@ -1290,7 +1123,7 @@ class LogicwareApiService
      * @return array
      * @throws Exception
      */
-    public function getStockByStage(string $projectCode, string $stageId, bool $forceRefresh = false, bool $debugRawResponse = false): array
+    public function getStockByStage(string $projectCode, string $stageId, bool $forceRefresh = false): array
     {
         try {
             $this->validateApiKey();
@@ -1304,13 +1137,6 @@ class LogicwareApiService
                     'cache_key' => $cacheKey,
                     'total' => isset($cachedData['data']) ? count($cachedData['data']) : 0
                 ]);
-                if ($debugRawResponse) {
-                    Log::warning('[LogicwareAPI] debug_raw_response solicitado, pero se usó caché (activa forceRefresh para ver respuesta real)', [
-                        'cache_key' => $cacheKey,
-                        'projectCode' => $projectCode,
-                        'stageId' => $stageId,
-                    ]);
-                }
                 return $cachedData;
             }
 
@@ -1369,47 +1195,6 @@ class LogicwareApiService
                 throw new Exception("Error al obtener stock: HTTP {$response->status()} - " . $response->body());
             }
 
-            if ($debugRawResponse) {
-                $rawBody = $response->body();
-                try {
-                    $dir = storage_path('logs/logicware');
-                    if (!is_dir($dir)) {
-                        @mkdir($dir, 0755, true);
-                    }
-
-                    $fileName = 'stage_stock_raw_' . $this->subdomain . '_' . $projectCode . '_' . $stageId . '_' . now()->format('Ymd_His') . '.json';
-                    $filePath = $dir . DIRECTORY_SEPARATOR . $fileName;
-                    @file_put_contents($filePath, $rawBody);
-
-                    Log::info('[LogicwareAPI] Respuesta RAW guardada', [
-                        'projectCode' => $projectCode,
-                        'stageId' => $stageId,
-                        'bytes' => strlen($rawBody),
-                        'file' => $filePath,
-                    ]);
-
-                    $chunkSize = 5000;
-                    $length = strlen($rawBody);
-                    $parts = (int) ceil($length / $chunkSize);
-                    for ($i = 0; $i < $parts; $i++) {
-                        $chunk = substr($rawBody, $i * $chunkSize, $chunkSize);
-                        Log::debug('[LogicwareAPI] RAW stage stock body chunk', [
-                            'projectCode' => $projectCode,
-                            'stageId' => $stageId,
-                            'part' => $i + 1,
-                            'parts' => $parts,
-                            'chunk' => $chunk,
-                        ]);
-                    }
-                } catch (\Throwable $e) {
-                    Log::warning('[LogicwareAPI] No se pudo guardar respuesta RAW', [
-                        'projectCode' => $projectCode,
-                        'stageId' => $stageId,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-
             $data = $response->json();
             
             // Normalizar estructura: El API devuelve data.properties[], nosotros necesitamos data[]
@@ -1463,10 +1248,6 @@ class LogicwareApiService
                             $unit['isCorner'] ? 'Lote esquinero' : null,
                             $unit['orientation'] ? 'Orientación: ' . $unit['orientation'] : null,
                         ]),
-
-                        // Campos extra útiles (si existen en el API)
-                        'unitModel' => $unit['unitModel'] ?? $unit['unit_model'] ?? null,
-                        'modelName' => $unit['unitModel']['modName'] ?? ($unit['unitModel']['modelName'] ?? null),
                     ];
                 }, $data['data']['properties']);
                 

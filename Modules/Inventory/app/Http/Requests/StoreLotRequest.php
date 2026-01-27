@@ -19,7 +19,7 @@ class StoreLotRequest extends FormRequest
             'area_construction_m2' => 'nullable|numeric',
             'total_price'          => 'required|numeric',
             'currency'             => 'required|string|size:3',
-            'status'               => 'required|in:disponible,reservado,bloqueado,vendido',
+            'status'               => 'required|in:disponible,reservado,vendido',
             // Financial fields removed - now handled by Contract requests
         ];
     }

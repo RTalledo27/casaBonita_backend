@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
@@ -18,10 +19,10 @@ Schedule::command('sales:create-daily-cut')
     ->timezone('America/Lima')
     ->description('Crear corte diario de ventas automáticamente')
     ->onFailure(function () {
-        \Log::error('Failed to create daily sales cut');
+        Log::error('Failed to create daily sales cut');
     })
     ->onSuccess(function () {
-        \Log::info('Daily sales cut created successfully');
+        Log::info('Daily sales cut created successfully');
     });
 
 // =======================================================================================
@@ -36,10 +37,10 @@ Schedule::command('bonuses:calculate')
     ->description('Cálculo automático de bonos mensuales')
     ->onFailure(function () {
         // Log error o enviar notificación
-        \Log::error('Failed to calculate monthly bonuses');
+        Log::error('Failed to calculate monthly bonuses');
     })
     ->onSuccess(function () {
-        \Log::info('Monthly bonuses calculated successfully');
+        Log::info('Monthly bonuses calculated successfully');
     });
 
 // Calcular bonos quincenales (día 1 y 16 de cada mes)
@@ -65,10 +66,10 @@ Schedule::command('logicware:renew-token')
     ->timezone('America/Lima')
     ->description('Renovación automática del Bearer Token de Logicware (cada 5 minutos)')
     ->onFailure(function () {
-        \Log::error('[LogicwareScheduler] Error al renovar token automáticamente');
+        Log::error('[LogicwareScheduler] Error al renovar token automáticamente');
     })
     ->onSuccess(function () {
-        \Log::info('[LogicwareScheduler] Token de Logicware verificado/renovado');
+        Log::info('[LogicwareScheduler] Token de Logicware verificado/renovado');
     });
 
 // =======================================================================================
@@ -82,10 +83,10 @@ Schedule::command('logicware:import-contracts')
     ->timezone('America/Lima')
     ->description('Sincronización de contratos desde Logicware cada 30 minutos')
     ->onFailure(function () {
-        \Log::error('[LogicwareSync] Error al importar contratos desde Logicware');
+        Log::error('[LogicwareSync] Error al importar contratos desde Logicware');
     })
     ->onSuccess(function () {
-        \Log::info('[LogicwareSync] Contratos importados exitosamente desde Logicware');
+        Log::info('[LogicwareSync] Contratos importados exitosamente desde Logicware');
     });
 
 // =======================================================================================
@@ -99,10 +100,10 @@ Schedule::command('collections:generate-schedules')
     ->timezone('America/Lima')
     ->description('Generar cronogramas de pagos para contratos activos sin cronograma')
     ->onFailure(function () {
-        \Log::error('[ScheduleGenerator] Error al generar cronogramas de pagos');
+        Log::error('[ScheduleGenerator] Error al generar cronogramas de pagos');
     })
     ->onSuccess(function () {
-        \Log::info('[ScheduleGenerator] Cronogramas de pagos generados exitosamente');
+        Log::info('[ScheduleGenerator] Cronogramas de pagos generados exitosamente');
     });
 
 // =======================================================================================
@@ -115,10 +116,26 @@ Schedule::command('cache:prune-stale-tags')
     ->timezone('America/Lima')
     ->description('Limpieza de tags obsoletos en cache')
     ->onFailure(function () {
-        \Log::error('[CacheMaintenance] Error al limpiar cache obsoleto');
+        Log::error('[CacheMaintenance] Error al limpiar cache obsoleto');
     })
     ->onSuccess(function () {
-        \Log::info('[CacheMaintenance] Cache limpiado exitosamente');
+        Log::info('[CacheMaintenance] Cache limpiado exitosamente');
+    });
+
+// =======================================================================================
+// AUDIT LOG RETENTION (SYSTEM ACTIVITY)
+// =======================================================================================
+
+// Limpieza automática de auditoría técnica (http_request, login_failed, etc.)
+Schedule::command('audit:prune')
+    ->dailyAt('03:30')
+    ->timezone('America/Lima')
+    ->description('Limpieza automática de logs de auditoría según retención')
+    ->onFailure(function () {
+        Log::error('[AuditPrune] Error al limpiar logs de auditoría');
+    })
+    ->onSuccess(function () {
+        Log::info('[AuditPrune] Logs de auditoría limpiados exitosamente');
     });
 
 // =======================================================================================

@@ -65,6 +65,7 @@ class AdminUserSeeder extends Seeder
             'security.users.destroy',
             'security.users.change-password',
             'security.users.toggle-status',
+            'security.audit.view',
 
             //MODULE CRM - ADDRESS
             'crm.addresses.view',
@@ -120,12 +121,6 @@ class AdminUserSeeder extends Seeder
             'sales.contracts.update',
             'sales.contracts.delete',
             'sales.conversions.process',
-
-            // MODULE SALES - PAYMENTS
-            'sales.payments.view',
-            'sales.payments.store',
-            'sales.payments.update',
-            'sales.payments.destroy',
             
             // MODULE SALES - CUTS
             'sales.cuts.view',
@@ -254,6 +249,8 @@ class AdminUserSeeder extends Seeder
             );
             $createdCount++;
         }
+
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
 
         $this->command->line("   ✓ {$createdCount} permisos creados/verificados");
     }

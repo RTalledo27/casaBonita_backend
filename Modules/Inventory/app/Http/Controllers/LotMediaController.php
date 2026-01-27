@@ -11,7 +11,7 @@ use Modules\Inventory\Http\Requests\LotMediaRequest;
 use Modules\Inventory\Models\LotMedia;
 use Modules\Inventory\Repositories\LotMediaRepository;
 use Modules\Inventory\Transformers\lotMediaResource;
-use Modules\Services\PusherNotifier;
+use Modules\services\PusherNotifier;
 use Pusher\Pusher;
 
 class LotMediaController extends Controller

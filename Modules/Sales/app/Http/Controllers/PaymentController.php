@@ -29,7 +29,7 @@ class PaymentController extends Controller
         $this->middleware('permission:sales.payments.destroy')->only('destroy');
     }
 
-    protected function buildLedgerQuery(Carbon $start, Carbon $end, array $filters = [])
+    protected function buildLedgerQuery(Carbon $start, Carbon $end)
     {
         $logicwarePaymentAgg = DB::table('logicware_payments')
             ->select(
@@ -68,23 +68,12 @@ class PaymentController extends Controller
                 DB::raw('p.payment_id as row_key'),
                 DB::raw("CONCAT('payment-', p.payment_id) as id"),
                 DB::raw("'payment' as source"),
-                DB::raw("CASE 
-                    WHEN ps.type = 'inicial' AND (
-                        ps.installment_number = 0 OR 
-                        LOWER(COALESCE(ps.notes, '')) LIKE '%separ%' OR 
-                        LOWER(COALESCE(ps.notes, '')) LIKE '%reserva%' OR
-                        (r.deposit_amount IS NOT NULL AND ABS(ps.amount - r.deposit_amount) < 0.01) OR
-                        ABS(ps.amount - 100) < 0.01
-                    )
-                        THEN 'reservation_deposit'
-                    ELSE 'installment'
-                END as movement_type"),
+                DB::raw("'installment' as movement_type"),
                 'p.payment_id',
                 DB::raw('NULL as reservation_id'),
                 'p.schedule_id',
                 'c.contract_id',
                 'c.contract_number',
-                'c.advisor_id',
                 DB::raw('COALESCE(c.client_id, r.client_id) as client_id'),
                 DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
                 DB::raw('COALESCE(c.lot_id, r.lot_id) as lot_id'),
@@ -97,7 +86,6 @@ class PaymentController extends Controller
                 DB::raw('p.payment_date as date'),
                 'ps.installment_number',
                 'ps.type as installment_type',
-                'ps.notes as schedule_notes',
                 'ps.due_date'
             );
 
@@ -125,23 +113,12 @@ class PaymentController extends Controller
                 DB::raw('(1000000000 + ps.schedule_id) as row_key'),
                 DB::raw("CONCAT('schedule-', ps.schedule_id) as id"),
                 DB::raw("'schedule' as source"),
-                DB::raw("CASE 
-                    WHEN ps.type = 'inicial' AND (
-                        ps.installment_number = 0 OR 
-                        LOWER(COALESCE(ps.notes, '')) LIKE '%separ%' OR 
-                        LOWER(COALESCE(ps.notes, '')) LIKE '%reserva%' OR
-                        (r.deposit_amount IS NOT NULL AND ABS(ps.amount - r.deposit_amount) < 0.01) OR
-                        ABS(ps.amount - 100) < 0.01
-                    )
-                        THEN 'reservation_deposit'
-                    ELSE 'installment'
-                END as movement_type"),
+                DB::raw("'installment' as movement_type"),
                 DB::raw('NULL as payment_id'),
                 DB::raw('NULL as reservation_id'),
                 'ps.schedule_id',
                 'c.contract_id',
                 'c.contract_number',
-                'c.advisor_id',
                 DB::raw('COALESCE(c.client_id, r.client_id) as client_id'),
                 DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
                 DB::raw('COALESCE(c.lot_id, r.lot_id) as lot_id'),
@@ -154,7 +131,6 @@ class PaymentController extends Controller
                 DB::raw('ps.paid_date as date'),
                 'ps.installment_number',
                 'ps.type as installment_type',
-                'ps.notes as schedule_notes',
                 'ps.due_date'
             );
 
@@ -175,7 +151,6 @@ class PaymentController extends Controller
                 DB::raw('NULL as schedule_id'),
                 'c.contract_id',
                 'c.contract_number',
-                'c.advisor_id',
                 'r.client_id',
                 DB::raw('CONCAT(COALESCE(cl.first_name, ""), " ", COALESCE(cl.last_name, "")) as client_name'),
                 'r.lot_id',
@@ -188,7 +163,6 @@ class PaymentController extends Controller
                 DB::raw('r.deposit_paid_at as date'),
                 DB::raw('NULL as installment_number'),
                 DB::raw('NULL as installment_type'),
-                DB::raw('NULL as schedule_notes'),
                 DB::raw('NULL as due_date')
             );
 
@@ -196,77 +170,9 @@ class PaymentController extends Controller
             ->unionAll($paidSchedulesWithoutPayment)
             ->unionAll($reservationDeposits);
 
-        $query = DB::query()
+        return DB::query()
             ->fromSub($union, 'ledger')
             ->orderByDesc('date');
-
-        if (!empty($filters['movement_type'])) {
-            $query->where('movement_type', $filters['movement_type']);
-        }
-
-        if (!empty($filters['source'])) {
-            $query->where('source', $filters['source']);
-        }
-
-        if (!empty($filters['method'])) {
-            $query->where('method', $filters['method']);
-        }
-
-        if (!empty($filters['advisor_id'])) {
-            $query->where('advisor_id', (int) $filters['advisor_id']);
-        }
-
-        if (array_key_exists('has_voucher', $filters) && $filters['has_voucher'] !== null && $filters['has_voucher'] !== '') {
-            $query->where('has_voucher', (int) $filters['has_voucher']);
-        }
-
-        if (!empty($filters['search'])) {
-            $term = (string) $filters['search'];
-            $term = trim($term);
-            if ($term !== '') {
-                $query->where(function ($q) use ($term) {
-                    $like = "%{$term}%";
-                    $q->where('client_name', 'LIKE', $like)
-                        ->orWhere('contract_number', 'LIKE', $like)
-                        ->orWhere('lot_name', 'LIKE', $like)
-                        ->orWhere('method', 'LIKE', $like)
-                        ->orWhere('reference', 'LIKE', $like)
-                        ->orWhere('bank_name', 'LIKE', $like)
-                        ->orWhere('schedule_notes', 'LIKE', $like)
-                        ->orWhere('id', 'LIKE', $like);
-
-                    if (ctype_digit($term)) {
-                        $n = (int) $term;
-                        $q->orWhere('payment_id', $n)
-                            ->orWhere('schedule_id', $n)
-                            ->orWhere('contract_id', $n)
-                            ->orWhere('client_id', $n)
-                            ->orWhere('lot_id', $n)
-                            ->orWhere('reservation_id', $n)
-                            ->orWhere('installment_number', $n);
-                    }
-                });
-            }
-        }
-
-        if (!empty($filters['sort_by'])) {
-            $allowed = [
-                'date' => 'date',
-                'amount' => 'amount',
-                'client_name' => 'client_name',
-                'contract_number' => 'contract_number',
-                'lot_name' => 'lot_name',
-                'method' => 'method',
-                'movement_type' => 'movement_type',
-                'source' => 'source',
-            ];
-            $col = $allowed[$filters['sort_by']] ?? 'date';
-            $dir = strtolower((string) ($filters['sort_dir'] ?? 'desc'));
-            $dir = in_array($dir, ['asc', 'desc'], true) ? $dir : 'desc';
-            $query->reorder()->orderBy($col, $dir);
-        }
-
-        return $query;
     }
 
     public function index()
@@ -366,21 +272,11 @@ class PaymentController extends Controller
         $endDate = $request->query('end_date');
         $perPage = (int) ($request->query('per_page', 50));
         $perPage = max(1, min(200, $perPage));
-        $filters = [
-            'search' => $request->query('search'),
-            'movement_type' => $request->query('movement_type'),
-            'source' => $request->query('source'),
-            'method' => $request->query('method'),
-            'advisor_id' => $request->query('advisor_id'),
-            'has_voucher' => $request->query('has_voucher'),
-            'sort_by' => $request->query('sort_by'),
-            'sort_dir' => $request->query('sort_dir'),
-        ];
 
         $start = $startDate ? Carbon::parse($startDate)->startOfDay() : now()->startOfMonth();
         $end = $endDate ? Carbon::parse($endDate)->endOfDay() : now()->endOfDay();
 
-        $paginated = $this->buildLedgerQuery($start, $end, $filters)->paginate($perPage);
+        $paginated = $this->buildLedgerQuery($start, $end)->paginate($perPage);
 
         return response()->json([
             'success' => true,
@@ -396,18 +292,11 @@ class PaymentController extends Controller
     {
         $startDate = $request->query('start_date');
         $endDate = $request->query('end_date');
-        $filters = [
-            'movement_type' => $request->query('movement_type'),
-            'source' => $request->query('source'),
-            'method' => $request->query('method'),
-            'advisor_id' => $request->query('advisor_id'),
-            'has_voucher' => $request->query('has_voucher'),
-        ];
 
         $start = $startDate ? Carbon::parse($startDate)->startOfDay() : now()->startOfMonth();
         $end = $endDate ? Carbon::parse($endDate)->endOfDay() : now()->endOfDay();
 
-        $items = $this->buildLedgerQuery($start, $end, $filters)->limit(5000)->get()->map(fn ($r) => (array) $r)->all();
+        $items = $this->buildLedgerQuery($start, $end)->limit(5000)->get()->map(fn ($r) => (array) $r)->all();
 
         $totalAmount = 0.0;
         foreach ($items as $it) {

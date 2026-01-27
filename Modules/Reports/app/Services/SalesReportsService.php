@@ -5,7 +5,6 @@ namespace Modules\Reports\Services;
 use Modules\Reports\Repositories\SalesRepository;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 
 class SalesReportsService
 {
@@ -29,48 +28,41 @@ class SalesReportsService
             $dateTo = Carbon::now()->format('Y-m-d');
         }
         
-        $cacheKey = "reports:sales_dashboard:v1:{$dateFrom}:{$dateTo}:employee={$employeeId}:project={$projectId}";
-
-        return Cache::remember($cacheKey, 120, function () use ($dateFrom, $dateTo, $employeeId, $projectId) {
-            try {
-                $summary = $this->getSalesSummary($dateFrom, $dateTo, $employeeId, $projectId);
-                $trends = $this->getSalesTrends($dateFrom, $dateTo, $employeeId, $projectId);
-                $topPerformers = $this->getTopPerformers($dateFrom, $dateTo, $projectId);
-                $conversionRates = $this->getConversionRates($dateFrom, $dateTo, $employeeId, $projectId);
-
-                if (config('app.debug')) {
-                    \Log::info('Dashboard data retrieved:', [
-                        'summary' => $summary,
-                        'trends' => $trends,
-                        'top_performers' => $topPerformers,
-                        'conversion_rates' => $conversionRates
-                    ]);
-                }
-
-                return [
-                    'summary' => $summary ?: [
-                        'total_sales' => 0,
-                        'total_revenue' => 0,
-                        'average_sale' => 0,
-                        'unique_clients' => 0,
-                        'active_employees' => 0
-                    ],
-                    'trends' => $trends ?: [],
-                    'top_performers' => $topPerformers ?: [],
-                    'conversion_rates' => $conversionRates ?: [
-                        'leads_to_prospects' => 0,
-                        'prospects_to_sales' => 0,
-                        'overall_conversion' => 0
-                    ]
-                ];
-            } catch (\Exception $e) {
-                \Log::error('Error in getDashboardData: ' . $e->getMessage());
-                if (config('app.debug')) {
-                    \Log::error('Stack trace: ' . $e->getTraceAsString());
-                }
-                return $this->getMockDashboardData();
-            }
-        });
+        try {
+            $summary = $this->getSalesSummary($dateFrom, $dateTo, $employeeId, $projectId);
+            $trends = $this->getSalesTrends($dateFrom, $dateTo, $employeeId, $projectId);
+            $topPerformers = $this->getTopPerformers($dateFrom, $dateTo, $projectId);
+            $conversionRates = $this->getConversionRates($dateFrom, $dateTo, $employeeId, $projectId);
+            
+            // Log the raw data for debugging
+            \Log::info('Dashboard data retrieved:', [
+                'summary' => $summary,
+                'trends' => $trends,
+                'top_performers' => $topPerformers,
+                'conversion_rates' => $conversionRates
+            ]);
+            
+            return [
+                'summary' => $summary ?: [
+                    'total_sales' => 0,
+                    'total_revenue' => 0,
+                    'average_sale' => 0,
+                    'unique_clients' => 0,
+                    'active_employees' => 0
+                ],
+                'trends' => $trends ?: [],
+                'top_performers' => $topPerformers ?: [],
+                'conversion_rates' => $conversionRates ?: [
+                    'leads_to_prospects' => 0,
+                    'prospects_to_sales' => 0,
+                    'overall_conversion' => 0
+                ]
+            ];
+        } catch (\Exception $e) {
+            \Log::error('Error in getDashboardData: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            return $this->getMockDashboardData();
+        }
     }
 
     /**

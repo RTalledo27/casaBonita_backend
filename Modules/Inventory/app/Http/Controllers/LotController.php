@@ -15,7 +15,7 @@ use Modules\Inventory\Models\LotFinancialTemplate;
 use Modules\Inventory\Models\ManzanaFinancingRule;
 use Modules\Inventory\Repositories\LotRepository;
 use Modules\Inventory\Transformers\LotResource;
-use Modules\Services\PusherNotifier;
+use Modules\services\PusherNotifier;
 use Pusher\Pusher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -102,7 +102,7 @@ class LotController extends Controller
     /** Mostrar un lote */
     public function show(Lot $lot)
     {
-        return new LotResource($lot->load(['manzana', 'streetType', 'media', 'financialTemplate']));
+        return new LotResource($lot->load(['manzana', 'streetType', 'media']));
     }
 
     /** Actualizar un lote */
@@ -111,19 +111,7 @@ class LotController extends Controller
         try {
             DB::beginTransaction();
 
-            $data = $request->validated();
-            if (($data['status'] ?? null) === 'disponible') {
-                $hasActiveReservation = $lot->reservations()
-                    ->whereIn('status', ['activa', 'convertida'])
-                    ->exists();
-                if ($hasActiveReservation) {
-                    return response()->json([
-                        'message' => 'No se puede liberar un lote con una reserva activa. Primero cancela/expira la reserva.',
-                    ], 409);
-                }
-            }
-
-            $this->repository->update($lot, $data);
+            $this->repository->update($lot, $request->validated());
 
             DB::commit();
 

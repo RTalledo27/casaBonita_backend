@@ -34,23 +34,10 @@ class ContractController extends Controller
     public function index(Request $request)
     {
         $perPage = $request->get('per_page', 15);
-        $sortBy = (string) $request->get('sort_by', 'sign_date');
-        $sortDirRaw = strtolower((string) $request->get('sort_dir', 'desc'));
-        $sortDir = in_array($sortDirRaw, ['asc', 'desc'], true) ? $sortDirRaw : 'desc';
-        $withFinancingRaw = $request->get('with_financing', true);
-        $withFinancing = filter_var($withFinancingRaw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-        if ($withFinancing === null) {
-            $withFinancing = true;
-        }
         $filters = [
             'search' => $request->get('search'),
             'status' => $request->get('status'),
-            'with_financing' => $withFinancing,
-            'advisor_id' => $request->get('advisor_id'),
-            'sign_date_from' => $request->get('sign_date_from'),
-            'sign_date_to' => $request->get('sign_date_to'),
-            'sort_by' => $sortBy,
-            'sort_dir' => $sortDir,
+            'with_financing' => $request->get('with_financing', true), // Default to contracts with financing
         ];
 
         return ContractResource::collection(
@@ -331,7 +318,6 @@ class ContractController extends Controller
                     'due_date' => $currentDate->format('Y-m-d'),
                     'amount' => round($downPayment, 2),
                     'status' => 'pendiente',
-                    'type' => 'inicial',
                     'notes' => $notes ? $notes . ' (Cuota inicial)' : 'Cuota inicial'
                 ];
                 $installmentNumber++;
@@ -347,7 +333,6 @@ class ContractController extends Controller
                     'due_date' => $currentDate->format('Y-m-d'),
                     'amount' => round($paymentAmount, 2),
                     'status' => 'pendiente',
-                    'type' => 'financiamiento',
                     'notes' => $notes
                 ];
                 

@@ -6,26 +6,12 @@ use App\Models\SalesCut;
 use App\Models\SalesCutItem;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Models\PaymentSchedule;
-use Modules\Sales\Models\Reservation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class SalesCutService
 {
-    private const SALES_CONTRACT_STATUSES = ['vigente'];
-    private const PAYMENT_CONTRACT_STATUSES = ['vigente', 'pendiente_aprobacion', 'resuelto'];
-
-    public static function salesContractStatuses(): array
-    {
-        return self::SALES_CONTRACT_STATUSES;
-    }
-
-    public static function paymentContractStatuses(): array
-    {
-        return self::PAYMENT_CONTRACT_STATUSES;
-    }
-
     /**
      * Crear corte diario automático
      */
@@ -42,9 +28,6 @@ class SalesCutService
 
         if ($existingCut) {
             Log::info('[SalesCut] Ya existe corte para esta fecha', ['cut_id' => $existingCut->cut_id]);
-            if ($existingCut->status === 'open') {
-                return $this->refreshDailyCut($existingCut, $cutDate);
-            }
             return $existingCut;
         }
 
@@ -79,36 +62,17 @@ class SalesCutService
         });
     }
 
-    public function refreshDailyCut(SalesCut $cut, ?Carbon $date = null): SalesCut
-    {
-        $cutDate = $date ? $date->copy() : Carbon::parse($cut->cut_date);
-
-        return DB::transaction(function () use ($cut, $cutDate) {
-            $cut->items()->delete();
-
-            $this->processSales($cut, $cutDate);
-            $this->processPayments($cut, $cutDate);
-            $this->processCommissions($cut, $cutDate);
-            $this->updateCutTotals($cut->fresh());
-
-            return $cut->fresh();
-        });
-    }
-
     /**
      * Procesar ventas del día
      */
     protected function processSales(SalesCut $cut, Carbon $date): void
     {
         $sales = Contract::whereDate('sign_date', $date->toDateString())
-            ->whereIn('status', self::SALES_CONTRACT_STATUSES)
-            ->with(['advisor.user', 'client', 'lot', 'reservation.client', 'reservation.lot'])
+            ->where('status', 'vigente')
+            ->with(['advisor', 'client', 'lot'])
             ->get();
 
         foreach ($sales as $sale) {
-            $client = $sale->getClient();
-            $lot = $sale->getLot();
-            $advisor = $sale->getAdvisor();
             SalesCutItem::create([
                 'cut_id' => $cut->cut_id,
                 'item_type' => 'sale',
@@ -118,10 +82,10 @@ class SalesCutService
                 'commission' => $this->calculateCommission($sale),
                 'description' => "Venta: {$sale->contract_number}",
                 'metadata' => [
-                    'client_name' => $client ? $client->first_name . ' ' . $client->last_name : null,
-                    'lot_number' => $lot ? $lot->num_lot : null,
-                    'advisor_name' => $advisor && $advisor->user
-                        ? $advisor->user->first_name . ' ' . $advisor->user->last_name
+                    'client_name' => $sale->client ? $sale->client->first_name . ' ' . $sale->client->last_name : null,
+                    'lot_number' => $sale->lot ? $sale->lot->num_lot : null,
+                    'advisor_name' => $sale->advisor && $sale->advisor->user 
+                        ? $sale->advisor->user->first_name . ' ' . $sale->advisor->user->last_name 
                         : null,
                 ],
             ]);
@@ -137,15 +101,11 @@ class SalesCutService
     {
         // Obtener cuotas pagadas en el día
         $payments = PaymentSchedule::whereDate('paid_date', $date->toDateString())
-            ->where('status', 'pagado')
-            ->whereHas('contract', function ($q) {
-                $q->whereIn('status', self::PAYMENT_CONTRACT_STATUSES);
-            })
-            ->with(['contract.client', 'contract.lot', 'contract.advisor.user', 'contract.reservation.client', 'contract.reservation.lot'])
+            ->where('status', 'pagada')
+            ->with(['contract.client', 'contract.advisor'])
             ->get();
 
         foreach ($payments as $payment) {
-            $client = $payment->contract ? $payment->contract->getClient() : null;
             SalesCutItem::create([
                 'cut_id' => $cut->cut_id,
                 'item_type' => 'payment',
@@ -157,8 +117,8 @@ class SalesCutService
                 'description' => "Pago de cuota #{$payment->installment_number}",
                 'metadata' => [
                     'contract_number' => $payment->contract->contract_number ?? null,
-                    'client_name' => $client
-                        ? $client->first_name . ' ' . $client->last_name
+                    'client_name' => $payment->contract->client 
+                        ? $payment->contract->client->first_name . ' ' . $payment->contract->client->last_name 
                         : null,
                     'installment_number' => $payment->installment_number,
                     'installment_type' => $payment->type,
@@ -213,9 +173,6 @@ class SalesCutService
         $cashBalance = $paymentItems->where('payment_method', 'cash')->sum('amount');
         $bankBalance = $paymentItems->whereIn('payment_method', ['bank_transfer', 'credit_card', 'debit_card'])->sum('amount');
 
-        $reservationsCount = Reservation::whereDate('reservation_date', $cut->cut_date)->count();
-        $separationTotal = Reservation::whereDate('reservation_date', $cut->cut_date)->sum('deposit_amount') ?? 0;
-
         $cut->update([
             'total_sales_count' => $salesItems->count(),
             'total_revenue' => $salesItems->sum('amount'),
@@ -232,8 +189,6 @@ class SalesCutService
                 'sales_by_advisor' => $this->getSalesByAdvisor($cut),
                 'payments_by_method' => $this->getPaymentsByMethod($cut),
                 'top_sales' => $this->getTopSales($cut),
-                'reservations_count' => (int) $reservationsCount,
-                'separation_total' => (float) $separationTotal,
             ],
         ]);
 
@@ -489,22 +444,12 @@ class SalesCutService
     public function getMonthlyStats(): array
     {
         $cuts = SalesCut::thisMonth()->get();
-        $start = now()->startOfMonth()->toDateString();
-        $end = now()->endOfMonth()->toDateString();
-        $reservationsCount = \Illuminate\Support\Facades\DB::table('reservations')
-            ->whereBetween('reservation_date', [$start, $end])
-            ->count();
-        $separationTotal = \Illuminate\Support\Facades\DB::table('reservations')
-            ->whereBetween('reservation_date', [$start, $end])
-            ->sum('deposit_amount') ?? 0;
 
         return [
             'total_sales' => $cuts->sum('total_sales_count'),
             'total_revenue' => $cuts->sum('total_revenue'),
             'total_payments' => $cuts->sum('total_payments_received'),
             'total_commissions' => $cuts->sum('total_commissions'),
-            'total_reservations' => (int) $reservationsCount,
-            'total_separation' => (float) $separationTotal,
             'daily_average' => [
                 'sales' => $cuts->avg('total_sales_count'),
                 'revenue' => $cuts->avg('total_revenue'),

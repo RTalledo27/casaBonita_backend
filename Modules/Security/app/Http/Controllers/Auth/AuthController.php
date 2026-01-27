@@ -3,6 +3,7 @@
 namespace Modules\Security\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\SystemActivityLog;
 use App\Models\UserActivityLog;
 use App\Models\UserSession;
 use Illuminate\Http\Request;
@@ -47,14 +48,24 @@ class AuthController extends Controller
 
         // Verificamos password contra password_hash
         if (! $user || ! Hash::check($credentials['password'], $user->password_hash)) {
+            try {
+                SystemActivityLog::create([
+                    'user_id' => $user?->user_id,
+                    'actor_identifier' => $credentials['username'] ?? null,
+                    'action' => SystemActivityLog::ACTION_LOGIN_FAILED,
+                    'details' => 'Credenciales inválidas',
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'metadata' => [
+                        'username' => $credentials['username'] ?? null,
+                    ],
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+            }
+
             throw ValidationException::withMessages([
                 'username' => ['Credenciales inválidas.'],
-            ]);
-        }
-
-        if (($user->status ?? 'active') !== 'active') {
-            throw ValidationException::withMessages([
-                'username' => ['Usuario bloqueado.'],
             ]);
         }
 
@@ -111,10 +122,7 @@ class AuthController extends Controller
             'Sesión cerrada'
         );
         
-        $token = $request->user()?->currentAccessToken();
-        if ($token) {
-            $token->delete();
-        }
+        $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Sesión cerrada correctamente.']);
     }
@@ -184,21 +192,9 @@ class AuthController extends Controller
             'password_changed_at' => now(),
         ]);
 
-        $user->tokens()->delete();
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        UserActivityLog::log(
-            $user->user_id,
-            UserActivityLog::ACTION_PASSWORD_CHANGED,
-            'Contraseña cambiada'
-        );
-
         return response()->json([
             'message' => 'Contraseña actualizada correctamente.',
             'must_change_password' => false,
-            'token' => $token,
-            'expiresIn' => 86400,
-            'user' => new UserResource($user->fresh(['roles.permissions', 'permissions'])),
         ]);
     }
 

@@ -225,18 +225,15 @@ class LogicwareImportController extends Controller
 
             $forceRefresh = $request->query('force_refresh', false);
             $forceRefresh = filter_var($forceRefresh, FILTER_VALIDATE_BOOLEAN);
-            $debugRawResponse = $request->query('debug_raw_response', false);
-            $debugRawResponse = filter_var($debugRawResponse, FILTER_VALIDATE_BOOLEAN);
 
             Log::info('[LogicwareImportAPI] Solicitud de stock completo', [
                 'user_id' => auth()->id() ?? 'N/A',
                 'force_refresh' => $forceRefresh,
-                'debug_raw_response' => $debugRawResponse,
                 'daily_requests_used' => $logicwareService->getDailyRequestCount()
             ]);
 
             // Obtener stock completo
-            $stockData = $logicwareService->getFullStockData($forceRefresh, $debugRawResponse);
+            $stockData = $logicwareService->getFullStockData($forceRefresh);
 
             $totalUnits = isset($stockData['data']) ? count($stockData['data']) : 0;
 

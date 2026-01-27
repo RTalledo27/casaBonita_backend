@@ -88,8 +88,6 @@ class SalesCutController extends Controller
             if (!$cut) {
                 // Crear corte si no existe
                 $cut = $this->salesCutService->createDailyCut();
-            } elseif ($cut->status === 'open') {
-                $cut = $this->salesCutService->refreshDailyCut($cut, now());
             }
 
             return response()->json([
@@ -457,12 +455,20 @@ class SalesCutController extends Controller
 
             // Crear items del corte (contratos)
             $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
-                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-                ->leftJoin('lots as l', function ($join) {
-                    $join->on('l.lot_id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-                })
                 ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
-                ->whereIn('c.status', \App\Services\SalesCutCalculatorService::salesContractStatuses())
+                ->where('c.status', 'vigente')
+                ->where(function ($q) {
+                    $q->whereExists(function ($q2) {
+                        $q2->select(\Illuminate\Support\Facades\DB::raw(1))
+                            ->from('payment_schedules as ps2')
+                            ->whereColumn('ps2.contract_id', 'c.contract_id')
+                            ->where('ps2.status', 'pagado')
+                            ->where(function ($qq) {
+                                $qq->where('ps2.type', 'inicial')
+                                    ->orWhere('ps2.installment_number', 1);
+                            });
+                    });
+                })
                 ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
                 ->get();
 
@@ -488,12 +494,18 @@ class SalesCutController extends Controller
             $payments = \Illuminate\Support\Facades\DB::table('payments as p')
                 ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
                 ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-                ->leftJoin('lots as l', function ($join) {
-                    $join->on('l.lot_id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-                })
                 ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
-                ->whereIn('c.status', \App\Services\SalesCutCalculatorService::paymentContractStatuses())
+                ->where('c.status', 'vigente')
+                ->whereExists(function ($q) {
+                    $q->select(\Illuminate\Support\Facades\DB::raw(1))
+                        ->from('payment_schedules as ps2')
+                        ->whereColumn('ps2.contract_id', 'c.contract_id')
+                        ->where('ps2.status', 'pagado')
+                        ->where(function ($qq) {
+                            $qq->where('ps2.type', 'inicial')
+                                ->orWhere('ps2.installment_number', 1);
+                        });
+                })
                 ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
                 ->get();
 
@@ -560,15 +572,6 @@ class SalesCutController extends Controller
                 $endDate = $startDate->copy()->endOfMonth();
             }
 
-            if ($cut->cut_type === 'daily') {
-                $updated = $this->salesCutService->refreshDailyCut($cut, $startDate);
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Corte recalculado exitosamente',
-                    'data' => $updated->load('items'),
-                ]);
-            }
-
             // Recalcular
             $calculatedData = $this->calculatorService->calculateCut($startDate, $endDate, true);
 
@@ -585,57 +588,6 @@ class SalesCutController extends Controller
                 'bank_balance' => $calculatedData['bank_balance'],
                 'summary_data' => json_encode($calculatedData['summary_data']),
             ]);
-
-            $cut->items()->delete();
-
-            $contracts = \Illuminate\Support\Facades\DB::table('contracts as c')
-                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-                ->leftJoin('lots as l', function ($join) {
-                    $join->on('l.lot_id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-                })
-                ->whereBetween('c.sign_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
-                ->whereIn('c.status', \App\Services\SalesCutCalculatorService::salesContractStatuses())
-                ->select('c.contract_id', 'c.total_price', 'c.advisor_id')
-                ->get();
-
-            foreach ($contracts as $contract) {
-                $realCommission = \Illuminate\Support\Facades\DB::table('commissions')
-                    ->where('contract_id', $contract->contract_id)
-                    ->where('employee_id', $contract->advisor_id)
-                    ->whereNull('parent_commission_id')
-                    ->where('status', '!=', 'cancelled')
-                    ->sum('commission_amount') ?? 0;
-
-                $cut->items()->create([
-                    'item_type' => 'sale',
-                    'contract_id' => $contract->contract_id,
-                    'employee_id' => $contract->advisor_id,
-                    'amount' => $contract->total_price,
-                    'commission' => round($realCommission, 2),
-                ]);
-            }
-
-            $payments = \Illuminate\Support\Facades\DB::table('payments as p')
-                ->join('payment_schedules as ps', 'p.schedule_id', '=', 'ps.schedule_id')
-                ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
-                ->leftJoin('reservations as r', 'c.reservation_id', '=', 'r.reservation_id')
-                ->leftJoin('lots as l', function ($join) {
-                    $join->on('l.lot_id', '=', \Illuminate\Support\Facades\DB::raw('COALESCE(c.lot_id, r.lot_id)'));
-                })
-                ->whereBetween('p.payment_date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
-                ->whereIn('c.status', \App\Services\SalesCutCalculatorService::paymentContractStatuses())
-                ->select('ps.contract_id', 'p.schedule_id', 'p.amount', 'p.method')
-                ->get();
-
-            foreach ($payments as $payment) {
-                $cut->items()->create([
-                    'item_type' => 'payment',
-                    'contract_id' => $payment->contract_id,
-                    'payment_schedule_id' => $payment->schedule_id,
-                    'amount' => $payment->amount,
-                    'payment_method' => $this->mapPaymentMethod($payment->method),
-                ]);
-            }
 
             Log::info('[SalesCut] Corte recalculado', [
                 'cut_id' => $cut->cut_id,

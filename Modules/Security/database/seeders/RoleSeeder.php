@@ -11,9 +11,12 @@ class RoleSeeder extends Seeder
      // 1) Obtén todos los permisos que ya sembraste
      $allPermissions = \Spatie\Permission\Models\Permission::pluck('name')->toArray();
 
-     // 2) Crea el rol 'admin' y asígnale TODO
+     // 2) Crea roles administradores y asígnales TODO
      $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'sanctum']);
      $admin->syncPermissions($allPermissions);
+     
+     $adminEs = Role::firstOrCreate(['name' => 'Administrador', 'guard_name' => 'sanctum']);
+     $adminEs->syncPermissions($allPermissions);
 
      // 3) Ejemplo de rol 'manager' con subset
     /* $managerPerms = [
@@ -35,5 +38,5 @@ class RoleSeeder extends Seeder
      $agent->syncPermissions($agentPerms);*/
 
  
-}
+ }
 }

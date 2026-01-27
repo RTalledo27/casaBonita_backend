@@ -14,7 +14,6 @@ class PaymentSchedule extends Model
 
     protected $table = 'payment_schedules';
     protected $primaryKey = 'schedule_id';
-    public $timestamps = false;
 
     protected $fillable = [
         'contract_id',
