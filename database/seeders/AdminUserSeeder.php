@@ -121,6 +121,17 @@ class AdminUserSeeder extends Seeder
             'sales.contracts.update',
             'sales.contracts.delete',
             'sales.conversions.process',
+
+            'sales.schedules.index',
+            'sales.schedules.view',
+            'sales.schedules.store',
+            'sales.schedules.update',
+            'sales.schedules.destroy',
+
+            'sales.payments.view',
+            'sales.payments.store',
+            'sales.payments.update',
+            'sales.payments.destroy',
             
             // MODULE SALES - CUTS
             'sales.cuts.view',

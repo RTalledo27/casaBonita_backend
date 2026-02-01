@@ -3,7 +3,6 @@
 namespace Modules\Sales\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Events\PaymentRecorded;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +12,9 @@ use Modules\Sales\Http\Requests\UpdatePaymentScheduleRequest;
 use Modules\Collections\Models\PaymentSchedule;
 use Modules\Sales\Models\Payment;
 use Modules\Sales\Models\Contract;
+use Modules\Sales\Models\PaymentTransaction;
 use Modules\Sales\Repositories\PaymentScheduleRepository;
+use Modules\Sales\Services\PaymentAllocationService;
 use Modules\Sales\Services\PaymentScheduleService;
 use Modules\Sales\Transformers\PaymentScheduleResource;
 use Modules\Services\PusherNotifier;
@@ -27,9 +28,9 @@ class PaymentScheduleController extends Controller
         private PusherNotifier $pusher
     ) {
         $this->middleware('auth:sanctum')->except(['getReport', 'generateReport']);
-        $this->middleware('permission:sales.schedules.index')->except(['getReport', 'generateReport']);
+        $this->middleware('permission:sales.schedules.index')->except(['getReport', 'generateReport', 'markAsPaid']);
         $this->middleware('permission:sales.schedules.store')->only(['store', 'generateIntelligentSchedule']);
-        $this->middleware('permission:sales.schedules.update')->only('update');
+        $this->middleware('permission:sales.schedules.update')->only(['update', 'markAsPaid']);
         $this->middleware('permission:sales.schedules.destroy')->only('destroy');
     }
 
@@ -114,6 +115,7 @@ class PaymentScheduleController extends Controller
                 $data['amount_paid'] = $request->input('amount_paid', $schedule->amount);
                 $data['payment_date'] = $request->input('payment_date', now()->format('Y-m-d'));
                 $data['payment_method'] = $request->input('payment_method', 'transfer');
+                $data['paid_date'] = $data['payment_date'];
                 
                 Log::info('💾 Actualizando campos de pago en schedule:', [
                     'amount_paid' => $data['amount_paid'],
@@ -129,12 +131,6 @@ class PaymentScheduleController extends Controller
             DB::commit();
             Log::info('✅ Transacción confirmada');
             
-            // Si se registró un pago, disparar evento para actualizar corte del día
-            if (isset($payment)) {
-                event(new PaymentRecorded($updated));
-                Log::info('📢 Evento PaymentRecorded disparado para schedule_id: ' . $updated->schedule_id);
-            }
-
             $this->pusher->notify('schedule-channel', 'updated', [
                 'schedule' => (new PaymentScheduleResource($updated))->toArray($request),
             ]);
@@ -289,25 +285,49 @@ class PaymentScheduleController extends Controller
         try {
             $validated = $request->validate([
                 'payment_date' => 'required|date',
-                'amount_paid' => 'required|numeric|min:0',
-                'payment_method' => 'nullable|string|in:cash,transfer,check,card',
+                'amount_paid' => 'required|numeric|min:0.01',
+                'payment_method' => 'required|string|in:cash,transfer,check,card',
+                'reference' => ['nullable', 'string', 'max:60', 'required_unless:payment_method,cash'],
                 'notes' => 'nullable|string|max:500'
             ]);
 
-            $schedule->update([
-                'status' => 'pagado',
+            DB::beginTransaction();
+
+            $transaction = PaymentTransaction::create([
+                'contract_id' => $schedule->contract_id,
+                'start_schedule_id' => $schedule->schedule_id,
                 'payment_date' => $validated['payment_date'],
-                'amount_paid' => $validated['amount_paid'],
-                'payment_method' => $validated['payment_method'] ?? 'transfer',
-                'notes' => $validated['notes']
+                'amount_total' => (float) $validated['amount_paid'],
+                'method' => $validated['payment_method'] ?? 'transfer',
+                'reference' => $validated['reference'] ?? null,
+                'notes' => $validated['notes'] ?? null,
+                'created_by' => auth()->id(),
             ]);
+
+            $allocation = app(PaymentAllocationService::class)->applyPaymentFromSchedule(
+                $schedule,
+                $validated['payment_date'],
+                (float) $validated['amount_paid'],
+                $validated['payment_method'] ?? 'transfer',
+                $validated['reference'] ?? null,
+                $validated['notes'] ?? null,
+                (int) $transaction->transaction_id
+            );
+
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'data' => new PaymentScheduleResource($schedule->fresh()),
-                'status' => 'paid'
+                'allocation' => $allocation,
+                'transaction' => [
+                    'transaction_id' => (int) $transaction->transaction_id,
+                    'has_voucher' => !empty($transaction->voucher_path),
+                    'voucher_url' => url("/api/v1/sales/payment-transactions/{$transaction->transaction_id}/voucher"),
+                ],
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Error al marcar como pagado: ' . $e->getMessage()

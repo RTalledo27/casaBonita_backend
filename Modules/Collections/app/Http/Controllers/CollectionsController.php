@@ -9,6 +9,8 @@ use Modules\Sales\Models\Contract;
 use Modules\Collections\Models\PaymentSchedule;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Modules\Collections\app\Models\Followup;
+use Modules\Collections\app\Models\FollowupLog;
 
 class CollectionsController extends Controller
 {
@@ -588,17 +590,25 @@ class CollectionsController extends Controller
                 })->count();
                 
                 $totalAmount = $schedules->sum('amount');
-                $paidAmount = $schedules->where('status', 'pagado')->sum('amount');
+                $paidAmount = $schedules->sum('amount_paid');
                 
                 // Calcular montos vencidos dinámicamente
                 $overdueAmount = $schedules->filter(function($schedule) {
                     return $schedule->due_date < now() && $schedule->status != 'pagado';
-                })->sum('amount');
+                })->sum(function($schedule) {
+                    $amount = (float) $schedule->amount;
+                    $paid = (float) ($schedule->amount_paid ?? 0);
+                    return max(0, $amount - $paid);
+                });
                 
                 // Calcular montos pendientes (no pagados y no vencidos)
                 $pendingAmount = $schedules->filter(function($schedule) {
                     return $schedule->status != 'pagado' && $schedule->due_date >= now();
-                })->sum('amount');
+                })->sum(function($schedule) {
+                    $amount = (float) $schedule->amount;
+                    $paid = (float) ($schedule->amount_paid ?? 0);
+                    return max(0, $amount - $paid);
+                });
                 
                 $paymentRate = $totalAmount > 0 ? ($paidAmount / $totalAmount) * 100 : 0;
                 
@@ -663,7 +673,12 @@ class CollectionsController extends Controller
                             'installment_number' => $schedule->installment_number,
                             'due_date' => $schedule->due_date,
                             'amount' => $schedule->amount,
+                            'amount_paid' => $schedule->amount_paid,
+                            'remaining_amount' => max(0, (float) $schedule->amount - (float) ($schedule->amount_paid ?? 0)),
                             'status' => $actualStatus,
+                            'payment_date' => $schedule->payment_date,
+                            'payment_method' => $schedule->payment_method,
+                            'paid_date' => $schedule->paid_date,
                             'notes' => $schedule->notes,
                             'type' => $schedule->type,
                             'is_overdue' => $isOverdue,
@@ -705,6 +720,7 @@ class CollectionsController extends Controller
             $request->validate([
                 'payment_date' => 'sometimes|date',
                 'payment_amount' => 'sometimes|numeric|min:0',
+                'amount_paid' => 'sometimes|numeric|min:0',
                 'payment_method' => 'sometimes|string|max:50',
                 'notes' => 'sometimes|string|max:500'
             ]);
@@ -719,13 +735,61 @@ class CollectionsController extends Controller
                 ], 400);
             }
 
+            $amountPaid = $request->input('amount_paid', $request->input('payment_amount', $schedule->amount));
+            $paymentDate = $request->input('payment_date', now());
+            $paymentMethod = $request->input('payment_method', 'transfer');
+            $notes = $request->input('notes');
+
             $schedule->update([
                 'status' => 'pagado',  // Changed from 'paid' to 'pagado'
-                'paid_date' => $request->input('payment_date', now()),
-                'paid_amount' => $request->input('payment_amount', $schedule->amount),
-                'payment_method' => $request->input('payment_method'),
-                'notes' => $request->input('notes')
+                'payment_date' => $paymentDate,
+                'paid_date' => $paymentDate,
+                'amount_paid' => $amountPaid,
+                'payment_method' => $paymentMethod,
+                'notes' => $notes
             ]);
+
+            $followup = Followup::where('contract_id', $schedule->contract_id)->orderByDesc('followup_id')->first();
+            if ($followup) {
+                $overdueLeft = PaymentSchedule::where('contract_id', $schedule->contract_id)
+                    ->where('status', 'pendiente')
+                    ->whereDate('due_date', '<', Carbon::now()->startOfDay())
+                    ->count();
+
+                $loggedAt = $paymentDate instanceof Carbon ? $paymentDate : Carbon::parse($paymentDate);
+                $logNotes = trim(sprintf(
+                    'Pago registrado. Cuota #%s (schedule_id=%s). Método: %s. Monto: %s. %s',
+                    $schedule->installment_number,
+                    $schedule->schedule_id,
+                    $paymentMethod,
+                    $amountPaid,
+                    $notes ? ('Notas: ' . $notes) : ''
+                ));
+
+                FollowupLog::create([
+                    'followup_id' => $followup->followup_id,
+                    'client_id' => $followup->client_id,
+                    'employee_id' => null,
+                    'channel' => 'payment',
+                    'result' => 'fulfilled',
+                    'notes' => $logNotes,
+                    'logged_at' => $loggedAt,
+                ]);
+
+                $followup->contact_date = $loggedAt;
+                $followup->action_taken = 'payment';
+                $followup->management_result = 'fulfilled';
+
+                if ($followup->commitment_status === 'pending') {
+                    $followup->commitment_status = 'fulfilled';
+                }
+
+                $followup->management_status = $overdueLeft > 0 ? 'in_progress' : 'resolved';
+
+                $prefix = sprintf('[%s %s]', $loggedAt->format('Y-m-d H:i'), 'PAYMENT');
+                $followup->management_notes = trim(($followup->management_notes ? ($followup->management_notes . "\n") : '') . $prefix . ' ' . $logNotes);
+                $followup->save();
+            }
 
             return response()->json([
                 'success' => true,
@@ -734,8 +798,8 @@ class CollectionsController extends Controller
                     'schedule_id' => $schedule->schedule_id,
                     'installment_number' => $schedule->installment_number,
                     'status' => $schedule->status,
-                    'paid_date' => $schedule->paid_date,
-                    'paid_amount' => $schedule->paid_amount
+                    'payment_date' => $schedule->payment_date,
+                    'amount_paid' => $schedule->amount_paid
                 ]
             ]);
 
@@ -762,7 +826,7 @@ class CollectionsController extends Controller
         try {
             $schedule = PaymentSchedule::findOrFail($schedule_id);
             
-            if ($schedule->status === 'paid') {
+            if ($schedule->status === 'pagado') {
                 return response()->json([
                     'success' => false,
                     'message' => 'No se puede marcar como vencido un cronograma ya pagado',
@@ -771,7 +835,7 @@ class CollectionsController extends Controller
             }
 
             $schedule->update([
-                'status' => 'overdue'
+                'status' => 'vencido'
             ]);
 
             return response()->json([

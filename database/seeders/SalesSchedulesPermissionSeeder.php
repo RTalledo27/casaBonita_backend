@@ -4,8 +4,8 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 use Modules\Security\Models\User;
+use Modules\Security\Models\Role;
 
 class SalesSchedulesPermissionSeeder extends Seeder
 {
@@ -43,14 +43,15 @@ class SalesSchedulesPermissionSeeder extends Seeder
         }
 
         // Asignar permisos al rol admin
-        $adminRole = Role::where('name', 'admin')->first();
+        $roleNames = ['Administrador', 'admin'];
+        $adminRole = Role::whereIn('name', $roleNames)->first();
         if ($adminRole) {
             foreach ($permissions as $permission) {
                 $adminRole->givePermissionTo($permission);
             }
-            $this->command->info('Sales Schedules permissions assigned to admin role');
+            $this->command->info("Sales Schedules permissions assigned to role: {$adminRole->name}");
         } else {
-            $this->command->warn('Admin role not found');
+            $this->command->warn('Admin role not found (Administrador/admin)');
         }
     }
 }

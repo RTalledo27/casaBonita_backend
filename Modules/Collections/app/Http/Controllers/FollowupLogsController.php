@@ -49,7 +49,7 @@ class FollowupLogsController extends Controller
                 if (!empty($data['result'])) {
                     $followup->management_result = $data['result'];
                     $res = strtolower($data['result']);
-                    if ($res === 'resolved') {
+                    if ($res === 'resolved' || $res === 'fulfilled') {
                         $followup->management_status = 'resolved';
                     } elseif ($res === 'unreachable') {
                         $followup->management_status = 'unreachable';

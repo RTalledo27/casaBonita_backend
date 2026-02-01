@@ -13,6 +13,11 @@ class PermissionSeeder extends Seeder
             'module' => ['Security'],
             '--class' => 'PermissionSeeder',
         ]);
+
+        $this->call([
+            SalesSchedulesPermissionSeeder::class,
+            CollectionsPermissionSeeder::class,
+            ReportsPermissionSeeder::class,
+        ]);
     }
 }
-

@@ -6,6 +6,7 @@ use Modules\Sales\Http\Controllers\ContractController;
 use Modules\Sales\Http\Controllers\ContractImportController;
 use Modules\Sales\Http\Controllers\PaymentController;
 use Modules\Sales\Http\Controllers\PaymentScheduleController;
+use Modules\Sales\Http\Controllers\PaymentTransactionController;
 use Modules\Sales\Http\Controllers\ReservationController;
 use Modules\Sales\Http\Controllers\SalesController;
 use Modules\Sales\Models\ContractApproval;
@@ -46,6 +47,8 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
         Route::get('payments/summary', [PaymentController::class, 'summary']);
         Route::post('payments/{payment}/voucher', [PaymentController::class, 'uploadVoucher']);
         Route::get('payments/{payment}/voucher', [PaymentController::class, 'downloadVoucher']);
+        Route::post('payment-transactions/{transaction}/voucher', [PaymentTransactionController::class, 'uploadVoucher']);
+        Route::get('payment-transactions/{transaction}/voucher', [PaymentTransactionController::class, 'downloadVoucher']);
         Route::apiResource('payments',     PaymentController::class);
         Route::post('contract-approvals/{approval}/approve', [ContractApprovalController::class, 'approve']);
         Route::post('contract-approvals/{approval}/reject',  [ContractApprovalController::class, 'reject']);

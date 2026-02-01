@@ -18,6 +18,7 @@ class SalesCutItem extends Model
         'item_type',
         'contract_id',
         'payment_schedule_id',
+        'payment_id',
         'employee_id',
         'amount',
         'commission',

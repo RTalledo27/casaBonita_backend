@@ -4,8 +4,8 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 use Modules\Security\Models\User;
+use Modules\Security\Models\Role;
 
 class ReportsPermissionSeeder extends Seeder
 {
@@ -51,10 +51,10 @@ class ReportsPermissionSeeder extends Seeder
         }
 
         // Asignar permisos al rol admin
-        $adminRole = Role::where('name', 'admin')->first();
+        $adminRole = Role::whereIn('name', ['Administrador', 'admin'])->first();
         if ($adminRole) {
             $adminRole->givePermissionTo($reportsPermissions);
-            $this->command->info('   ✅ Permisos asignados al rol admin');
+            $this->command->info("   ✅ Permisos asignados al rol {$adminRole->name}");
         } else {
             $this->command->warn('   ⚠️  Rol admin no encontrado');
         }

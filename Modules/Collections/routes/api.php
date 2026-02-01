@@ -129,10 +129,14 @@ Route::middleware(['auth:sanctum'])->prefix('v1/collections')->group(function ()
             ->name('collections.followups.index');
         Route::post('/', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'store'])
             ->name('collections.followups.store');
+        Route::post('/from-contract/{contractId}', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'fromContract'])
+            ->name('collections.followups.from-contract');
         Route::put('/{id}', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'update'])
             ->name('collections.followups.update');
         Route::put('/{id}/commitment', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'updateCommitment'])
             ->name('collections.followups.commitment');
+        Route::put('/{id}/commitment-status', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'updateCommitmentStatus'])
+            ->name('collections.followups.commitment-status');
         Route::post('/{id}/quick-action', [\Modules\Collections\app\Http\Controllers\FollowupsController::class, 'quickAction'])
             ->name('collections.followups.quick-action');
     });

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\SalesCut;
 use App\Models\SalesCutItem;
 use Modules\Sales\Models\Contract;
+use Modules\Sales\Models\Payment;
 use Modules\Sales\Models\PaymentSchedule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -402,7 +403,7 @@ class SalesCutService
                 'payment_schedule_id' => $payment->schedule_id,
                 'employee_id' => $payment->contract->advisor_id ?? null,
                 'amount' => $payment->amount_paid ?? $payment->amount,
-                'payment_method' => $payment->payment_method ?? 'cash',
+                'payment_method' => $this->mapPaymentMethodForCut($payment->payment_method ?? 'cash'),
                 'description' => "Pago de cuota #{$payment->installment_number}",
                 'metadata' => [
                     'contract_number' => $payment->contract->contract_number ?? null,
@@ -428,6 +429,71 @@ class SalesCutService
                 'schedule_id' => $payment->schedule_id,
             ]);
         }
+    }
+
+    public function addPaymentRecordToCurrentCut(Payment $payment): void
+    {
+        $cut = $this->getTodayCut();
+
+        if (!$cut || $cut->status !== 'open') {
+            Log::warning('[SalesCut] No hay corte abierto para agregar pago', [
+                'payment_id' => $payment->payment_id,
+            ]);
+            return;
+        }
+
+        try {
+            if (SalesCutItem::where('cut_id', $cut->cut_id)->where('payment_id', $payment->payment_id)->exists()) {
+                return;
+            }
+
+            $payment->loadMissing(['schedule.contract.client']);
+            $schedule = $payment->schedule;
+            if (!$schedule) {
+                return;
+            }
+
+            SalesCutItem::create([
+                'cut_id' => $cut->cut_id,
+                'item_type' => 'payment',
+                'contract_id' => $payment->contract_id,
+                'payment_schedule_id' => $payment->schedule_id,
+                'payment_id' => $payment->payment_id,
+                'employee_id' => $schedule->contract->advisor_id ?? null,
+                'amount' => $payment->amount,
+                'payment_method' => $this->mapPaymentMethodForCut($payment->method),
+                'description' => "Pago cuota #{$schedule->installment_number}",
+                'metadata' => [
+                    'payment_id' => $payment->payment_id,
+                    'contract_number' => $schedule->contract->contract_number ?? null,
+                    'client_name' => $schedule->contract->client
+                        ? $schedule->contract->client->first_name . ' ' . $schedule->contract->client->last_name
+                        : null,
+                    'installment_number' => $schedule->installment_number,
+                    'installment_type' => $schedule->type,
+                ],
+            ]);
+
+            $this->updateCutTotals($cut);
+        } catch (\Exception $e) {
+            Log::error('[SalesCut] Error al agregar pago al corte', [
+                'error' => $e->getMessage(),
+                'payment_id' => $payment->payment_id,
+            ]);
+        }
+    }
+
+    private function mapPaymentMethodForCut(?string $method): string
+    {
+        $method = strtolower(trim((string) $method));
+
+        return match ($method) {
+            'cash' => 'cash',
+            'transfer', 'bank_transfer', 'wire' => 'bank_transfer',
+            'check' => 'check',
+            'card', 'credit_card', 'debit_card' => 'credit_card',
+            default => 'cash',
+        };
     }
 
     /**

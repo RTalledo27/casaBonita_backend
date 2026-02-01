@@ -14,26 +14,34 @@ class PaymentSchedule extends Model
 
     protected $table = 'payment_schedules';
     protected $primaryKey = 'schedule_id';
+    public $timestamps = false;
 
     protected $fillable = [
         'contract_id',
         'installment_number',
         'due_date',
         'amount',
+        'currency',
         'status',
-        'paid_date',
-        'paid_amount',
+        'amount_paid',
+        'payment_date',
         'payment_method',
         'notes',
+        'type',
+        'paid_date',
+        'logicware_schedule_det_id',
+        'logicware_paid_amount',
         'created_by',
         'updated_by'
     ];
 
     protected $casts = [
         'due_date' => 'date',
-        'paid_date' => 'date',
         'amount' => 'decimal:2',
-        'paid_amount' => 'decimal:2'
+        'amount_paid' => 'decimal:2',
+        'payment_date' => 'date',
+        'paid_date' => 'date',
+        'logicware_paid_amount' => 'decimal:2'
     ];
 
     protected $dates = ['deleted_at'];
@@ -51,6 +59,11 @@ class PaymentSchedule extends Model
     }
 
     public function payments()
+    {
+        return $this->hasMany(\Modules\Sales\Models\Payment::class, 'schedule_id', 'schedule_id');
+    }
+
+    public function customerPayments()
     {
         return $this->hasMany(\Modules\Collections\Models\CustomerPayment::class, 'ar_id');
     }
@@ -101,9 +114,10 @@ class PaymentSchedule extends Model
     {
         $this->update([
             'status' => self::STATUS_PAID,
+            'amount_paid' => $amount ?? $this->amount,
+            'payment_date' => $paymentDate ?? now(),
             'paid_date' => $paymentDate ?? now(),
-            'paid_amount' => $amount ?? $this->amount,
-            'payment_method' => $method,
+            'payment_method' => $method ?? 'transfer',
             'notes' => $notes
         ]);
     }

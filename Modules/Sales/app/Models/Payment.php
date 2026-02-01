@@ -2,11 +2,13 @@
 
 namespace Modules\Sales\Models;
 
+use App\Services\SalesCutService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Modules\Accounting\Models\JournalEntry;
 use Modules\Collections\Models\CustomerPayment;
 use Modules\Collections\Models\AccountReceivable;
+use Modules\Collections\Models\PaymentSchedule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
@@ -22,13 +24,15 @@ class Payment extends Model
      * The attributes that are mass assignable.
      */
     protected $fillable = [
+        'transaction_id',
         'schedule_id',
         'journal_entry_id',
         'contract_id',
         'payment_date',
         'amount',
         'method',
-        'reference'
+        'reference',
+        'voucher_path'
     ];
 
     // protected static function newFactory(): PaymentFactory
@@ -51,6 +55,11 @@ class Payment extends Model
         return $this->belongsTo(Contract::class, 'contract_id', 'contract_id');
     }
 
+    public function transaction()
+    {
+        return $this->belongsTo(PaymentTransaction::class, 'transaction_id', 'transaction_id');
+    }
+
     /**
      * Boot del modelo para sincronización automática
      */
@@ -61,6 +70,10 @@ class Payment extends Model
         // Evento que se dispara después de crear un pago
         static::created(function ($payment) {
             $payment->syncWithCollections();
+            try {
+                app(SalesCutService::class)->addPaymentRecordToCurrentCut($payment);
+            } catch (\Throwable $e) {
+            }
         });
     }
 

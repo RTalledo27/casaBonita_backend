@@ -232,6 +232,38 @@ class FollowupsController extends Controller
         return response()->json(['success' => true, 'data' => $followup], 201);
     }
 
+    public function fromContract(Request $request, int $contractId)
+    {
+        $followup = Followup::where('contract_id', $contractId)->orderByDesc('followup_id')->first();
+        if ($followup) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Seguimiento encontrado',
+                'data' => [
+                    'was_created' => false,
+                    'followup' => $followup,
+                ]
+            ]);
+        }
+
+        $created = $this->createFollowupFromContract($contractId);
+        if (!$created) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se encontró el contrato para crear el seguimiento',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Seguimiento creado',
+            'data' => [
+                'was_created' => true,
+                'followup' => $created,
+            ]
+        ], 201);
+    }
+
     public function update(Request $request, int $id)
     {
         $followup = Followup::findOrFail($id);
@@ -251,6 +283,45 @@ class FollowupsController extends Controller
         $followup->commitment_amount = $data['commitment_amount'];
         $followup->commitment_status = 'pending'; // Inicializar como pendiente
         $followup->management_status = 'in_progress';
+        $followup->save();
+        return response()->json(['success' => true, 'data' => $followup]);
+    }
+
+    public function updateCommitmentStatus(Request $request, int $id)
+    {
+        $data = $request->validate([
+            'commitment_status' => 'required|in:pending,fulfilled,broken,cancelled',
+        ]);
+
+        $followup = Followup::findOrFail($id);
+        $status = $data['commitment_status'];
+
+        if ($status === 'pending') {
+            if (empty($followup->commitment_date) || empty($followup->commitment_amount)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se puede marcar como pendiente sin fecha y monto de compromiso',
+                ], 422);
+            }
+            $followup->commitment_status = 'pending';
+            if (!$followup->management_status || $followup->management_status === 'pending') {
+                $followup->management_status = 'in_progress';
+            }
+        } elseif ($status === 'fulfilled') {
+            $followup->commitment_status = 'fulfilled';
+            $followup->management_status = 'resolved';
+        } elseif ($status === 'broken') {
+            $followup->commitment_status = 'broken';
+            $followup->management_status = 'in_progress';
+        } elseif ($status === 'cancelled') {
+            $followup->commitment_status = 'cancelled';
+            $followup->commitment_date = null;
+            $followup->commitment_amount = null;
+            if (!$followup->management_status || $followup->management_status === 'pending') {
+                $followup->management_status = 'in_progress';
+            }
+        }
+
         $followup->save();
         return response()->json(['success' => true, 'data' => $followup]);
     }

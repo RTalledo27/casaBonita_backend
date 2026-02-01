@@ -4,8 +4,8 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 use Modules\Security\Models\User;
+use Modules\Security\Models\Role;
 
 class CollectionsPermissionSeeder extends Seeder
 {
@@ -58,10 +58,10 @@ class CollectionsPermissionSeeder extends Seeder
         }
 
         // Asignar permisos a todos los usuarios con rol admin
-        $adminRole = Role::where('name', 'admin')->first();
+        $adminRole = Role::whereIn('name', ['Administrador', 'admin'])->first();
         if ($adminRole) {
             $adminRole->givePermissionTo($collectionsPermissions);
-            $this->command->info('   ✅ Permisos asignados al rol admin');
+            $this->command->info("   ✅ Permisos asignados al rol {$adminRole->name}");
         }
 
         $this->command->info('🎯 Módulo Collections configurado correctamente!');
