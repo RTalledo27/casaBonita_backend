@@ -37,6 +37,12 @@ class ServiceRequestController extends Controller
         $data['opened_by'] = auth()->user()->user_id;
         $data['opened_at'] = now();
 
+        // Calculate SLA based on priority
+        $slaConfig = \Modules\ServiceDesk\Models\SlaConfig::where('priority', $data['priority'])->first();
+        if ($slaConfig) {
+            $data['sla_due_at'] = now()->addHours($slaConfig->resolution_hours);
+        }
+
         $ticket = $this->repo->create($data);
         
 
@@ -80,5 +86,112 @@ class ServiceRequestController extends Controller
         $this->repo->delete($ticket_id);
 
         return response()->json(['message' => 'Ticket eliminado'], 204);
+    }
+
+    /**
+     * Assign ticket to a technician
+     * POST /requests/{ticket_id}/assign
+     */
+    public function assign(Request $request, $ticket_id)
+    {
+        Log::info("Intento de asignación de ticket", [
+            'ticket_id' => $ticket_id, 
+            'incoming_user_id' => $request->user_id,
+            'user_exists' => \Modules\Security\Models\User::find($request->user_id) ? 'YES' : 'NO'
+        ]);
+
+        $request->validate([
+            'user_id' => 'required|exists:users,user_id',
+        ]);
+
+        $ticket = $this->repo->find($ticket_id);
+        $this->authorize('update', $ticket);
+
+        $updated = $this->repo->assignTicket($ticket_id, $request->user_id);
+
+        return new ServiceRequestResource($updated);
+    }
+
+    /**
+     * Change ticket status
+     * POST /requests/{ticket_id}/status
+     */
+    public function changeStatus(Request $request, $ticket_id)
+    {
+        $request->validate([
+            'status' => 'required|in:abierto,en_proceso,cerrado',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $ticket = $this->repo->find($ticket_id);
+        $this->authorize('update', $ticket);
+
+        $updated = $this->repo->changeStatus($ticket_id, $request->status, $request->notes);
+
+        return new ServiceRequestResource($updated);
+    }
+
+    /**
+     * Escalate a ticket
+     * POST /requests/{ticket_id}/escalate
+     */
+    public function escalate(Request $request, $ticket_id)
+    {
+        $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $ticket = $this->repo->find($ticket_id);
+        $this->authorize('update', $ticket);
+
+        $updated = $this->repo->escalate($ticket_id, $request->reason);
+
+        return new ServiceRequestResource($updated);
+    }
+
+    /**
+     * Add a comment/action to a ticket
+     * POST /requests/{ticket_id}/comment
+     */
+    public function addComment(Request $request, $ticket_id)
+    {
+        $request->validate([
+            'notes' => 'required|string|max:2000',
+            'action_type' => 'nullable|string|max:50',
+        ]);
+
+        $ticket = $this->repo->find($ticket_id);
+        $this->authorize('update', $ticket);
+
+        $actionType = $request->input('action_type', 'comment');
+        $updated = $this->repo->addComment($ticket_id, $request->notes, $actionType);
+
+        return new ServiceRequestResource($updated);
+    }
+
+    /**
+     * Get ticket actions/history
+     * GET /requests/{ticket_id}/actions
+     */
+    public function getActions($ticket_id)
+    {
+        $ticket = $this->repo->findWithRelations($ticket_id);
+        $this->authorize('view', $ticket);
+
+        return response()->json([
+            'data' => $ticket->actions->map(function($action) {
+                return [
+                    'action_id' => $action->action_id,
+                    'action_type' => $action->action_type,
+                    'notes' => $action->notes,
+                    'performed_at' => $action->performed_at,
+                    'user' => $action->user ? [
+                        'user_id' => $action->user->user_id,
+                        'first_name' => $action->user->first_name,
+                        'last_name' => $action->user->last_name,
+                    ] : null,
+                ];
+            })
+        ]);
     }
 }

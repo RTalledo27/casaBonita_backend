@@ -7,13 +7,14 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 use Modules\ServiceDesk\Console\AutoAssignCriticalTickets;
-use Modules\ServiceDesk\Console\EscalateTierOneTickets;
+use Modules\ServiceDesk\Console\Commands\CheckSlaExpiryCommand;
 use Modules\ServiceDesk\Models\ServiceAction;
 use Modules\ServiceDesk\Models\ServiceRequest;
 use Modules\ServiceDesk\Policies\ServiceActionPolicy;
 use Modules\ServiceDesk\Policies\ServiceRequestPolicy;
 use Modules\ServiceDesk\Repositories\ServiceActionRepository;
 use Modules\ServiceDesk\Repositories\ServiceRequestRepository;
+use Modules\ServiceDesk\Services\ServiceDeskNotificationService;
 use Nwidart\Modules\Traits\PathNamespace;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -67,6 +68,7 @@ class ServiceDeskServiceProvider extends ServiceProvider
         $this->app->register(RouteServiceProvider::class);
         $this->app->singleton(ServiceActionRepository::class, ServiceActionRepository::class);
         $this->app->singleton(ServiceRequestRepository::class, ServiceRequestRepository::class);
+        $this->app->singleton(ServiceDeskNotificationService::class, ServiceDeskNotificationService::class);
     }
 
     /**
@@ -74,10 +76,9 @@ class ServiceDeskServiceProvider extends ServiceProvider
      */
     protected function registerCommands(): void
     {
-        // $this->commands([]);
-
         $this->commands([
             AutoAssignCriticalTickets::class,
+            CheckSlaExpiryCommand::class,
         ]);
     }
 
@@ -86,16 +87,13 @@ class ServiceDeskServiceProvider extends ServiceProvider
      */
     protected function registerCommandSchedules(): void
     {
-        // $this->app->booted(function () {
-        //     $schedule = $this->app->make(Schedule::class);
-        //     $schedule->command('inspire')->hourly();
-        // });
-
-        // TODO: Implementar comando servicedesk:escalate-tier1
-        // $this->app->booted(function () {
-        //     $schedule = $this->app->make(Schedule::class);
-        //     $schedule->command('servicedesk:escalate-tier1')->everyFiveMinutes();
-        // });
+        $this->app->booted(function () {
+            $schedule = $this->app->make(Schedule::class);
+            // Check SLA every hour
+            $schedule->command('servicedesk:check-sla --hours=4 --auto-escalate')
+                     ->hourly()
+                     ->withoutOverlapping();
+        });
     }
 
     /**

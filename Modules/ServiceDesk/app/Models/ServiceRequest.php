@@ -10,26 +10,31 @@ class ServiceRequest extends Model
 {
     protected $primaryKey = 'ticket_id';
     public $incrementing = true;
-    public $timestamps    = false;
+    public $timestamps    = true; // Enable timestamps for updated_at tracking
     protected $fillable   = [
-
         'contract_id',
         'opened_by',
         'opened_at',
         'ticket_type',
+        'category_id',
         'priority',
         'status',
         'description',
         'sla_due_at',
         'escalated_at',
-        
+        'assigned_to',
+        'closed_by',
+        'closed_at',
     ];
 
     protected $casts = [
         'opened_at'    => 'datetime',
         'sla_due_at'   => 'datetime',
         'escalated_at' => 'datetime',
-        'assigned_to' => 'integer',
+        'closed_at'    => 'datetime',
+        'assigned_to'  => 'integer',
+        'closed_by'    => 'integer',
+        'category_id'  => 'integer',
         'created_at'   => 'datetime',
         'updated_at'   => 'datetime',
         'deleted_at'   => 'datetime',
@@ -45,6 +50,21 @@ class ServiceRequest extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'opened_by', 'user_id');
+    }
+
+    public function assignee()
+    {
+        return $this->belongsTo(User::class, 'assigned_to', 'user_id');
+    }
+
+    public function closer()
+    {
+        return $this->belongsTo(User::class, 'closed_by', 'user_id');
+    }
+
+    public function category()
+    {
+        return $this->belongsTo(ServiceCategory::class, 'category_id');
     }
 
     public function contract()

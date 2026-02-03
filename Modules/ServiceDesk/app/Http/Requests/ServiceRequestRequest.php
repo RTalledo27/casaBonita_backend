@@ -13,13 +13,14 @@ class ServiceRequestRequest extends FormRequest
     {
         return [
             'contract_id'    => 'nullable|exists:contracts,contract_id',
-            'ticket_type'    => 'required|in:garantia,mantenimiento,otro',
+            'ticket_type'    => 'required|in:incidente,solicitud,cambio,garantia,mantenimiento,otro',
             'priority'       => 'required|in:baja,media,alta,critica',
-            'status'         => 'sometimes|in:abierto,en_proceso,cerrado',
+            'status'         => 'sometimes|in:abierto,en_progreso,pendiente,escalado,resuelto,reabierto,cerrado',
             'description'    => 'nullable|string|max:3000',
             'opened_at'      => 'nullable|date',
             'sla_due_at'     => 'nullable|date',
             'escalated_at'   => 'nullable|date',
+            'category_id'    => 'nullable|exists:service_categories,id',
 
         ];
     }

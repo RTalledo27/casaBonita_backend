@@ -18,6 +18,8 @@ class ServiceRequestResource extends JsonResource
             'ticket_id'     => $this->ticket_id,
             'contract_id'   => $this->contract_id,
             'opened_by'     => new UserResource($this->whenLoaded('creator')),
+            'assigned_to'   => new UserResource($this->whenLoaded('assignee')),
+            'closed_by'     => new UserResource($this->whenLoaded('closer')),
             'opened_at'     => $this->opened_at?->toIso8601String(),
             'ticket_type'   => $this->ticket_type,
             'priority'      => $this->priority,
@@ -25,8 +27,9 @@ class ServiceRequestResource extends JsonResource
             'description'   => $this->description,
             'sla_due_at'    => $this->sla_due_at?->toIso8601String(),
             'escalated_at'  => $this->escalated_at?->toIso8601String(),
+            'closed_at'     => $this->closed_at?->toIso8601String(),
             'actions'       => ServiceActionResource::collection($this->whenLoaded('actions')),
-            // Agrega más campos o relaciones si las usas (adjuntos, etc.)
+            // Timestamps
             'created_at'    => $this->created_at?->toIso8601String(),
             'updated_at'    => $this->updated_at?->toIso8601String(),
             'deleted_at'    => $this->deleted_at?->toIso8601String(),
