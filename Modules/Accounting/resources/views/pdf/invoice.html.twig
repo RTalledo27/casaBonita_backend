@@ -1,0 +1,300 @@
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <style type="text/css">
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+            color: #000;
+        }
+        .container {
+            width: 100%;
+            padding: 0 10px;
+        }
+        .header-table {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .company-info {
+            text-align: left;
+            padding-right: 20px;
+        }
+        .company-name {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        .ruc-box {
+            border: 2px solid #000;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .ruc-number {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .doc-type {
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #eee;
+            padding: 5px 0;
+            margin: 5px 0;
+        }
+        .doc-number {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .client-info-box {
+            border: 1px solid #000;
+            padding: 5px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .client-table {
+            width: 100%;
+        }
+        .client-table td {
+            padding: 2px;
+            vertical-align: top;
+        }
+        .label {
+            font-weight: bold;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .items-table th {
+            border: 1px solid #000;
+            padding: 5px;
+            background-color: #eee;
+            font-weight: bold;
+            text-align: center;
+        }
+        .items-table td {
+            border: 1px solid #000;
+            padding: 5px;
+        }
+        .footer-table {
+            width: 100%;
+        }
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .totals-table td {
+            padding: 3px;
+            text-align: right;
+        }
+        .total-label {
+            font-weight: bold;
+        }
+        .total-amount {
+            border-bottom: 1px solid #ccc;
+        }
+        .main-total {
+            font-size: 13px;
+            font-weight: bold;
+            border-top: 1px solid #000;
+        }
+        .legend {
+            margin-top: 10px;
+            font-style: italic;
+        }
+        .qr-section {
+            text-align: center;
+        }
+        .disclaimer {
+            font-size: 9px;
+            text-align: center;
+            margin-top: 20px;
+            border-top: 1px solid #999;
+            padding-top: 5px;
+        }
+        .logo-img {
+            max-height: 80px;
+            max-width: 250px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    {% set cp = doc.company %}
+    {% set isInvoice = doc.tipoDoc in ['01', '03'] %}
+    {% set isNota = doc.tipoDoc in ['07', '08'] %}
+    {% set name = doc.tipoDoc|catalog('01') %}
+    
+    <div class="container">
+        <!-- Header -->
+        <table class="header-table">
+            <tr>
+                <td width="60%" valign="top" class="company-info">
+                    {% if params.system.logo %}
+                        <img src="{{ params.system.logo|image_b64 }}" class="logo-img">
+                    {% endif %}
+                    <div class="company-name">{{ cp.razonSocial }}</div>
+                    <div>{{ cp.address.direccion }}</div>
+                    <div>{{ cp.address.distrito }} - {{ cp.address.provincia }} - {{ cp.address.departamento }}</div>
+                    {% if params.user.header %}
+                        <div>{{ params.user.header|raw }}</div>
+                    {% endif %}
+                </td>
+                <td width="40%" valign="top">
+                    <div class="ruc-box">
+                        <div class="ruc-number">R.U.C. {{ cp.ruc }}</div>
+                        <div class="doc-type">{{ name|upper }} ELECTRÓNICA</div>
+                        <div class="doc-number">{{ doc.serie }}-{{ doc.correlativo }}</div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <!-- Client Info -->
+        <div class="client-info-box">
+            {% set cl = doc.client %}
+            <table class="client-table">
+                <tr>
+                    <td width="15%" class="label">Señor(es):</td>
+                    <td width="50%">{{ cl.rznSocial }}</td>
+                    <td width="15%" class="label">Fecha Emisión:</td>
+                    <td width="20%">{{ doc.fechaEmision|date('d/m/Y') }}</td>
+                </tr>
+                <tr>
+                    <td class="label">{{ cl.tipoDoc|catalog('06') }}:</td>
+                    <td>{{ cl.numDoc }}</td>
+                    <td class="label">Moneda:</td>
+                    <td>{{ doc.tipoMoneda|catalog('021') }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Dirección:</td>
+                    <td colspan="3">{% if cl.address %}{{ cl.address.direccion }}{% endif %}</td>
+                </tr>
+                {% if doc.fecVencimiento %}
+                <tr>
+                    <td class="label">Vencimiento:</td>
+                    <td colspan="3">{{ doc.fecVencimiento|date('d/m/Y') }}</td>
+                </tr>
+                {% endif %}
+                {% if isNota %}
+                <tr>
+                    <td class="label">Doc. Afectado:</td>
+                    <td colspan="3">{{ doc.tipDocAfectado|catalog('01') }} {{ doc.numDocfectado }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Motivo:</td>
+                    <td colspan="3">{{ doc.desMotivo }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <!-- Items -->
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th width="8%">Cant.</th>
+                    <th width="10%">Unidad</th>
+                    <th width="12%">Código</th>
+                    <th>Descripción</th>
+                    <th width="12%">V. Unit</th>
+                    <th width="12%">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set moneda = doc.tipoMoneda|catalog('02') %}
+                {% for det in doc.details %}
+                <tr>
+                    <td align="center">{{ det.cantidad|n_format }}</td>
+                    <td align="center">{{ det.unidad }}</td>
+                    <td align="center">{{ det.codProducto }}</td>
+                    <td>{{ det.descripcion }}</td>
+                    <td align="right">{{ moneda }} {{ det.mtoValorUnitario|n_format }}</td>
+                    <td align="right">{{ moneda }} {{ det.mtoValorVenta|n_format }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Footer -->
+        <table class="footer-table">
+            <tr>
+                <td width="65%" valign="top">
+                    <!-- Leyenda -->
+                    <div>
+                        <strong>SON: {{ legend(doc.legends, '1000') }}</strong>
+                    </div>
+                    
+                    {% if doc.legends %}
+                        <div class="legend">
+                        {% for leg in doc.legends %}
+                            {% if leg.code != '1000' %}{{ leg.value }}<br>{% endif %}
+                        {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% if params.user.extras %}
+                        <br>
+                        <table width="100%" cellpadding="2">
+                        {% for item in params.user.extras %}
+                            <tr>
+                                <td><strong>{{ item.name|upper }}:</strong> {{ item.value }}</td>
+                            </tr>
+                        {% endfor %}
+                        </table>
+                    {% endif %}
+
+                    <br>
+                    {% if params.system.hash %}
+                    <div><strong>Resumen:</strong> {{ params.system.hash }}</div>
+                    {% endif %}
+                    
+                    <br>
+                    <div class="qr-section" style="text-align: left;">
+                        <img src="{{ qrCode(doc)|image_b64('svg+xml') }}" width="120" alt="Qr Image">
+                    </div>
+                </td>
+                <td width="35%" valign="top">
+                    <table class="totals-table">
+                        {% if doc.mtoOperGravadas %}
+                        <tr>
+                            <td class="total-label">Op. Gravada:</td>
+                            <td class="total-amount">{{ moneda }} {{ doc.mtoOperGravadas|n_format }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if doc.mtoOperExoneradas %}
+                        <tr>
+                            <td class="total-label">Op. Exonerada:</td>
+                            <td class="total-amount">{{ moneda }} {{ doc.mtoOperExoneradas|n_format }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if doc.mtoOperInafectas %}
+                        <tr>
+                            <td class="total-label">Op. Inafecta:</td>
+                            <td class="total-amount">{{ moneda }} {{ doc.mtoOperInafectas|n_format }}</td>
+                        </tr>
+                        {% endif %}
+                        
+                        <tr>
+                            <td class="total-label">I.G.V. (18%):</td>
+                            <td class="total-amount">{{ moneda }} {{ doc.mtoIGV|n_format }}</td>
+                        </tr>
+                        
+                        <tr class="main-total">
+                            <td class="total-label">TOTAL:</td>
+                            <td>{{ moneda }} {{ doc.mtoImpVenta|n_format }}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <div class="disclaimer">
+            Representación impresa de la {{ name|upper }} ELECTRÓNICA, generada desde el sistema facturador SUNAT. Puede verificarla usando su clave SOL.
+        </div>
+    </div>
+</body>
+</html>

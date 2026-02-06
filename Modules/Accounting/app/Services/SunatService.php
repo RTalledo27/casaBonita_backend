@@ -464,8 +464,14 @@ class SunatService //servicio sunat
         
         // Configurar Reporte HTML
         $report = new \Greenter\Report\HtmlReport();
-        $resolver = new \Greenter\Report\Resolver\DefaultTemplateResolver();
-        $report->setTemplate($resolver->getTemplate($greenterDoc));
+        
+        $templatePath = base_path('Modules/Accounting/resources/views/pdf/invoice.html.twig');
+        if (file_exists($templatePath)) {
+            $report->setTemplate(file_get_contents($templatePath));
+        } else {
+            $resolver = new \Greenter\Report\Resolver\DefaultTemplateResolver();
+            $report->setTemplate($resolver->getTemplate($greenterDoc));
+        }
 
         // Cargar logo
         $logoPath = public_path('img/logo.png');
@@ -513,8 +519,14 @@ class SunatService //servicio sunat
         $greenterDoc = $this->buildGreenterInvoice($invoice);
         
         $report = new \Greenter\Report\HtmlReport();
-        $resolver = new \Greenter\Report\Resolver\DefaultTemplateResolver();
-        $report->setTemplate($resolver->getTemplate($greenterDoc));
+        
+        $templatePath = base_path('Modules/Accounting/resources/views/pdf/invoice.html.twig');
+        if (file_exists($templatePath)) {
+            $report->setTemplate(file_get_contents($templatePath));
+        } else {
+            $resolver = new \Greenter\Report\Resolver\DefaultTemplateResolver();
+            $report->setTemplate($resolver->getTemplate($greenterDoc));
+        }
 
         // Cargar logo
         $logoPath = public_path('img/logo.png');
