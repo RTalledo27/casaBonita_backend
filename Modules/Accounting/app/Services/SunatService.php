@@ -463,12 +463,14 @@ class SunatService //servicio sunat
         $greenterDoc = $this->buildGreenterInvoice($invoice);
         
         // Configurar Reporte HTML
-        $report = new \Greenter\Report\HtmlReport();
-        
-        $templatePath = base_path('Modules/Accounting/resources/views/pdf/invoice.html.twig');
-        if (file_exists($templatePath)) {
-            $report->setTemplate(file_get_contents($templatePath));
+        $templateDir = base_path('Modules/Accounting/resources/views/pdf');
+        $templateFile = 'invoice.html.twig';
+
+        if (file_exists($templateDir . '/' . $templateFile)) {
+            $report = new \Greenter\Report\HtmlReport($templateDir);
+            $report->setTemplate($templateFile);
         } else {
+            $report = new \Greenter\Report\HtmlReport();
             $resolver = new \Greenter\Report\Resolver\DefaultTemplateResolver();
             $report->setTemplate($resolver->getTemplate($greenterDoc));
         }
@@ -518,12 +520,15 @@ class SunatService //servicio sunat
     {
         $greenterDoc = $this->buildGreenterInvoice($invoice);
         
-        $report = new \Greenter\Report\HtmlReport();
-        
-        $templatePath = base_path('Modules/Accounting/resources/views/pdf/invoice.html.twig');
-        if (file_exists($templatePath)) {
-            $report->setTemplate(file_get_contents($templatePath));
+        // Configurar Reporte HTML
+        $templateDir = base_path('Modules/Accounting/resources/views/pdf');
+        $templateFile = 'invoice.html.twig';
+
+        if (file_exists($templateDir . '/' . $templateFile)) {
+            $report = new \Greenter\Report\HtmlReport($templateDir);
+            $report->setTemplate($templateFile);
         } else {
+            $report = new \Greenter\Report\HtmlReport();
             $resolver = new \Greenter\Report\Resolver\DefaultTemplateResolver();
             $report->setTemplate($resolver->getTemplate($greenterDoc));
         }
