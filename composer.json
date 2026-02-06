@@ -6,6 +6,8 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
+        "greenter/greenter": "^5.1",
+        "greenter/htmltopdf": "*",
         "laravel/framework": "^11.0",
         "laravel/reverb": "^1.6",
         "laravel/sanctum": "^4.0",

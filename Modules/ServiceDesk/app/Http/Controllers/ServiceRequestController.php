@@ -9,19 +9,18 @@ use Modules\ServiceDesk\Repositories\ServiceRequestRepository;
 use Modules\ServiceDesk\Transformers\ServiceRequestResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
+use Modules\ServiceDesk\Events\TicketUpdated;
 
 class ServiceRequestController extends Controller
 {
     protected $repo;
+    
     public function __construct(ServiceRequestRepository $repo)
     {
         $this->repo = $repo;
         $this->middleware('auth:sanctum');
-        $this->middleware('can:service-desk.tickets.view')->only(['index', 'show']);
-        $this->middleware('can:service-desk.tickets.store')->only('store');
-        $this->middleware('can:service-desk.tickets.update')->only('update');
-        $this->middleware('can:service-desk.tickets.delete')->only('destroy');
-        $this->authorizeResource(ServiceRequest::class, 'request'); // <--- ESTA LÍNEA BIEN!
+        // Authorization handled by ServiceRequestPolicy (includes before() for admin bypass)
+        // No middleware 'can:' needed - Policy handles everything
     }
     
 
@@ -45,8 +44,8 @@ class ServiceRequestController extends Controller
 
         $ticket = $this->repo->create($data);
         
-
-        // Notificar/emitir evento aquí si quieres
+        // Broadcast ticket created event for real-time updates
+        event(new TicketUpdated($ticket, 'created'));
 
         return new ServiceRequestResource($ticket->load(['creator', 'actions.user']));
     }
@@ -75,6 +74,9 @@ class ServiceRequestController extends Controller
 
         $updated = $this->repo->update($ticket_id, $request->validated());
 
+        // Broadcast ticket updated event for real-time updates
+        event(new TicketUpdated($updated, 'updated'));
+
         return new ServiceRequestResource($updated);
     }
 
@@ -82,6 +84,9 @@ class ServiceRequestController extends Controller
     {
         $ticket = $this->repo->find($ticket_id);
         $this->authorize('delete', $ticket);
+
+        // Broadcast before delete for real-time updates
+        event(new TicketUpdated($ticket, 'deleted'));
 
         $this->repo->delete($ticket_id);
 
@@ -109,6 +114,9 @@ class ServiceRequestController extends Controller
 
         $updated = $this->repo->assignTicket($ticket_id, $request->user_id);
 
+        // Broadcast ticket assigned event
+        event(new TicketUpdated($updated, 'assigned'));
+
         return new ServiceRequestResource($updated);
     }
 
@@ -128,6 +136,9 @@ class ServiceRequestController extends Controller
 
         $updated = $this->repo->changeStatus($ticket_id, $request->status, $request->notes);
 
+        // Broadcast status change event
+        event(new TicketUpdated($updated, 'updated'));
+
         return new ServiceRequestResource($updated);
     }
 
@@ -145,6 +156,9 @@ class ServiceRequestController extends Controller
         $this->authorize('update', $ticket);
 
         $updated = $this->repo->escalate($ticket_id, $request->reason);
+
+        // Broadcast escalation event
+        event(new TicketUpdated($updated, 'updated'));
 
         return new ServiceRequestResource($updated);
     }
@@ -165,6 +179,9 @@ class ServiceRequestController extends Controller
 
         $actionType = $request->input('action_type', 'comment');
         $updated = $this->repo->addComment($ticket_id, $request->notes, $actionType);
+
+        // Broadcast comment added event
+        event(new TicketUpdated($updated, 'updated'));
 
         return new ServiceRequestResource($updated);
     }

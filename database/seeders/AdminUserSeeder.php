@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
 use Modules\Security\Models\User;
 use Modules\Security\Models\Role;
 use Spatie\Permission\Models\Permission;
@@ -13,16 +12,21 @@ class AdminUserSeeder extends Seeder
 {
     /**
      * Run the database seeds.
+     * 
+     * Este seeder:
+     * 1. Ejecuta PermissionsSeeder para crear todos los permisos y roles
+     * 2. Crea el usuario administrador
+     * 3. Asigna el rol Administrador al usuario
      */
     public function run(): void
     {
         $this->command->info('🚀 Iniciando creación de usuario administrador...');
 
-        // Crear todos los permisos necesarios
-        $this->createPermissions();
+        // Ejecutar PermissionsSeeder para crear todos los permisos y roles
+        $this->call(PermissionsSeeder::class);
 
-        // Crear rol de administrador
-        $adminRole = $this->createAdminRole();
+        // Obtener el rol de administrador (ya creado por PermissionsSeeder)
+        $adminRole = $this->getAdminRole();
 
         // Crear usuario administrador
         $adminUser = $this->createAdminUser();
@@ -32,7 +36,7 @@ class AdminUserSeeder extends Seeder
 
         $this->command->info('✅ Usuario administrador creado exitosamente!');
         $this->command->info('📋 Detalles del usuario:');
-        $this->command->line('   • ID: ' . $adminUser->id);
+        $this->command->line('   • ID: ' . $adminUser->user_id);
         $this->command->line('   • Usuario: ' . $adminUser->username);
         $this->command->line('   • Email: ' . $adminUser->email);
         $this->command->line('   • Rol: ' . $adminRole->name);
@@ -40,265 +44,19 @@ class AdminUserSeeder extends Seeder
     }
 
     /**
-     * Crear todos los permisos del sistema
+     * Obtener rol de administrador (ya creado por PermissionsSeeder)
      */
-    private function createPermissions(): void
+    private function getAdminRole(): Role
     {
-        $this->command->info('🔐 Creando permisos del sistema...');
+        $this->command->info('👑 Obteniendo rol de administrador...');
 
-        $permissions = [
-            //MODULE SECURITY - PERMISSIONS
-            'security.access', //Permiso para acceder a la sección de seguridad
-            'security.permissions.view',
-            'security.permissions.store',
-            'security.permissions.update',
-            'security.permissions.destroy',
-            //MODULE SECURITY - ROLES
-            'security.roles.view',
-            'security.roles.store',
-            'security.roles.update',
-            'security.roles.destroy',
-            //MODULE SECURITY - USERS
-            'security.users.index',
-            'security.users.store',
-            'security.users.update',
-            'security.users.destroy',
-            'security.users.change-password',
-            'security.users.toggle-status',
-            'security.audit.view',
+        $adminRole = Role::where('name', 'Administrador')->first();
 
-            //MODULE CRM - ADDRESS
-            'crm.addresses.view',
-            'crm.addresses.store',
-            'crm.addresses.update',
-            'crm.addresses.destroy',
-            //MODULE CRM - CLIENTS
-            'crm.clients.view',
-            'crm.clients.store',
-            'crm.clients.update',
-            'crm.clients.delete',
-            'crm.clients.spouses.view',
-            'crm.clients.spouses.store',
-            'crm.clients.spouses.delete',
-            'crm.clients.export',
-            //MODULE CRM - INTERACTIONS
-            'crm.access', //Permiso para acceder a la sección de CRM
-            'crm.interactions.view',
-            'crm.interactions.store',
-            'crm.interactions.update',
-            'crm.interactions.delete',
-
-            // MODULE INVENTORY
-            'inventory.access',
-            'inventory.manzanas.view',
-            'inventory.manzanas.store',
-            'inventory.manzanas.update',
-            'inventory.manzanas.delete',
-            'inventory.street-types.view',
-            'inventory.street-types.store',
-            'inventory.street-types.update',
-            'inventory.street-types.delete',
-            'inventory.lots.view',
-            'inventory.lots.store',
-            'inventory.lots.update',
-            'inventory.lots.delete',
-            'inventory.media.manage',
-            'inventory.media.index',
-            'inventory.media.store',
-            'inventory.media.update',
-            'inventory.media.destroy',
-
-            // MODULE SALES
-            'sales.reservations.access',
-            'sales.reservations.view',
-            'sales.reservations.store',
-            'sales.reservations.update',
-            'sales.reservations.cancel',
-            'sales.reservations.convert',
-            'sales.access',
-            'sales.contracts.view',
-            'sales.contracts.store',
-            'sales.contracts.update',
-            'sales.contracts.delete',
-            'sales.conversions.process',
-
-            'sales.schedules.index',
-            'sales.schedules.view',
-            'sales.schedules.store',
-            'sales.schedules.update',
-            'sales.schedules.destroy',
-
-            'sales.payments.view',
-            'sales.payments.store',
-            'sales.payments.update',
-            'sales.payments.destroy',
-            
-            // MODULE SALES - CUTS
-            'sales.cuts.view',
-            'sales.cuts.create',
-            'sales.cuts.close',
-            'sales.cuts.review',
-            'sales.cuts.notes',
-            'sales.cuts.stats',
-
-            // MODULE SERVICE DESK - TICKETS
-            'service-desk.tickets.view',
-            'service-desk.tickets.store',
-            'service-desk.tickets.update',
-            'service-desk.tickets.delete',
-            'service-desk.tickets.assign',
-            'service-desk.tickets.actions',
-            'service-desk.tickets.close',
-
-            // MODULE SERVICE DESK - ACCIONES (HISTORIAL)
-            'service-desk.actions.view',
-            'service-desk.actions.store',
-            'service-desk.actions.update',
-            'service-desk.actions.delete',
-
-            // MODULE HUMAN RESOURCES
-            'hr.access',
-            'hr.employees.view',
-            'hr.employees.store',
-            'hr.employees.update',
-            'hr.employees.destroy',
-            'hr.employees.generate-user',
-            'hr.employees.dashboard',
-            'hr.commissions.view',
-            'hr.commissions.store',
-            'hr.commissions.update',
-            'hr.commissions.destroy',
-            'hr.commissions.pay',
-            'hr.commissions.process',
-            'hr.commissions.split-payment',
-            'hr.commission-verifications.view',
-            'hr.commission-verifications.verify',
-            'hr.commission-verifications.reverse',
-            'hr.commission-verifications.process',
-            'hr.commission-verifications.stats',
-            'hr.payroll.view',
-            'hr.payroll.generate',
-            'hr.payroll.process',
-            'hr.payroll.approve',
-            'hr.bonuses.view',
-            'hr.bonuses.store',
-            'hr.bonuses.update',
-            'hr.bonuses.destroy',
-            'hr.bonuses.process',
-            'hr.bonus-types.view',
-            'hr.bonus-types.store',
-            'hr.bonus-types.update',
-            'hr.bonus-types.destroy',
-            'hr.bonus-goals.view',
-            'hr.bonus-goals.store',
-            'hr.bonus-goals.update',
-            'hr.bonus-goals.destroy',
-            'hr.teams.view',
-            'hr.teams.store',
-            'hr.teams.update',
-            'hr.teams.destroy',
-            'hr.teams.assign-leader',
-            'hr.teams.toggle-status',
-            'hr.employee-import.validate',
-            'hr.employee-import.import',
-            'hr.employee-import.template',
-
-            // MODULE COLLECTIONS
-            'collections.access',
-            'collections.dashboard.view',
-            'collections.schedules.create',
-            'collections.schedules.view',
-            'collections.followups.view',
-            'collections.followups.store',
-            'collections.followups.update',
-            'collections.customer-payments.view',
-            'collections.customer-payments.create',
-            'collections.customer-payments.update',
-            'collections.customer-payments.delete',
-            'collections.customer-payments.redetect',
-            'collections.customer-payments.stats',
-            'collections.accounts-receivable.view',
-            'collections.accounts-receivable.create',
-            'collections.accounts-receivable.update',
-            'collections.accounts-receivable.delete',
-            'collections.accounts-receivable.overdue',
-            'collections.accounts-receivable.assign_collector',
-            'collections.receivables.view',
-            'collections.receivables.create',
-            'collections.receivables.update',
-            'collections.receivables.delete',
-            'collections.hr-integration.view',
-            'collections.hr-integration.sync',
-            'collections.hr-integration.process',
-            'collections.hr-integration.mark',
-            'collections.reports.view',
-            'collections.alerts.view',
-            'collections.collectors.view',
-            'collections.view',
-            'collections.create',
-            'collections.reports',
-
-            // MODULE REPORTS
-            'reports.access',
-            'reports.view', 
-            'reports.view_dashboard',
-            'reports.view_sales',
-            'reports.view_payments', 
-            'reports.view_projections',
-            'reports.export',
-            'reports.create',
-            'reports.edit',
-            'reports.delete',
-            'reports.admin'
-        ];
-
-        $createdCount = 0;
-        foreach ($permissions as $permission) {
-            Permission::firstOrCreate(
-                ['name' => $permission],
-                ['guard_name' => 'sanctum']
-            );
-            $createdCount++;
+        if (!$adminRole) {
+            throw new \Exception('Error: No se encontró el rol Administrador. Asegúrese de que PermissionsSeeder se haya ejecutado correctamente.');
         }
 
-        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
-
-        $this->command->line("   ✓ {$createdCount} permisos creados/verificados");
-    }
-
-    /**
-     * Crear rol de administrador con todos los permisos
-     */
-    private function createAdminRole(): Role
-    {
-        $this->command->info('👑 Creando rol de administrador...');
-
-        // Crear o actualizar rol de administrador
-        $adminRole = Role::firstOrCreate(
-            ['name' => 'Administrador'],
-            [
-                'guard_name' => 'sanctum',
-                'description' => 'Rol con acceso completo al sistema'
-            ]
-        );
-
-        // Asegurar que el rol se haya guardado correctamente
-        $adminRole->refresh();
-        
-        // Verificar que el rol tiene un ID válido (la tabla roles usa role_id)
-        if (!$adminRole->role_id) {
-            throw new \Exception('Error: No se pudo crear el rol de administrador');
-        }
-
-        // Asignar todos los permisos al rol
-        $allPermissions = Permission::where('guard_name', 'sanctum')->get();
-        
-        if ($allPermissions->count() > 0) {
-            $adminRole->syncPermissions($allPermissions);
-            $this->command->line("   ✓ Rol 'Administrador' creado con {$allPermissions->count()} permisos");
-        } else {
-            $this->command->warn('   ⚠ No se encontraron permisos para asignar al rol');
-        }
+        $this->command->line("   ✓ Rol 'Administrador' encontrado con {$adminRole->permissions->count()} permisos");
 
         return $adminRole;
     }
@@ -308,10 +66,15 @@ class AdminUserSeeder extends Seeder
      */
     private function createAdminUser(): User
     {
-        $this->command->info('👤 Creando usuario administrador...');
+        $this->command->info('� Creando usuario administrador...');
 
-        // Eliminar usuario admin existente si existe
-        User::where('email', 'admin@casabonita.com')->delete();
+        // Buscar o crear usuario admin
+        $adminUser = User::where('email', 'admin@casabonita.com')->first();
+
+        if ($adminUser) {
+            $this->command->line("   ℹ Usuario administrador ya existe (ID: {$adminUser->user_id})");
+            return $adminUser;
+        }
 
         // Crear nuevo usuario administrador
         $adminUser = User::create([
@@ -319,12 +82,14 @@ class AdminUserSeeder extends Seeder
             'email' => 'admin@casabonita.com',
             'password_hash' => Hash::make('admin123'),
             'status' => 'active',
+            'must_change_password' => false,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        $this->command->line("   ✓ Usuario administrador creado (ID: {$adminUser->id})");
+        $this->command->line("   ✓ Usuario administrador creado (ID: {$adminUser->user_id})");
 
         return $adminUser;
     }
 }
+

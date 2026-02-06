@@ -71,4 +71,9 @@ class ServiceRequest extends Model
     {
         return $this->belongsTo(Contract::class, 'contract_id', 'contract_id');
     }
+
+    public function attachments()
+    {
+        return $this->hasMany(TicketAttachment::class, 'ticket_id', 'ticket_id');
+    }
 }

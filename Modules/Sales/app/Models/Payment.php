@@ -61,6 +61,15 @@ class Payment extends Model
     }
 
     /**
+     * Facturas generadas a partir de este pago
+     */
+    public function invoices()
+    {
+        return $this->hasMany(\Modules\Accounting\Models\Invoice::class, 'payment_id', 'payment_id');
+    }
+
+
+    /**
      * Boot del modelo para sincronización automática
      */
     protected static function boot()

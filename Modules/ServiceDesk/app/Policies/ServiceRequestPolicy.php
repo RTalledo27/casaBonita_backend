@@ -11,68 +11,122 @@ class ServiceRequestPolicy
     use HandlesAuthorization;
 
     /**
-     * Create a new policy instance.
+     * Perform pre-authorization checks.
+     * Admins get full access to everything.
      */
-    use HandlesAuthorization;
+    public function before(User $user, string $ability): ?bool
+    {
+        if ($user->hasRole('Administrador') || $user->hasRole('admin')) {
+            return true;
+        }
+        
+        return null; // Fall through to specific policy methods
+    }
 
-    // Puede ver la lista de tickets
-    public function viewAny(User $user)
+    /**
+     * Can view the list of tickets
+     */
+    public function viewAny(User $user): bool
     {
         return $user->can('service-desk.tickets.view');
     }
 
-    public function view(User $user, ServiceRequest $ticket)
+    /**
+     * Can view a specific ticket
+     */
+    public function view(User $user, ServiceRequest $ticket): bool
     {
+        // Can view if has permission AND is related to the ticket
         return $user->can('service-desk.tickets.view')
             && ($user->user_id === $ticket->opened_by
-                || $user->hasRole('admin')
                 || $user->user_id === $ticket->assigned_to);
     }
 
-    public function create(User $user)
+    /**
+     * Can create tickets
+     */
+    public function create(User $user): bool
     {
-        return $user->can('service-desk.tickets.store');
+        return $user->can('service-desk.tickets.create') 
+            || $user->can('service-desk.tickets.store');
     }
 
-    public function update(User $user, ServiceRequest $ticket)
+    /**
+     * Can update a ticket
+     */
+    public function update(User $user, ServiceRequest $ticket): bool
     {
-        return $user->can('service-desk.tickets.update')
+        return ($user->can('service-desk.tickets.edit') || $user->can('service-desk.tickets.update'))
             && ($user->user_id === $ticket->opened_by
-                || $user->hasRole('admin')
                 || $user->user_id === $ticket->assigned_to);
     }
 
-    public function delete(User $user, ServiceRequest $ticket)
+    /**
+     * Can delete a ticket
+     */
+    public function delete(User $user, ServiceRequest $ticket): bool
     {
-        return $user->can('service-desk.tickets.delete')
-            && ($user->hasRole('admin') || $user->user_id === $ticket->opened_by);
+        return ($user->can('service-desk.tickets.delete') || $user->can('service-desk.tickets.destroy'))
+            && $user->user_id === $ticket->opened_by;
     }
 
-    public function assign(User $user, ServiceRequest $ticket)
+    /**
+     * Can assign technician to ticket
+     */
+    public function assign(User $user, ServiceRequest $ticket): bool
     {
         return $user->can('service-desk.tickets.assign');
     }
 
-    public function addAction(User $user, ServiceRequest $ticket)
+    /**
+     * Can add actions/comments to ticket
+     */
+    public function addAction(User $user, ServiceRequest $ticket): bool
     {
         return $user->can('service-desk.tickets.actions')
-            && ($user->user_id === $ticket->opened_by
-                || $user->hasRole('admin')
-                || $user->user_id === $ticket->assigned_to);
+            || $user->can('service-desk.tickets.comment');
     }
 
-    public function close(User $user, ServiceRequest $ticket)
+    /**
+     * Can change ticket status
+     */
+    public function changeStatus(User $user, ServiceRequest $ticket): bool
     {
-        return $user->can('service-desk.tickets.close');
+        return $user->can('service-desk.tickets.edit') 
+            || $user->can('service-desk.tickets.update')
+            || $user->user_id === $ticket->assigned_to;
     }
 
-    public function restore(User $user, ServiceRequest $ticket)
+    /**
+     * Can escalate ticket
+     */
+    public function escalate(User $user, ServiceRequest $ticket): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('service-desk.tickets.escalate');
     }
 
-    public function forceDelete(User $user, ServiceRequest $ticket)
+    /**
+     * Can close ticket
+     */
+    public function close(User $user, ServiceRequest $ticket): bool
     {
-        return $user->hasRole('admin');
+        return $user->can('service-desk.tickets.close')
+            || $user->user_id === $ticket->assigned_to;
+    }
+
+    /**
+     * Can restore ticket (admin only via before())
+     */
+    public function restore(User $user, ServiceRequest $ticket): bool
+    {
+        return false;
+    }
+
+    /**
+     * Can force delete (admin only via before())
+     */
+    public function forceDelete(User $user, ServiceRequest $ticket): bool
+    {
+        return false;
     }
 }

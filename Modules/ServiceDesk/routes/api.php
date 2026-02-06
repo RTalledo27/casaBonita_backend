@@ -6,6 +6,7 @@ use Modules\ServiceDesk\Http\Controllers\ServiceDeskController;
 use Modules\ServiceDesk\Http\Controllers\ServiceRequestController;
 use Modules\ServiceDesk\Http\Controllers\SlaConfigController;
 use Modules\ServiceDesk\Http\Controllers\ServiceCategoryController;
+use Modules\ServiceDesk\Http\Controllers\TicketAttachmentController;
 
 Route::middleware(['auth:sanctum'])->prefix('v1/servicedesk')->group(function () {
     Route::apiResource('servicedesks', ServiceDeskController::class)->names('servicedesk');
@@ -22,6 +23,13 @@ Route::middleware(['auth:sanctum'])->prefix('v1/servicedesk')->group(function ()
         Route::post('/requests/{ticket_id}/escalate', [ServiceRequestController::class, 'escalate'])->name('requests.escalate');
         Route::post('/requests/{ticket_id}/comment', [ServiceRequestController::class, 'addComment'])->name('requests.comment');
         Route::get('/requests/{ticket_id}/actions', [ServiceRequestController::class, 'getActions'])->name('requests.actions');
+        
+        // Ticket Attachments routes
+        Route::get('/requests/{ticket_id}/attachments', [TicketAttachmentController::class, 'index'])->name('attachments.index');
+        Route::post('/requests/{ticket_id}/attachments', [TicketAttachmentController::class, 'store'])->name('attachments.store');
+        Route::get('/attachments/{attachment_id}/download', [TicketAttachmentController::class, 'download'])->name('attachments.download');
+        Route::get('/attachments/{attachment_id}/preview', [TicketAttachmentController::class, 'preview'])->name('attachments.preview');
+        Route::delete('/attachments/{attachment_id}', [TicketAttachmentController::class, 'destroy'])->name('attachments.destroy');
         
         // SLA Configuration routes
         Route::get('/sla-configs', [SlaConfigController::class, 'index'])->name('sla.index');
