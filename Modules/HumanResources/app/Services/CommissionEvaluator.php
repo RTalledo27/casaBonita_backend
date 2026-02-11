@@ -37,7 +37,12 @@ class CommissionEvaluator
                 });
             }
 
-            $scheme = $schemeQuery->orderByDesc('is_default')->first();
+            // Priorizar el esquema más reciente vigente, luego el default como fallback
+            $scheme = $schemeQuery
+                ->orderByDesc('effective_from')  // El más reciente primero
+                ->orderByDesc('created_at')      // Si empatan, el más nuevo
+                ->orderByDesc('is_default')      // Si empatan, el default
+                ->first();
 
             if (!$scheme) {
                 return null;

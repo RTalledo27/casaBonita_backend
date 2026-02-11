@@ -7,10 +7,16 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Modules\HumanResources\Models\Employee;
+use Modules\HumanResources\Models\Team;
+use Modules\HumanResources\Models\Office;
+use Modules\HumanResources\Models\Area;
+use Modules\HumanResources\Models\Position;
 use Carbon\Carbon;
 use Exception;
 use Modules\Security\Models\User;
+use Modules\Security\Models\Role;
 use App\Mail\NewUserCredentialsMail;
+use Illuminate\Support\Str;
 
 class EmployeeImportService
 {
@@ -21,8 +27,10 @@ class EmployeeImportService
     {
         $results = [
             'success' => 0,
+            'updated' => 0,
             'errors' => [],
             'created_users' => [],
+            'updated_users' => [],
             'created_employees' => [],
             'emails_sent' => 0,
             'emails_failed' => []
@@ -45,32 +53,68 @@ class EmployeeImportService
                     // Procesar datos del empleado
                     $processedData = $this->processRowData($row);
                     
-                    // Guardar la contraseña temporal antes de hashearla
-                    $temporaryPassword = '123456'; // Contraseña por defecto
-                    
-                    // Crear usuario
-                    $user = $this->createUser($processedData['user_data']);
-                    $results['created_users'][] = $user->user_id;
-                    
-                    // Crear empleado
-                    $employee = $this->createEmployee($processedData['employee_data'], $user->user_id);
-                    $results['created_employees'][] = $employee->employee_id;
-                    
-                    // Enviar correo con credenciales
-                    try {
-                        $this->sendWelcomeEmail($user, $temporaryPassword);
-                        $results['emails_sent']++;
-                        Log::info("Email enviado exitosamente a: {$user->email}");
-                    } catch (Exception $emailError) {
-                        $results['emails_failed'][] = "Fila {$rowNumber}: Error al enviar email a {$user->email} - {$emailError->getMessage()}";
-                        Log::error("Error enviando email de bienvenida", [
-                            'user_id' => $user->user_id,
-                            'email' => $user->email,
-                            'error' => $emailError->getMessage()
-                        ]);
+                    // Buscar usuario existente por DNI o Correo
+                    $existingUser = User::where('dni', $processedData['user_data']['dni'])
+                                        ->orWhere('email', $processedData['user_data']['email'])
+                                        ->first();
+
+                    if ($existingUser) {
+                        // ACTUALIZAR USUARIO EXISTENTE
+                       $this->updateUser($existingUser, $processedData['user_data']);
+                       $results['updated_users'][] = $existingUser->user_id;
+
+                       // Buscar o crear empleado
+                       $existingEmployee = Employee::where('user_id', $existingUser->user_id)->first();
+                       
+                       if ($existingEmployee) {
+                           $this->updateEmployee($existingEmployee, $processedData['employee_data']);
+                       } else {
+                           $employee = $this->createEmployee($processedData['employee_data'], $existingUser->user_id);
+                           $results['created_employees'][] = $employee->employee_id;
+                       }
+                       
+                       // Asignar roles (Accesos)
+                       if (!empty($processedData['roles'])) {
+                           $this->assignRoles($existingUser, $processedData['roles']);
+                       }
+
+                       $results['updated']++;
+
+                    } else {
+                        // CREAR NUEVO USUARIO
+                        // Generar contraseña aleatoria segura
+                        $rawPassword = Str::random(10);
+                        $processedData['user_data']['password_hash'] = Hash::make($rawPassword);
+                        
+                        // Crear usuario
+                        $user = $this->createUser($processedData['user_data']);
+                        $results['created_users'][] = $user->user_id;
+                        
+                        // Crear empleado
+                        $employee = $this->createEmployee($processedData['employee_data'], $user->user_id);
+                        $results['created_employees'][] = $employee->employee_id;
+                        
+                        // Asignar roles (Accesos)
+                        if (!empty($processedData['roles'])) {
+                            $this->assignRoles($user, $processedData['roles']);
+                        }
+
+                        // Enviar correo con credenciales
+                        try {
+                            $this->sendWelcomeEmail($user, $rawPassword);
+                            $results['emails_sent']++;
+                            Log::info("Email enviado exitosamente a: {$user->email}");
+                        } catch (Exception $emailError) {
+                            $results['emails_failed'][] = "Fila {$rowNumber}: Error al enviar email a {$user->email} - {$emailError->getMessage()}";
+                            Log::error("Error enviando email de bienvenida", [
+                                'user_id' => $user->user_id,
+                                'email' => $user->email,
+                                'error' => $emailError->getMessage()
+                            ]);
+                        }
+                        
+                        $results['success']++;
                     }
-                    
-                    $results['success']++;
                     
                 } catch (Exception $e) {
                     $results['errors'][] = "Fila {$rowNumber}: {$e->getMessage()}";
@@ -81,7 +125,7 @@ class EmployeeImportService
                 }
             }
 
-            if (count($results['errors']) > 0 && $results['success'] === 0) {
+            if (count($results['errors']) > 0 && $results['success'] === 0 && $results['updated'] === 0) {
                 DB::rollBack();
                 return $results;
             }
@@ -103,30 +147,31 @@ class EmployeeImportService
         $errors = [];
 
         // Validar campos requeridos
-        if (empty($row['COLABORADOR'])) {
-            $errors[] = "El nombre del colaborador es requerido";
+        $requiredFields = [
+            'COLABORADOR' => 'El nombre del colaborador es requerido',
+            'DNI' => 'El DNI es requerido',
+            'CORREO' => 'El correo es requerido',
+            'AREA' => 'El Área (Departamento) es requerida',
+            'EQUIPO' => 'El Equipo es requerido',
+            'OFICINA' => 'La Oficina es requerida',
+            'ACCESOS' => 'Los Accesos (Roles) son requeridos'
+        ];
+
+        foreach ($requiredFields as $field => $message) {
+            if (empty($row[$field])) {
+                $errors[] = $message;
+            }
         }
         
-        if (empty($row['DNI'])) {
-            $errors[] = "El DNI es requerido";
-        } elseif (strlen($row['DNI']) !== 8 || !is_numeric($row['DNI'])) {
+        if (!empty($row['DNI']) && (strlen($row['DNI']) !== 8 || !is_numeric($row['DNI']))) {
             $errors[] = "El DNI debe tener 8 dígitos";
         }
         
-        if (empty($row['CORREO'])) {
-            $errors[] = "El correo es requerido";
-        } elseif (!filter_var($row['CORREO'], FILTER_VALIDATE_EMAIL)) {
+        if (!empty($row['CORREO']) && !filter_var($row['CORREO'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = "El formato del correo es inválido";
         }
 
-        // Verificar duplicados
-        if (!empty($row['DNI']) && User::where('dni', $row['DNI'])->exists()) {
-            $errors[] = "Ya existe un usuario con el DNI {$row['DNI']}";
-        }
-        
-        if (!empty($row['CORREO']) && User::where('email', $row['CORREO'])->exists()) {
-            $errors[] = "Ya existe un usuario con el correo {$row['CORREO']}";
-        }
+        // Ya NO validamos duplicados aquí porque ahora actualizamos si existe.
 
         if (!empty($errors)) {
             return [
@@ -165,20 +210,48 @@ class EmployeeImportService
             'salario_base_parsed' => $baseSalary
         ]);
         
+        // Obtener/Crear Office ID (case-insensitive firstOrCreate)
+        $officeId = null;
+        if (!empty($row['OFICINA'])) {
+            $office = Office::findOrCreateByName($row['OFICINA']);
+            $officeId = $office->office_id;
+        }
+
+        // Obtener/Crear Area ID (case-insensitive firstOrCreate)
+        $areaId = null;
+        if (!empty($row['AREA'])) {
+            $area = Area::findOrCreateByName($row['AREA']);
+            $areaId = $area->area_id;
+        }
+
+        // Obtener/Crear Team ID (case-insensitive firstOrCreate)
+        $teamId = null;
+        if (!empty($row['EQUIPO'])) {
+            $team = Team::findOrCreateByName($row['EQUIPO']);
+            $teamId = $team->team_id;
+        }
+
+        // Obtener/Crear Position ID usando findOrCreateSmart
+        $positionId = null;
+        if (!empty($row['CARGO'])) {
+            $position = Position::findOrCreateSmart($row['CARGO']);
+            $positionId = $position->position_id;
+        }
+
         return [
             'user_data' => [
                 'username' => $username,
-                'password_hash' => Hash::make('123456'), // Contraseña temporal
+                // 'password_hash' se asignará en el importador dependiendo si es nuevo o no
                 'email' => $row['CORREO'],
-                'status' => 'active',
+                'status' => 'active', // El import siempre activa
                 'must_change_password' => true,
-                'first_name' => $this->removeAccents($nameParts['first_name']), // Normalizar nombres
-                'last_name' => $this->removeAccents($nameParts['last_name']), // Normalizar nombres
+                'first_name' => $this->removeAccents($nameParts['first_name']),
+                'last_name' => $this->removeAccents($nameParts['last_name']),
                 'dni' => $row['DNI'] ?? null,
                 'phone' => $row['TELEFONO'] ?? null,
                 'birth_date' => $birthDate,
                 'position' => $row['CARGO'] ?? null,
-                'department' => $row['DEPARTAMENTO'] ?? null,
+                'department' => $row['AREA'] ?? null, // Mantener string en user también
                 'address' => $row['DIRECCION'] ?? null,
                 'hire_date' => $hireDate,
             ],
@@ -195,7 +268,12 @@ class EmployeeImportService
                 'social_security_number' => $row['SUNAT'] ?? null,
                 'is_commission_eligible' => 1,
                 'is_bonus_eligible' => 1,
-            ]
+                'team_id' => $teamId,
+                'office_id' => $officeId,  // Nuevo: FK a offices
+                'area_id' => $areaId,       // Nuevo: FK a areas
+                'position_id' => $positionId, // Nuevo: FK a positions
+            ],
+            'roles' => $row['ACCESOS'] ?? null
         ];
     }
 
@@ -214,6 +292,76 @@ class EmployeeImportService
     {
         $employeeData['user_id'] = $userId;
         return Employee::create($employeeData);
+    }
+
+    /**
+     * Actualizar usuario existente
+     */
+    private function updateUser(User $user, array $userData): void
+    {
+        // No actualizamos password ni username para evitar problemas de acceso
+        unset($userData['password_hash']);
+        unset($userData['username']); // Preservar username original
+        
+        $user->update($userData);
+    }
+
+    /**
+     * Actualizar empleado existente
+     */
+    private function updateEmployee(Employee $employee, array $employeeData): void
+    {
+        unset($employeeData['employee_code']); // No cambiar código de empleado
+        $employee->update($employeeData);
+    }
+
+    /**
+     * Buscar ID de equipo por nombre
+     */
+    private function findTeamByName(string $teamName): ?int
+    {
+        if (empty($teamName)) {
+            return null;
+        }
+
+        $team = Team::where('team_name', 'LIKE', '%' . trim($teamName) . '%')->first();
+
+        if (!$team) {
+            // Log::warning("Equipo no encontrado: {$teamName}");
+            // Opcional: Crear equipo si no existe? Por ahora solo retornamos null.
+            return null;
+        }
+
+        return $team->team_id;
+    }
+
+    /**
+     * Asignar roles a usuario
+     */
+    private function assignRoles(User $user, string $accesos): void
+    {
+        // Limpiar roles string (ej: "Admin, Vendedor" -> ["Admin", "Vendedor"])
+        $roleNames = array_map('trim', explode(',', $accesos));
+        $validRoles = [];
+
+        foreach ($roleNames as $roleName) {
+            // Buscar rol insensitive case
+            // Asumiendo que usamos Spatie Permission o similar con tabla roles
+            $role = Role::whereRaw('LOWER(name) = ?', [mb_strtolower($roleName, 'UTF-8')])->first();
+            
+            if ($role) {
+                $validRoles[] = $role->name; // Usar el nombre exacto de la DB
+            } else {
+                Log::warning("Rol no encontrado durante importación: {$roleName}");
+            }
+        }
+
+        if (!empty($validRoles)) {
+            // Sincronizar roles (reemplaza los existentes) o asignar (agrega)?
+            // El usuario pidió "Accesos", normalmente esto define QUE roles tiene. 
+            // Sync parece más seguro para reflejar estado actual del Excel.
+            $user->syncRoles($validRoles);
+        }
     }
 
     /**
@@ -473,7 +621,7 @@ class EmployeeImportService
      */
     public function validateExcelStructure(array $headers): array
     {
-        $requiredHeaders = ['N°', 'COLABORADOR', 'DNI', 'CORREO', 'SUELDO BASICO', 'FECHA DE INICIO'];
+        $requiredHeaders = ['N°', 'COLABORADOR', 'DNI', 'CORREO', 'SUELDO BASICO', 'FECHA DE INICIO', 'AREA', 'EQUIPO', 'ACCESOS', 'OFICINA'];
         $missingHeaders = [];
         
         foreach ($requiredHeaders as $required) {
@@ -509,5 +657,132 @@ class EmployeeImportService
                 new NewUserCredentialsMail($user, $temporaryPassword, $loginUrl)
             );
         }
+    }
+
+    /**
+     * Obtener preview de la importación - Analiza qué se va a crear
+     */
+    public function getImportPreview(array $excelData): array
+    {
+        $preview = [
+            'total_employees' => count($excelData),
+            'new_employees' => 0,
+            'existing_employees' => 0,
+            'offices' => [],
+            'teams' => [],
+            'areas' => [],
+            'positions' => [],
+            'employees' => [],
+        ];
+
+        $officeNames = [];
+        $teamNames = [];
+        $areaNames = [];
+        $positionNames = [];
+        $processedEmployees = [];
+
+        foreach ($excelData as $index => $row) {
+            // Contar empleados nuevos vs existentes
+            $dni = $row['DNI'] ?? null;
+            $email = $row['CORREO'] ?? null;
+            
+            $existingUser = null;
+            if ($dni || $email) {
+                $existingUser = User::where('dni', $dni)
+                    ->orWhere('email', $email)
+                    ->first();
+            }
+
+            if ($existingUser) {
+                $preview['existing_employees']++;
+                $status = 'update';
+            } else {
+                $preview['new_employees']++;
+                $status = 'new';
+            }
+
+            // Agregar al preview de empleados (máximo 15 filas)
+            if (count($processedEmployees) < 15) {
+                $processedEmployees[] = [
+                    'row' => $index + 2,
+                    'name' => $row['COLABORADOR'] ?? 'Sin nombre',
+                    'dni' => $dni,
+                    'email' => $email,
+                    'office' => $row['OFICINA'] ?? '-',
+                    'team' => $row['EQUIPO'] ?? '-',
+                    'area' => $row['AREA'] ?? '-',
+                    'position' => $row['CARGO'] ?? '-',
+                    'status' => $status,
+                ];
+            }
+
+            // Recolectar oficinas únicas
+            if (!empty($row['OFICINA']) && !in_array(strtolower(trim($row['OFICINA'])), array_map('strtolower', $officeNames))) {
+                $officeNames[] = trim($row['OFICINA']);
+            }
+
+            // Recolectar equipos únicos
+            if (!empty($row['EQUIPO']) && !in_array(strtolower(trim($row['EQUIPO'])), array_map('strtolower', $teamNames))) {
+                $teamNames[] = trim($row['EQUIPO']);
+            }
+
+            // Recolectar áreas únicas
+            if (!empty($row['AREA']) && !in_array(strtolower(trim($row['AREA'])), array_map('strtolower', $areaNames))) {
+                $areaNames[] = trim($row['AREA']);
+            }
+
+            // Recolectar cargos únicos
+            if (!empty($row['CARGO']) && !in_array(strtolower(trim($row['CARGO'])), array_map('strtolower', $positionNames))) {
+                $positionNames[] = trim($row['CARGO']);
+            }
+        }
+
+        // Verificar qué oficinas existen
+        foreach ($officeNames as $name) {
+            $exists = Office::whereRaw('LOWER(name) = ?', [strtolower($name)])->exists();
+            $preview['offices'][] = [
+                'name' => $name,
+                'is_new' => !$exists,
+            ];
+        }
+
+        // Verificar qué equipos existen
+        foreach ($teamNames as $name) {
+            $exists = Team::whereRaw('LOWER(team_name) = ?', [strtolower($name)])->exists();
+            $preview['teams'][] = [
+                'name' => $name,
+                'is_new' => !$exists,
+            ];
+        }
+
+        // Verificar qué áreas existen
+        foreach ($areaNames as $name) {
+            $exists = Area::whereRaw('LOWER(name) = ?', [strtolower($name)])->exists();
+            $preview['areas'][] = [
+                'name' => $name,
+                'is_new' => !$exists,
+            ];
+        }
+
+        // Verificar qué cargos existen
+        foreach ($positionNames as $name) {
+            $exists = Position::where('name_normalized', strtolower($name))->exists();
+            $category = Position::guessCategoryFromName($name);
+            $preview['positions'][] = [
+                'name' => $name,
+                'is_new' => !$exists,
+                'category' => $category,
+            ];
+        }
+
+        $preview['employees'] = $processedEmployees;
+
+        // Contadores adicionales
+        $preview['new_offices'] = count(array_filter($preview['offices'], fn($o) => $o['is_new']));
+        $preview['new_teams'] = count(array_filter($preview['teams'], fn($t) => $t['is_new']));
+        $preview['new_areas'] = count(array_filter($preview['areas'], fn($a) => $a['is_new']));
+        $preview['new_positions'] = count(array_filter($preview['positions'], fn($p) => $p['is_new']));
+
+        return $preview;
     }
 }

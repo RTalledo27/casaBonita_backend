@@ -393,6 +393,24 @@ class PermissionsSeeder extends Seeder
             // Tax Parameters
             ['name' => 'hr.tax-parameters.view', 'description' => 'Ver parámetros tributarios'],
             ['name' => 'hr.tax-parameters.edit', 'description' => 'Editar parámetros tributarios'],
+            
+            // Offices
+            ['name' => 'hr.offices.view', 'description' => 'Ver oficinas'],
+            ['name' => 'hr.offices.create', 'description' => 'Crear oficinas'],
+            ['name' => 'hr.offices.edit', 'description' => 'Editar oficinas'],
+            ['name' => 'hr.offices.delete', 'description' => 'Eliminar oficinas'],
+            
+            // Areas
+            ['name' => 'hr.areas.view', 'description' => 'Ver áreas'],
+            ['name' => 'hr.areas.create', 'description' => 'Crear áreas'],
+            ['name' => 'hr.areas.edit', 'description' => 'Editar áreas'],
+            ['name' => 'hr.areas.delete', 'description' => 'Eliminar áreas'],
+            
+            // Positions (Cargos)
+            ['name' => 'hr.positions.view', 'description' => 'Ver cargos'],
+            ['name' => 'hr.positions.create', 'description' => 'Crear cargos'],
+            ['name' => 'hr.positions.edit', 'description' => 'Editar cargos'],
+            ['name' => 'hr.positions.delete', 'description' => 'Eliminar cargos'],
         ];
     }
 
@@ -698,6 +716,9 @@ class PermissionsSeeder extends Seeder
                 'hr.bonus-goals.view', 'hr.bonus-goals.create', 'hr.bonus-goals.edit', 'hr.bonus-goals.delete',
                 'hr.teams.view', 'hr.teams.create', 'hr.teams.edit', 'hr.teams.delete', 'hr.teams.assign-leader',
                 'hr.tax-parameters.view', 'hr.tax-parameters.edit',
+                'hr.offices.view', 'hr.offices.create', 'hr.offices.edit', 'hr.offices.delete',
+                'hr.areas.view', 'hr.areas.create', 'hr.areas.edit', 'hr.areas.delete',
+                'hr.positions.view', 'hr.positions.create', 'hr.positions.edit', 'hr.positions.delete',
                 'security.notifications.view',
             ];
             $rrhhRole->syncPermissions($rrhhPermissions);

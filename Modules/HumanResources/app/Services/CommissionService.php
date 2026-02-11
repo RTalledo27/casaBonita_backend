@@ -209,7 +209,13 @@ class CommissionService
             // No interrumpir: caemos al fallback hardcoded
         }
 
-        // Fallback: Determinar si es plazo corto (12/24/36) o largo (48/60)
+        // Fallback: usar tasas hardcodeadas (solo si no hay esquema/reglas en BD)
+        Log::warning('CommissionService: Usando tasas hardcodeadas como fallback', [
+            'salesCount' => $salesCount,
+            'termMonths' => $termMonths,
+            'saleType' => $saleType,
+            'asOfDate' => $asOfDate,
+        ]);
         $isShortTerm = in_array($termMonths, [12, 24, 36]);
 
         if ($salesCount >= 10) {
@@ -259,7 +265,7 @@ class CommissionService
         $ruleId = null;
         try {
             $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
-            $evaluated = $this->commissionEvaluator->evaluate($salesCount, $contract->term_months, $calculationDate, $saleType);
+            $evaluated = $this->commissionEvaluator->evaluate($salesCount, $contract->term_months, $saleType, $calculationDate);
             if (is_array($evaluated)) {
                 $schemeId = $evaluated['scheme_id'] ?? null;
                 $ruleId = $evaluated['rule_id'] ?? null;

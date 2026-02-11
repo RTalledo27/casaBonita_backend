@@ -20,6 +20,7 @@ class Employee extends Model
         'user_id',
         'employee_code',
         'employee_type',
+        'position_id',
         'base_salary',
         'variable_salary',
         'commission_percentage',
@@ -33,6 +34,8 @@ class Employee extends Model
         'emergency_contact_phone',
         'emergency_contact_relationship',
         'team_id',
+        'office_id',
+        'area_id',
         'supervisor_id',
         'hire_date',
         'termination_date',
@@ -66,6 +69,21 @@ class Employee extends Model
     public function team()
     {
         return $this->belongsTo(Team::class, 'team_id');
+    }
+
+    public function office()
+    {
+        return $this->belongsTo(Office::class, 'office_id', 'office_id');
+    }
+
+    public function area()
+    {
+        return $this->belongsTo(Area::class, 'area_id', 'area_id');
+    }
+
+    public function position()
+    {
+        return $this->belongsTo(Position::class, 'position_id', 'position_id');
     }
 
     public function supervisor()
@@ -116,6 +134,10 @@ class Employee extends Model
 
     public function getIsAdvisorAttribute()
     {
+        // Usar position si existe, sino fallback a employee_type
+        if ($this->position) {
+            return $this->position->category === 'ventas';
+        }
         return in_array($this->employee_type, ['asesor_inmobiliario', 'vendedor']);
     }
 
@@ -124,6 +146,9 @@ class Employee extends Model
      */
     public function isSalesAdvisor(): bool
     {
+        if ($this->position) {
+            return $this->position->is_commission_eligible;
+        }
         return in_array($this->employee_type, ['asesor_inmobiliario', 'vendedor']);
     }
 
@@ -135,7 +160,11 @@ class Employee extends Model
 
     public function scopeAdvisors($query)
     {
-        return $query->whereIn('employee_type', ['asesor_inmobiliario', 'vendedor']);
+        return $query->where(function ($q) {
+            $q->whereHas('position', function ($pq) {
+                $pq->where('category', 'ventas');
+            })->orWhereIn('employee_type', ['asesor_inmobiliario', 'vendedor']);
+        });
     }
 
     // --- MÉTODOS DE CÁLCULO ---

@@ -25,6 +25,9 @@ class AdminUserSeeder extends Seeder
         // Ejecutar PermissionsSeeder para crear todos los permisos y roles
         $this->call(PermissionsSeeder::class);
 
+        // Ejecutar CommissionSchemeSeeder para crear esquema y reglas de comisiones por defecto
+        $this->call(CommissionSchemeSeeder::class);
+
         // Obtener el rol de administrador (ya creado por PermissionsSeeder)
         $adminRole = $this->getAdminRole();
 

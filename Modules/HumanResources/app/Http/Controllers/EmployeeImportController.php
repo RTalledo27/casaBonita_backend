@@ -147,14 +147,71 @@ class EmployeeImportController
                 ], 422);
             }
 
-            // Procesar datos
-            $headers = array_map('trim', $data[0]);
+            // Procesar datos con normalización de headers
+            $rawHeaders = array_map('trim', $data[0]);
             $dataRows = array_slice($data, 1);
+            
+            // Normalizar headers (mismo mapeo que en analyzeImport)
+            $headerMapping = [
+                'N°' => 'N',
+                'NO' => 'N',
+                'NUMERO' => 'N',
+                'COLABORADOR' => 'COLABORADOR',
+                'NOMBRE' => 'COLABORADOR',
+                'NOMBRE COMPLETO' => 'COLABORADOR',
+                'SUNAT' => 'SUNAT',
+                'RUC' => 'SUNAT',
+                'DNI' => 'DNI',
+                'DOCUMENTO' => 'DNI',
+                'CORREO' => 'CORREO',
+                'EMAIL' => 'CORREO',
+                'MAIL' => 'CORREO',
+                'CORREO ELECTRONICO' => 'CORREO',
+                'CORREO ELECTRÓNICO' => 'CORREO',
+                'OFICINA' => 'OFICINA',
+                'OFFICE' => 'OFICINA',
+                'SUCURSAL' => 'OFICINA',
+                'EQUIPO' => 'EQUIPO',
+                'TEAM' => 'EQUIPO',
+                'AREA' => 'AREA',
+                'ÁREA' => 'AREA',
+                'DEPARTAMENTO' => 'AREA',
+                'CARGO' => 'CARGO',
+                'PUESTO' => 'CARGO',
+                'POSITION' => 'CARGO',
+                'ACCESOS' => 'ACCESOS',
+                'ROLES' => 'ACCESOS',
+                'PERMISOS' => 'ACCESOS',
+                'TELEFONO' => 'TELEFONO',
+                'TELÉFONO' => 'TELEFONO',
+                'PHONE' => 'TELEFONO',
+                'FECHA NAC' => 'FECHA NAC',
+                'FECHA DE NACIMIENTO' => 'FECHA NAC',
+                'FECHA DE INICIO' => 'FECHA DE INICIO',
+                'FECHA INICIO' => 'FECHA DE INICIO',
+                'SUELDO BASICO' => 'SUELDO BASICO',
+                'SUELDO' => 'SUELDO BASICO',
+                'SALARIO' => 'SUELDO BASICO',
+                'AFP' => 'AFP',
+                'CUSPP' => 'CUSPP',
+                'DIAS' => 'DIAS',
+            ];
+            
+            $normalizedHeaders = [];
+            foreach ($rawHeaders as $header) {
+                $upperHeader = mb_strtoupper(trim($header));
+                $cleanHeader = $this->removeAccents($upperHeader);
+                $normalizedHeaders[] = $headerMapping[$upperHeader] ?? $headerMapping[$cleanHeader] ?? $upperHeader;
+            }
             
             $processedData = [];
             foreach ($dataRows as $row) {
                 if (!empty(array_filter($row))) { // Ignorar filas vacías
-                    $processedData[] = array_combine($headers, $row);
+                    $rowData = [];
+                    foreach ($normalizedHeaders as $index => $header) {
+                        $rowData[$header] = $row[$index] ?? null;
+                    }
+                    $processedData[] = $rowData;
                 }
             }
 
@@ -233,21 +290,24 @@ class EmployeeImportController
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
             
-            // Configurar headers
+            // Configurar headers (incluyendo todos los campos requeridos)
             $headers = [
                 'N°',
                 'COLABORADOR',
-                'SUNAT',
-                'FECHA NAC',
-                'CORREO',
                 'DNI',
-                'AFP',
-                'CUSPP',
+                'CORREO',
                 'CARGO',
+                'AREA',
+                'EQUIPO',
+                'OFICINA',
+                'ACCESOS',
+                'FECHA NAC',
                 'FECHA DE INICIO',
                 'SUELDO BASICO',
-                'DÍAS',
-                'SUELDO'
+                'SUNAT',
+                'AFP',
+                'CUSPP',
+                'TELEFONO',
             ];
             
             // Escribir headers en la primera fila
@@ -257,17 +317,20 @@ class EmployeeImportController
             $sampleData = [
                 '1',
                 'JUAN CARLOS PÉREZ GARCÍA',
-                '12345678901',
-                '15/03/1990',
-                'juan.perez@example.com',
                 '12345678',
-                'PRIMA',
-                '1234567890123',
+                'juan.perez@example.com',
                 'ASESOR INMOBILIARIO',
+                'VENTAS',
+                'EQUIPO ALFA',
+                'LIMA CENTRO',
+                'Asesor de Ventas',
+                '15/03/1990',
                 '01/01/2024',
                 '2500.00',
-                '30',
-                '2500.00'
+                '12345678901',
+                'PRIMA',
+                '1234567890123',
+                '999888777',
             ];
             
             // Escribir datos de ejemplo en la segunda fila
@@ -310,5 +373,18 @@ class EmployeeImportController
                 'message' => 'Error al generar plantilla: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Remover acentos de una cadena para normalizar comparaciones
+     */
+    private function removeAccents(string $string): string
+    {
+        $unwanted = [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
+            'ñ' => 'n', 'Ñ' => 'N', 'ü' => 'u', 'Ü' => 'U'
+        ];
+        return strtr($string, $unwanted);
     }
 }

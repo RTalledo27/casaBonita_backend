@@ -72,6 +72,27 @@ class Team extends Model
         return $this->members()->where('employment_status', 'activo')->count();
     }
 
+    /**
+     * Find or create a team by name (case-insensitive)
+     */
+    public static function findOrCreateByName(string $name): self
+    {
+        $normalized = mb_strtolower(trim($name));
+        
+        // Search case-insensitively
+        $existing = static::whereRaw('LOWER(team_name) = ?', [$normalized])->first();
+        
+        if ($existing) {
+            return $existing;
+        }
+        
+        // Create new team
+        return static::create([
+            'team_name' => trim($name),
+            'is_active' => true,
+        ]);
+    }
+
     public function scopeActive($query)
     {
         return $query->where('is_active', true);

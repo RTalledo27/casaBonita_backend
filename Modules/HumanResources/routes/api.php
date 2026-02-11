@@ -12,6 +12,9 @@ use Modules\HumanResources\Http\Controllers\HumanResourcesController;
 use Modules\HumanResources\Http\Controllers\PayrollController;
 use Modules\HumanResources\Http\Controllers\TeamController;
 use Modules\HumanResources\Http\Controllers\TaxParameterController;
+use Modules\HumanResources\Http\Controllers\OfficeController;
+use Modules\HumanResources\Http\Controllers\AreaController;
+use Modules\HumanResources\Http\Controllers\PositionController;
 
 Route::middleware(['auth:sanctum'])->prefix('v1')->group(function () {
     Route::apiResource('humanresources', HumanResourcesController::class)->names('humanresources');
@@ -62,6 +65,7 @@ Route::prefix('v1')->group(function () {
             // Rutas de Importación de Empleados
             Route::prefix('employee-import')->group(function () {
                 Route::post('/validate', [EmployeeImportController::class, 'validateImport'])->name('hr.employee-import.validate');
+                Route::post('/analyze', [EmployeeController::class, 'analyzeImport'])->name('hr.employee-import.analyze');
                 Route::post('/import', [EmployeeImportController::class, 'import'])->name('hr.employee-import.import');
                 Route::get('/template', [EmployeeImportController::class, 'downloadTemplate'])->name('hr.employee-import.template');
             });
@@ -143,6 +147,33 @@ Route::prefix('v1')->group(function () {
                 Route::get('/{id}/members', [TeamController::class, 'members'])->name('hr.teams.members');
                 Route::patch('/{id}/assign-leader', [TeamController::class, 'assignLeader'])->name('hr.teams.assign-leader');
                 Route::patch('/{id}/toggle-status', [TeamController::class, 'toggleStatus'])->name('hr.teams.toggle-status');
+            });
+
+            // Offices routes
+            Route::prefix('offices')->group(function () {
+                Route::get('/', [OfficeController::class, 'index'])->name('hr.offices.index');
+                Route::get('/{office}', [OfficeController::class, 'show'])->name('hr.offices.show');
+                Route::post('/', [OfficeController::class, 'store'])->name('hr.offices.store');
+                Route::put('/{office}', [OfficeController::class, 'update'])->name('hr.offices.update');
+                Route::delete('/{office}', [OfficeController::class, 'destroy'])->name('hr.offices.destroy');
+            });
+
+            // Areas routes
+            Route::prefix('areas')->group(function () {
+                Route::get('/', [AreaController::class, 'index'])->name('hr.areas.index');
+                Route::get('/{area}', [AreaController::class, 'show'])->name('hr.areas.show');
+                Route::post('/', [AreaController::class, 'store'])->name('hr.areas.store');
+                Route::put('/{area}', [AreaController::class, 'update'])->name('hr.areas.update');
+                Route::delete('/{area}', [AreaController::class, 'destroy'])->name('hr.areas.destroy');
+            });
+
+            // Positions routes (Cargos)
+            Route::prefix('positions')->group(function () {
+                Route::get('/', [PositionController::class, 'index'])->name('hr.positions.index');
+                Route::get('/{position}', [PositionController::class, 'show'])->name('hr.positions.show');
+                Route::post('/', [PositionController::class, 'store'])->name('hr.positions.store');
+                Route::put('/{position}', [PositionController::class, 'update'])->name('hr.positions.update');
+                Route::delete('/{position}', [PositionController::class, 'destroy'])->name('hr.positions.destroy');
             });
             
             // Rutas de Parámetros Tributarios (Tax Parameters)

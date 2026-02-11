@@ -473,4 +473,138 @@ class EmployeeController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Analizar archivo de importación y devolver preview
+     */
+    public function analyzeImport(Request $request): JsonResponse
+    {
+        try {
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+                'file' => 'required|file|mimes:xlsx,xls'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Archivo inválido',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $file = $request->file('file');
+            $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file->getPathname());
+            $spreadsheet = $reader->load($file->getPathname());
+            $worksheet = $spreadsheet->getActiveSheet();
+            
+            // Obtener datos del Excel
+            $data = $worksheet->toArray();
+            
+            if (empty($data) || count($data) < 2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'El archivo está vacío o solo tiene encabezados'
+                ], 422);
+            }
+
+            $headers = array_map('trim', $data[0]);
+            $rows = array_slice($data, 1);
+            
+            // Normalizar headers: convertir a mayúsculas y mapear variaciones comunes
+            $headerMapping = [
+                'COLABORADOR' => 'COLABORADOR',
+                'NOMBRE' => 'COLABORADOR',
+                'NOMBRE COMPLETO' => 'COLABORADOR',
+                'EMPLOYEE' => 'COLABORADOR',
+                'DNI' => 'DNI',
+                'DOCUMENTO' => 'DNI',
+                'CORREO' => 'CORREO',
+                'EMAIL' => 'CORREO',
+                'MAIL' => 'CORREO',
+                'CORREO ELECTRONICO' => 'CORREO',
+                'CORREO ELECTRÓNICO' => 'CORREO',
+                'OFICINA' => 'OFICINA',
+                'OFFICE' => 'OFICINA',
+                'SUCURSAL' => 'OFICINA',
+                'EQUIPO' => 'EQUIPO',
+                'TEAM' => 'EQUIPO',
+                'AREA' => 'AREA',
+                'ÁREA' => 'AREA',
+                'DEPARTAMENTO' => 'AREA',
+                'CARGO' => 'CARGO',
+                'PUESTO' => 'CARGO',
+                'POSITION' => 'CARGO',
+                'ACCESOS' => 'ACCESOS',
+                'ROLES' => 'ACCESOS',
+                'PERMISOS' => 'ACCESOS',
+                'TELEFONO' => 'TELEFONO',
+                'TELÉFONO' => 'TELEFONO',
+                'PHONE' => 'TELEFONO',
+                'FECHA NAC' => 'FECHA NAC',
+                'FECHA DE NACIMIENTO' => 'FECHA NAC',
+                'FECHA DE INICIO' => 'FECHA DE INICIO',
+                'FECHA INICIO' => 'FECHA DE INICIO',
+                'SUELDO BASICO' => 'SUELDO BASICO',
+                'SUELDO' => 'SUELDO BASICO',
+                'SALARIO' => 'SUELDO BASICO',
+            ];
+            
+            $normalizedHeaders = [];
+            foreach ($headers as $header) {
+                $upperHeader = strtoupper(trim($header));
+                // Remover acentos para matching
+                $cleanHeader = $this->removeAccents($upperHeader);
+                $normalizedHeaders[] = $headerMapping[$upperHeader] ?? $headerMapping[$cleanHeader] ?? $upperHeader;
+            }
+            
+            // Convertir a array asociativo con headers normalizados
+            $excelData = [];
+            foreach ($rows as $row) {
+                if (empty(array_filter($row))) continue; // Skip empty rows
+                $rowData = [];
+                foreach ($normalizedHeaders as $index => $header) {
+                    $rowData[$header] = $row[$index] ?? null;
+                }
+                $excelData[] = $rowData;
+            }
+
+            // Obtener preview usando el servicio
+            $importService = app(\Modules\HumanResources\Services\EmployeeImportService::class);
+            $preview = $importService->getImportPreview($excelData);
+            
+            // Agregar info de headers detectados para debugging
+            $preview['detected_headers'] = $headers;
+            $preview['normalized_headers'] = $normalizedHeaders;
+
+            return response()->json([
+                'success' => true,
+                'data' => $preview,
+                'message' => 'Análisis completado exitosamente'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error analizando archivo de importación', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al analizar el archivo: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Remover acentos de una cadena para normalizar comparaciones
+     */
+    private function removeAccents(string $string): string
+    {
+        $unwanted = [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u',
+            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
+            'ñ' => 'n', 'Ñ' => 'N', 'ü' => 'u', 'Ü' => 'U'
+        ];
+        return strtr($string, $unwanted);
+    }
 }
