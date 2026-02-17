@@ -297,6 +297,8 @@ class LogicwareLotImportService
             }
         }
 
+        $bonoTechoPropio = LotFinancialTemplate::BONO_TECHO_PROPIO_DEFAULT;
+
         $templateData = [
             'precio_lista' => $price,
             'descuento' => 0,
@@ -306,6 +308,8 @@ class LogicwareLotImportService
             'ci_fraccionamiento' => $downPayment,
             'cuota_balon' => 0,
             'bono_bpp' => 0,
+            'bono_techo_propio' => $bonoTechoPropio,
+            'precio_total_real' => round($price + $bonoTechoPropio, 2),
             'installments_24' => $installments24,
             'installments_40' => $installments40,
             'installments_44' => $installments44,

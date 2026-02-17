@@ -387,7 +387,7 @@ class PaymentScheduleController extends Controller
                 'contract_id' => 'sometimes|integer|exists:contracts,contract_id'
             ]);
 
-            $query = PaymentSchedule::with(['contract.reservation.client', 'contract.reservation.lot']);
+            $query = PaymentSchedule::with(['contract.client', 'contract.lot.financialTemplate', 'contract.reservation.client', 'contract.reservation.lot.financialTemplate']);
 
             // Apply filters
             if ($request->has('due_date_from')) {
@@ -440,6 +440,9 @@ class PaymentScheduleController extends Controller
 
             // Format schedules data
             $schedulesData = $schedules->map(function($schedule) {
+                $lot = $schedule->contract?->getLot();
+                $financialTemplate = $lot?->financialTemplate;
+
                 return [
                     'schedule_id' => $schedule->schedule_id,
                     'contract_id' => $schedule->contract_id,
@@ -451,9 +454,13 @@ class PaymentScheduleController extends Controller
                     'payment_date' => $schedule->payment_date,
                     'payment_method' => $schedule->payment_method,
                     'notes' => $schedule->notes,
-                    'client_name' => $schedule->contract?->reservation?->client?->full_name ?? 'N/A',
-                    'lot_number' => $schedule->contract?->reservation?->lot?->lot_number ?? 'N/A',
+                    'client_name' => $schedule->contract?->getClientName() ?? 'N/A',
+                    'lot_number' => $lot?->lot_number ?? $lot?->num_lot ?? 'N/A',
                     'contract_number' => $schedule->contract?->contract_number ?? 'N/A',
+                    'descuento' => (float) ($schedule->contract?->discount ?? 0),
+                    'bono_techo_propio' => $financialTemplate?->bono_techo_propio ?? 0,
+                    'precio_total_real' => (float) (($financialTemplate?->precio_venta ?? $schedule->contract?->total_price ?? 0) - ($schedule->contract?->discount ?? 0) + ($financialTemplate?->bono_techo_propio ?? 0)),
+                    'precio_venta' => $financialTemplate?->precio_venta ?? $schedule->contract?->total_price ?? 0,
                     'days_overdue' => $schedule->status === 'vencido' && $schedule->due_date 
                         ? now()->diffInDays($schedule->due_date) 
                         : 0

@@ -28,5 +28,6 @@ class LotResource extends JsonResource
             'manzana'              => new ManzanaResource($this->whenLoaded('manzana')),
             'street_type'          => new StreetTypeResource($this->whenLoaded('streetType')),
             'media'                => LotMediaResource::collection($this->whenLoaded('media')),
+            'financial_template'   => $this->whenLoaded('financialTemplate'),
         ];    }
 }

@@ -102,7 +102,7 @@ class LotController extends Controller
     /** Mostrar un lote */
     public function show(Lot $lot)
     {
-        return new LotResource($lot->load(['manzana', 'streetType', 'media']));
+        return new LotResource($lot->load(['manzana', 'streetType', 'media', 'financialTemplate']));
     }
 
     /** Actualizar un lote */

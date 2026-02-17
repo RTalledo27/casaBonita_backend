@@ -44,6 +44,9 @@ class PaymentScheduleService
             $paymentType = $options['payment_type'] ?? 'installments';
             $installments = $options['installments'] ?? 24;
 
+            // Calcular factor de descuento si el contrato tiene precio menor al template
+            $discountFactor = $this->calculateDiscountFactor($contract, $financialTemplate);
+
             // Validar reglas de la manzana si existen
             if ($manzanaRule) {
                 $this->validateManzanaRules($manzanaRule, $paymentType, $installments);
@@ -51,9 +54,9 @@ class PaymentScheduleService
 
             // Generar cronograma según el tipo de pago
             if ($paymentType === 'cash') {
-                return $this->generateCashSchedule($contract, $financialTemplate);
+                return $this->generateCashSchedule($contract, $financialTemplate, $discountFactor);
             } else {
-                return $this->generateInstallmentSchedule($contract, $financialTemplate, $installments, $options);
+                return $this->generateInstallmentSchedule($contract, $financialTemplate, $installments, $options, $discountFactor);
             }
 
         } catch (Exception $e) {
@@ -87,9 +90,33 @@ class PaymentScheduleService
     }
 
     /**
+     * Calcula el factor de descuento comparando precio del contrato vs template
+     * Si el contrato tiene un precio menor al template, retorna un factor < 1.0
+     */
+    private function calculateDiscountFactor(Contract $contract, LotFinancialTemplate $template): float
+    {
+        $templatePrecioVenta = (float) ($template->precio_venta ?? 0);
+        $contractDiscount = (float) ($contract->discount ?? 0);
+
+        // Solo aplicar descuento si está explícitamente definido en el contrato
+        if ($contractDiscount > 0 && $templatePrecioVenta > 0) {
+            $factor = 1 - ($contractDiscount / $templatePrecioVenta);
+            Log::info('[PaymentScheduleService] 🏷️ Descuento del contrato', [
+                'contract_id' => $contract->contract_id,
+                'template_precio_venta' => $templatePrecioVenta,
+                'contract_discount' => $contractDiscount,
+                'discount_factor' => round($factor, 4),
+            ]);
+            return max($factor, 0.01);
+        }
+
+        return 1.0; // Sin descuento
+    }
+
+    /**
      * Genera cronograma para pago al contado
      */
-    private function generateCashSchedule(Contract $contract, LotFinancialTemplate $template): array
+    private function generateCashSchedule(Contract $contract, LotFinancialTemplate $template, float $discountFactor = 1.0): array
     {
         if (!$template->hasCashPrice()) {
             throw new Exception('Este lote no tiene precio de contado disponible');
@@ -98,13 +125,23 @@ class PaymentScheduleService
         $schedules = [];
         $dueDate = Carbon::parse($contract->sign_date ?? now())->addDays(30);
 
+        $cashAmount = round($template->precio_contado * $discountFactor, 2);
+
         $schedules[] = [
             'contract_id' => $contract->contract_id,
             'installment_number' => 1,
             'due_date' => $dueDate->format('Y-m-d'),
-            'amount' => $template->precio_contado,
+            'amount' => $cashAmount,
             'status' => 'pendiente'
         ];
+
+        if ($discountFactor < 1.0) {
+            Log::info('[PaymentScheduleService] 💰 Cronograma contado con descuento', [
+                'contract_id' => $contract->contract_id,
+                'original' => $template->precio_contado,
+                'con_descuento' => $cashAmount,
+            ]);
+        }
 
         return $schedules;
     }
@@ -116,7 +153,8 @@ class PaymentScheduleService
         Contract $contract, 
         LotFinancialTemplate $template, 
         int $installments, 
-        array $options = []
+        array $options = [],
+        float $discountFactor = 1.0
     ): array {
         if (!$template->hasInstallmentOptions()) {
             throw new Exception('Este lote no tiene opciones de financiamiento disponibles');
@@ -125,6 +163,24 @@ class PaymentScheduleService
         $monthlyAmount = $template->getInstallmentAmount($installments);
         if ($monthlyAmount <= 0) {
             throw new Exception("No hay monto configurado para {$installments} cuotas");
+        }
+
+        // Aplicar factor de descuento a todos los montos
+        $monthlyAmount = round($monthlyAmount * $discountFactor, 2);
+        $cuotaInicial = round((float) $template->cuota_inicial * $discountFactor, 2);
+        $cuotaBalon = round((float) $template->cuota_balon * $discountFactor, 2);
+
+        if ($discountFactor < 1.0) {
+            Log::info('[PaymentScheduleService] 🏷️ Montos con descuento aplicado', [
+                'contract_id' => $contract->contract_id,
+                'discount_factor' => round($discountFactor, 4),
+                'cuota_mensual_original' => $template->getInstallmentAmount($installments),
+                'cuota_mensual_descuento' => $monthlyAmount,
+                'cuota_inicial_original' => $template->cuota_inicial,
+                'cuota_inicial_descuento' => $cuotaInicial,
+                'cuota_balon_original' => $template->cuota_balon,
+                'cuota_balon_descuento' => $cuotaBalon,
+            ]);
         }
 
         $schedules = [];
@@ -148,12 +204,12 @@ class PaymentScheduleService
         $installmentNumber = 1;
 
         // Cuota inicial si existe
-        if ($template->cuota_inicial > 0) {
+        if ($cuotaInicial > 0) {
             $schedules[] = [
                 'contract_id' => $contract->contract_id,
                 'installment_number' => $installmentNumber++,
                 'due_date' => $startDate->copy()->addDays(15)->format('Y-m-d'),
-                'amount' => $template->cuota_inicial,
+                'amount' => $cuotaInicial,
                 'status' => 'pendiente'
             ];
         }
@@ -172,14 +228,14 @@ class PaymentScheduleService
         }
 
         // Cuota balón si existe
-        if ($template->cuota_balon > 0) {
+        if ($cuotaBalon > 0) {
             $balloonDate = $startDate->copy()->addMonths($installments + 1);
             
             $schedules[] = [
                 'contract_id' => $contract->contract_id,
                 'installment_number' => $installmentNumber++,
                 'due_date' => $balloonDate->format('Y-m-d'),
-                'amount' => $template->cuota_balon,
+                'amount' => $cuotaBalon,
                 'status' => 'pendiente'
             ];
         }
@@ -213,11 +269,17 @@ class PaymentScheduleService
      */
     public function getFinancingOptions(Contract $contract): array
     {
-        if (!$contract->reservation || !$contract->reservation->lot) {
+        $lot = null;
+        if ($contract->reservation && $contract->reservation->lot) {
+            $lot = $contract->reservation->lot;
+        } elseif ($contract->lot_id) {
+            $lot = $contract->lot;
+        }
+
+        if (!$lot) {
             return [];
         }
 
-        $lot = $contract->reservation->lot;
         $financialTemplate = $lot->financialTemplate;
         $manzanaRule = $lot->manzana->financingRule ?? null;
 
@@ -225,13 +287,20 @@ class PaymentScheduleService
             return [];
         }
 
+        // Calcular factor de descuento
+        $discountFactor = $this->calculateDiscountFactor($contract, $financialTemplate);
+        $contractDiscount = (float) ($contract->discount ?? 0);
+
         $options = [
             'cash_available' => $financialTemplate->hasCashPrice(),
             'installments_available' => $financialTemplate->hasInstallmentOptions(),
-            'cash_price' => $financialTemplate->precio_contado,
-            'sale_price' => $financialTemplate->precio_venta,
-            'down_payment' => $financialTemplate->cuota_inicial,
-            'balloon_payment' => $financialTemplate->cuota_balon,
+            'cash_price' => round((float) $financialTemplate->precio_contado * $discountFactor, 2),
+            'sale_price' => (float) $financialTemplate->precio_venta,
+            'sale_price_with_discount' => round((float) $financialTemplate->precio_venta * $discountFactor, 2),
+            'discount' => $contractDiscount,
+            'discount_factor' => round($discountFactor, 4),
+            'down_payment' => round((float) $financialTemplate->cuota_inicial * $discountFactor, 2),
+            'balloon_payment' => round((float) $financialTemplate->cuota_balon * $discountFactor, 2),
             'installment_options' => []
         ];
 
@@ -244,10 +313,13 @@ class PaymentScheduleService
                 continue;
             }
 
+            $discountedAmount = round($amount * $discountFactor, 2);
+
             $options['installment_options'][$months] = [
                 'months' => $months,
-                'monthly_amount' => $amount,
-                'total_amount' => $financialTemplate->getTotalPaymentForInstallments($months)
+                'monthly_amount' => $discountedAmount,
+                'monthly_amount_original' => (float) $amount,
+                'total_amount' => round($financialTemplate->getTotalPaymentForInstallments($months) * $discountFactor, 2)
             ];
         }
 

@@ -37,7 +37,7 @@ class ContractController extends Controller
         $filters = [
             'search' => $request->get('search'),
             'status' => $request->get('status'),
-            'with_financing' => $request->get('with_financing', true), // Default to contracts with financing
+            'with_financing' => $request->get('with_financing'), // Solo filtrar si se pide explícitamente
         ];
 
         return ContractResource::collection(

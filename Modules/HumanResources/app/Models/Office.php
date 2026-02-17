@@ -18,11 +18,13 @@ class Office extends Model
         'code',
         'address',
         'city',
+        'monthly_goal',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'monthly_goal' => 'decimal:2',
     ];
 
     protected $appends = ['status'];
@@ -72,6 +74,50 @@ class Office extends Model
     public function employees()
     {
         return $this->hasMany(Employee::class, 'office_id', 'office_id');
+    }
+
+    public function teams()
+    {
+        return $this->hasMany(Team::class, 'office_id', 'office_id');
+    }
+
+    /**
+     * Calculate monthly sales achievement for this office (across all its teams)
+     */
+    public function calculateMonthlyAchievement($month, $year): float
+    {
+        if ($this->monthly_goal <= 0) {
+            return 0;
+        }
+
+        $totalSales = $this->calculateMonthlySalesAmount($month, $year);
+        return ($totalSales / $this->monthly_goal) * 100;
+    }
+
+    /**
+     * Calculate total sales amount for this office in a period
+     */
+    public function calculateMonthlySalesAmount($month, $year): float
+    {
+        $total = 0;
+        $employees = $this->employees()->active()->get();
+        foreach ($employees as $employee) {
+            $total += $employee->calculateMonthlySales($month, $year)->sum('total_price');
+        }
+        return $total;
+    }
+
+    /**
+     * Calculate total sales count for this office in a period
+     */
+    public function calculateMonthlySalesCount($month, $year): int
+    {
+        $total = 0;
+        $employees = $this->employees()->active()->get();
+        foreach ($employees as $employee) {
+            $total += $employee->calculateMonthlySalesCount($month, $year);
+        }
+        return $total;
     }
 
     // --- SCOPES ---

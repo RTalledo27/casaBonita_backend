@@ -30,6 +30,35 @@ Route::post('/webhooks/logicware', [WebhookController::class, 'handleLogicwareWe
 
 // Profile API Routes
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    // Dashboard home stats (sin permisos especiales, cualquier usuario autenticado)
+    Route::get('dashboard/stats', function () {
+        return response()->json([
+            'contracts' => [
+                'vigente' => \Modules\Sales\Models\Contract::where('status', 'vigente')->count(),
+                'pendiente' => \Modules\Sales\Models\Contract::where('status', 'pendiente_aprobacion')->count(),
+                'total' => \Modules\Sales\Models\Contract::count(),
+            ],
+            'lots' => [
+                'disponible' => \Modules\Inventory\Models\Lot::where('status', 'disponible')->count(),
+                'reservado' => \Modules\Inventory\Models\Lot::where('status', 'reservado')->count(),
+                'vendido' => \Modules\Inventory\Models\Lot::where('status', 'vendido')->count(),
+                'total' => \Modules\Inventory\Models\Lot::count(),
+            ],
+            'clients' => [
+                'total' => \Modules\CRM\Models\Client::count(),
+            ],
+            'reservations' => [
+                'activa' => \Modules\Sales\Models\Reservation::where('status', 'activa')->count(),
+                'convertida' => \Modules\Sales\Models\Reservation::where('status', 'convertida')->count(),
+            ],
+            'payments' => [
+                'pendiente' => \Modules\Collections\Models\PaymentSchedule::where('status', 'pendiente')->count(),
+                'vencido' => \Modules\Collections\Models\PaymentSchedule::where('status', 'vencido')->count(),
+                'pagado' => \Modules\Collections\Models\PaymentSchedule::where('status', 'pagado')->count(),
+            ],
+        ]);
+    });
+
     Route::prefix('profile')->group(function () {
         Route::get('/', [ProfileController::class, 'show']);
         Route::put('/', [ProfileController::class, 'update']);

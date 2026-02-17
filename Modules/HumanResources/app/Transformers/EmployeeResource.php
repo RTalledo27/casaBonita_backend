@@ -38,6 +38,7 @@ class EmployeeResource extends JsonResource
             'cuspp' => $this->cuspp,
             'health_insurance' => $this->health_insurance,
             'notes' => $this->notes,
+            'position_id' => $this->position_id,
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at?->format('Y-m-d H:i:s'),
 
@@ -61,6 +62,16 @@ class EmployeeResource extends JsonResource
                     'team_name' => $this->team->team_name,
                     'team_code' => $this->team->team_code,
                     'monthly_goal' => $this->team->monthly_goal
+                ];
+            }),
+
+            'position' => $this->whenLoaded('position', function () {
+                return [
+                    'position_id' => $this->position->position_id,
+                    'name' => $this->position->name,
+                    'category' => $this->position->category,
+                    'is_commission_eligible' => $this->position->is_commission_eligible,
+                    'status' => $this->position->status
                 ];
             }),
 

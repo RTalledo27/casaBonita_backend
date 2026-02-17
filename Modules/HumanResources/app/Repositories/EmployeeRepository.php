@@ -18,6 +18,7 @@ class EmployeeRepository
         $query = $this->model->with([
             'user', 
             'team',
+            'position',
             'commissions' => function ($query) use ($month, $year) {
                 $query->where('period_month', $month)
                       ->where('period_year', $year);
@@ -46,7 +47,7 @@ class EmployeeRepository
     }
 
     public function getPaginated(array $filters = [], int $perPage = 15): LengthAwarePaginator    {
-        $query = $this->model->with(['user', 'team']);
+        $query = $this->model->with(['user', 'team', 'position']);
 
         if (isset($filters['employee_type'])) {
             $query->where('employee_type', $filters['employee_type']);
@@ -78,7 +79,7 @@ class EmployeeRepository
 
     public function findById(int $id): ?Employee
     {
-        return $this->model->with(['user', 'team', 'commissions', 'bonuses'])
+        return $this->model->with(['user', 'team', 'position', 'commissions', 'bonuses'])
             ->find($id);
     }
     public function create(array $data): Employee
@@ -108,7 +109,7 @@ class EmployeeRepository
 
     public function getAdvisors(): Collection
     {
-        return $this->model->with(['user', 'team'])->advisors()->get();
+        return $this->model->with(['user', 'team', 'position'])->advisors()->get();
     }
 
 

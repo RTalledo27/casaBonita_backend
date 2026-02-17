@@ -18,14 +18,26 @@ class ConvertReservationRequest extends FormRequest
             'contract_number' => 'required|string|max:255|unique:contracts,contract_number',
             'sign_date' => 'required|date',
             'total_price' => 'required|numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
             'currency' => 'required|string|max:3',
 
-            // Campos financieros
+            // Campos financieros principales
             'down_payment' => 'required|numeric|min:0',
             'financing_amount' => 'required|numeric|min:0',
             'interest_rate' => 'required|numeric|min:0|max:100',
             'term_months' => 'required|integer|min:1|max:360',
             'monthly_payment' => 'nullable|numeric|min:0',
+
+            // Campos financieros adicionales (bonos, cuotas especiales)
+            'initial_quota' => 'nullable|numeric|min:0',
+            'balloon_payment' => 'nullable|numeric|min:0',
+            'bpp' => 'nullable|numeric|min:0',
+            'bfh' => 'nullable|numeric|min:0',
+            'funding' => 'nullable|numeric|min:0',
+
+            // Generación automática de cronograma
+            'schedule_start_date' => 'nullable|date',
+            'schedule_frequency' => 'nullable|in:monthly,biweekly,weekly',
 
             'approvers'       => 'sometimes|array',
             'approvers.*'     => 'integer|exists:users,user_id',
@@ -64,11 +76,14 @@ class ConvertReservationRequest extends FormRequest
             $downPayment = $this->input('down_payment', 0);
             $financingAmount = $this->input('financing_amount', 0);
             $totalPrice = $this->input('total_price', 0);
+            $discount = $this->input('discount', 0);
 
-            if (abs(($downPayment + $financingAmount) - $totalPrice) > 0.01) {
+            $effectivePrice = $totalPrice - $discount;
+
+            if (abs(($downPayment + $financingAmount) - $effectivePrice) > 0.01) {
                 $validator->errors()->add(
                     'financing_amount',
-                    'La suma del enganche y el monto financiado debe ser igual al precio total.'
+                    'La suma del enganche y el monto financiado debe ser igual al precio total menos el descuento.'
                 );
             }
         });

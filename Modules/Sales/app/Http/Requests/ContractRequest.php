@@ -26,6 +26,7 @@ class ContractRequest extends FormRequest
             ],
             'sign_date' => 'required|date',
             'total_price' => 'required|numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
             'currency' => 'required|string|max:3',
             'status' => 'required|string|in:vigente,pendiente,anulado,reemplazado',
             'transferred_amount_from_previous_contract' => 'nullable|numeric|min:0',

@@ -16,20 +16,26 @@ class ReservationResource extends JsonResource
     {
         return [
             'reservation_id'      => $this->reservation_id,
+            'lot_id'              => $this->lot_id,
+            'client_id'           => $this->client_id,
+            'advisor_id'          => $this->advisor_id,
             'lot'                 => new LotResource($this->whenLoaded('lot')),
             'client'              => new ClientResource($this->whenLoaded('client')),
+            'advisor'             => $this->whenLoaded('advisor', fn () => [
+                'employee_id' => $this->advisor->employee_id,
+                'first_name'  => $this->advisor->user?->name ?? '',
+                'last_name'   => $this->advisor->user?->last_name ?? '',
+            ]),
             'reservation_date'    => $this->reservation_date,
-            'lot_id' => $this->lot_id,
-            'client_id' => $this->client_id,
             'expiration_date'     => $this->expiration_date,
             'deposit_amount'      => $this->deposit_amount,
             'deposit_method'      => $this->deposit_method,
             'deposit_reference'   => $this->deposit_reference,
-            'deposit_paid_at' => $this->deposit_paid_at?->toDateTimeString(),
+            'deposit_paid_at'     => $this->deposit_paid_at?->toDateTimeString(),
             'status'              => $this->status,
             'created_at'          => $this->created_at?->toDateTimeString(),
             'updated_at'          => $this->updated_at?->toDateTimeString(),
-            'contract' => new ContractResource($this->whenLoaded('contract')), // Cargar la relación de contrato si 
+            'contract'            => new ContractResource($this->whenLoaded('contract')),
         ];
     }
 }

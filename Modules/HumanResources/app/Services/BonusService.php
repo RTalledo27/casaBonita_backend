@@ -3,10 +3,12 @@
 namespace Modules\HumanResources\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Modules\HumanResources\Models\Bonus;
 use Modules\HumanResources\Models\BonusGoal;
 use Modules\HumanResources\Models\BonusType;
 use Modules\HumanResources\Models\Employee;
+use Modules\HumanResources\Models\Office;
 use Modules\HumanResources\Models\Team;
 use Modules\HumanResources\Repositories\BonusRepository;
 use Modules\HumanResources\Repositories\EmployeeRepository;
@@ -18,12 +20,15 @@ class BonusService
         protected EmployeeRepository $employeeRepo
     ) {}
 
+    // =========================================================================
+    // CREATE BONUS
+    // =========================================================================
+
     /**
      * Crear bono basado en tipo y meta
      */
     public function createBonus(array $data): Bonus
     {
-        // Si se especifica un tipo de bono, buscar la meta apropiada
         if (isset($data['bonus_type_id']) && !isset($data['bonus_goal_id'])) {
             $bonusType = BonusType::find($data['bonus_type_id']);
             $employee = Employee::find($data['employee_id']);
@@ -41,295 +46,6 @@ class BonusService
         }
 
         return $this->bonusRepo->create($data);
-    }
-
-    /**
-     * Procesar bonos automáticos para un período
-     */
-    public function processAllAutomaticBonuses(int $month, int $year, array $options = []): array
-    {
-        $allBonuses = [];
-        $employeeId = $options['employee_id'] ?? null;
-        $bonusTypeFilter = $options['bonus_type'] ?? null;
-        $dryRun = $options['dry_run'] ?? false;
-
-        // Obtener tipos de bonos automáticos activos
-        $automaticBonusTypes = BonusType::active()->automatic()->get();
-
-        foreach ($automaticBonusTypes as $bonusType) {
-            // Filtrar por tipo si se especifica
-            if ($bonusTypeFilter && $bonusType->type_code !== $bonusTypeFilter) {
-                continue;
-            }
-
-            switch ($bonusType->type_code) {
-                case 'INDIVIDUAL_GOAL':
-                    $bonuses = $this->processIndividualGoalBonuses($month, $year, $employeeId, $dryRun);
-                    $allBonuses['individual'] = $bonuses;
-                    break;
-
-                case 'TEAM_GOAL':
-                    $bonuses = $this->processTeamGoalBonuses($month, $year, $employeeId, $dryRun);
-                    $allBonuses['team'] = $bonuses;
-                    break;
-
-                case 'QUARTERLY':
-                    if (in_array($month, [3, 6, 9, 12])) {
-                        $quarter = ceil($month / 3);
-                        $bonuses = $this->processQuarterlyBonuses($quarter, $year, $employeeId, $dryRun);
-                        $allBonuses['quarterly'] = $bonuses;
-                    }
-                    break;
-
-                case 'BIWEEKLY':
-                    $bonuses = $this->processBiweeklyBonuses($month, $year, $employeeId, $dryRun);
-                    $allBonuses['biweekly'] = $bonuses;
-                    break;
-
-                case 'COLLECTION':
-                    $bonuses = $this->processCollectionBonuses($month, $year, $employeeId, $dryRun);
-                    $allBonuses['collection'] = $bonuses;
-                    break;
-            }
-        }
-
-        return $allBonuses;
-    }
-
-    /**
-     * Procesar bonos por meta individual
-     */
-    public function processIndividualGoalBonuses(int $month, int $year): array
-    {
-        $bonuses = [];
-        $bonusType = BonusType::where('type_code', 'INDIVIDUAL_GOAL')->active()->first();
-
-        if (!$bonusType) {
-            return $bonuses;
-        }
-
-        DB::transaction(function () use ($month, $year, $bonusType, &$bonuses) {
-            $employees = $this->employeeRepo->getAll(['employment_status' => 'activo']);
-
-            foreach ($employees as $employee) {
-                if (!$bonusType->isApplicableToEmployee($employee)) {
-                    continue;
-                }
-
-                // Verificar si ya tiene bono de este tipo para el período
-                $existingBonus = $this->bonusRepo->getAll([
-                    'employee_id' => $employee->employee_id,
-                    'bonus_type_id' => $bonusType->bonus_type_id,
-                    'period_month' => $month,
-                    'period_year' => $year
-                ])->first();
-
-                if ($existingBonus) {
-                    continue;
-                }
-
-                $achievement = $employee->calculateGoalAchievement($month, $year);
-                $bonusGoal = $this->findApplicableBonusGoal($bonusType, $employee, $achievement);
-
-                // Para metas basadas en CANTIDAD de ventas (como tu ejemplo de 10 ventas)
-                if ($bonusGoal && $bonusGoal->goal_name && str_contains(strtolower($bonusGoal->goal_name), 'cantidad')) {
-                    // Usar cantidad de ventas en lugar de monto
-                    $salesCount = $employee->calculateMonthlySalesCount($month, $year);
-                    $targetCount = $bonusGoal->target_value ?? 10; // Meta de cantidad (ej: 10 ventas)
-                    $achievement = $targetCount > 0 ? ($salesCount / $targetCount) * 100 : 0;
-                    
-                    if ($achievement >= $bonusGoal->min_achievement) {
-                        $bonusAmount = $bonusGoal->calculateBonusAmount($achievement, $employee->base_salary);
-
-                        if ($bonusAmount > 0) {
-                            $bonus = $this->bonusRepo->create([
-                                'employee_id' => $employee->employee_id,
-                                'bonus_type_id' => $bonusType->bonus_type_id,
-                                'bonus_goal_id' => $bonusGoal->bonus_goal_id,
-                                'bonus_name' => $bonusGoal->goal_name,
-                                'bonus_amount' => $bonusAmount,
-                                'target_amount' => $targetCount,
-                                'achieved_amount' => $salesCount,
-                                'achievement_percentage' => $achievement,
-                                'payment_status' => 'pendiente',
-                                'period_month' => $month,
-                                'period_year' => $year,
-                                'created_by' => null,
-                                'notes' => "Bono automático por cantidad de ventas: {$salesCount}/{$targetCount} ({$achievement}%)"
-                            ]);
-
-                            $bonuses[] = $bonus;
-                        }
-                    }
-                } else if ($bonusGoal && $achievement >= $bonusGoal->min_achievement) {
-                    // Lógica original para metas basadas en MONTO
-                    $bonusAmount = $bonusGoal->calculateBonusAmount($achievement, $employee->base_salary);
-
-                    if ($bonusAmount > 0) {
-                        $bonus = $this->bonusRepo->create([
-                            'employee_id' => $employee->employee_id,
-                            'bonus_type_id' => $bonusType->bonus_type_id,
-                            'bonus_goal_id' => $bonusGoal->bonus_goal_id,
-                            'bonus_name' => $bonusGoal->goal_name,
-                            'bonus_amount' => $bonusAmount,
-                            'target_amount' => $employee->individual_goal,
-                            'achieved_amount' => $employee->calculateMonthlySales($month, $year)->sum('total_price'),
-                            'achievement_percentage' => $achievement,
-                            'payment_status' => 'pendiente',
-                            'period_month' => $month,
-                            'period_year' => $year,
-                            'created_by' => null, // Sistema automático
-                            'notes' => "Bono automático por cumplimiento de meta individual ({$achievement}%)"
-                        ]);
-
-                        $bonuses[] = $bonus;
-                    }
-                }
-            }
-        });
-
-        return $bonuses;
-    }
-
-    /**
-     * Procesar bonos por meta de equipo
-     */
-    public function processTeamGoalBonuses(int $month, int $year): array
-    {
-        $bonuses = [];
-        $bonusType = BonusType::where('type_code', 'TEAM_GOAL')->active()->first();
-
-        if (!$bonusType) {
-            return $bonuses;
-        }
-
-        DB::transaction(function () use ($month, $year, $bonusType, &$bonuses) {
-            // Obtener empleados que ya tienen bono individual este mes
-            $employeesWithIndividualBonus = $this->bonusRepo->getAll([
-                'period_month' => $month,
-                'period_year' => $year
-            ])->whereHas('bonusType', function ($q) {
-                $q->where('type_code', 'INDIVIDUAL_GOAL');
-            })->pluck('employee_id')->toArray();
-
-            if (empty($employeesWithIndividualBonus)) {
-                return;
-            }
-
-            // Calcular cumplimiento de meta de sucursal/empresa
-            $branchAchievement = $this->calculateBranchGoalAchievement($month, $year);
-            $bonusGoal = $this->findApplicableBonusGoal($bonusType, null, $branchAchievement);
-
-            if ($bonusGoal && $branchAchievement >= $bonusGoal->min_achievement) {
-                foreach ($employeesWithIndividualBonus as $employeeId) {
-                    $employee = Employee::find($employeeId);
-
-                    if (!$employee || !$bonusType->isApplicableToEmployee($employee)) {
-                        continue;
-                    }
-
-                    // Verificar si ya tiene bono de equipo
-                    $existingBonus = $this->bonusRepo->getAll([
-                        'employee_id' => $employeeId,
-                        'bonus_type_id' => $bonusType->bonus_type_id,
-                        'period_month' => $month,
-                        'period_year' => $year
-                    ])->first();
-
-                    if ($existingBonus) {
-                        continue;
-                    }
-
-                    $bonusAmount = $bonusGoal->calculateBonusAmount($branchAchievement, $employee->base_salary);
-
-                    if ($bonusAmount > 0) {
-                        $bonus = $this->bonusRepo->create([
-                            'employee_id' => $employeeId,
-                            'bonus_type_id' => $bonusType->bonus_type_id,
-                            'bonus_goal_id' => $bonusGoal->bonus_goal_id,
-                            'bonus_name' => $bonusGoal->goal_name,
-                            'bonus_amount' => $bonusAmount,
-                            'target_amount' => null,
-                            'achieved_amount' => null,
-                            'achievement_percentage' => $branchAchievement,
-                            'payment_status' => 'pendiente',
-                            'period_month' => $month,
-                            'period_year' => $year,
-                            'created_by' => null,
-                            'notes' => "Bono automático por meta de equipo ({$branchAchievement}% cumplimiento sucursal)"
-                        ]);
-
-                        $bonuses[] = $bonus;
-                    }
-                }
-            }
-        });
-
-        return $bonuses;
-    }
-
-    /**
-     * Procesar bonos trimestrales
-     */
-    public function processQuarterlyBonuses(int $quarter, int $year): array
-    {
-        $bonuses = [];
-        $bonusType = BonusType::where('type_code', 'QUARTERLY')->active()->first();
-
-        if (!$bonusType) {
-            return $bonuses;
-        }
-
-        DB::transaction(function () use ($quarter, $year, $bonusType, &$bonuses) {
-            $employees = $this->employeeRepo->getAll(['employment_status' => 'activo']);
-
-            foreach ($employees as $employee) {
-                if (!$bonusType->isApplicableToEmployee($employee)) {
-                    continue;
-                }
-
-                // Verificar si ya tiene bono trimestral
-                $existingBonus = $this->bonusRepo->getAll([
-                    'employee_id' => $employee->employee_id,
-                    'bonus_type_id' => $bonusType->bonus_type_id,
-                    'period_quarter' => $quarter,
-                    'period_year' => $year
-                ])->first();
-
-                if ($existingBonus) {
-                    continue;
-                }
-
-                $quarterlySales = $this->getQuarterlySalesCount($employee, $quarter, $year);
-                $bonusGoal = $this->findApplicableBonusGoal($bonusType, $employee, $quarterlySales);
-
-                if ($bonusGoal && $quarterlySales >= $bonusGoal->min_achievement) {
-                    $bonusAmount = $bonusGoal->calculateBonusAmount($quarterlySales, $employee->base_salary);
-
-                    if ($bonusAmount > 0) {
-                        $bonus = $this->bonusRepo->create([
-                            'employee_id' => $employee->employee_id,
-                            'bonus_type_id' => $bonusType->bonus_type_id,
-                            'bonus_goal_id' => $bonusGoal->bonus_goal_id,
-                            'bonus_name' => $bonusGoal->goal_name,
-                            'bonus_amount' => $bonusAmount,
-                            'target_amount' => $bonusGoal->min_achievement,
-                            'achieved_amount' => $quarterlySales,
-                            'achievement_percentage' => ($quarterlySales / $bonusGoal->min_achievement) * 100,
-                            'payment_status' => 'pendiente',
-                            'period_quarter' => $quarter,
-                            'period_year' => $year,
-                            'created_by' => null,
-                            'notes' => "Bono automático trimestral Q{$quarter} {$year} - {$quarterlySales} ventas"
-                        ]);
-
-                        $bonuses[] = $bonus;
-                    }
-                }
-            }
-        });
-
-        return $bonuses;
     }
 
     /**
@@ -353,9 +69,667 @@ class BonusService
             'period_month' => now()->month,
             'period_year' => now()->year,
             'created_by' => $createdBy,
-            'notes' => $description
+            'notes' => $description,
         ]);
     }
+
+    // =========================================================================
+    // AUTOMATIC BONUS PROCESSING
+    // =========================================================================
+
+    /**
+     * Procesar todos los bonos automáticos para un período
+     */
+    public function processAllAutomaticBonuses(int $month, int $year, array $options = []): array
+    {
+        $allBonuses = [];
+        $bonusTypeFilter = $options['bonus_type'] ?? null;
+        $dryRun = $options['dry_run'] ?? false;
+
+        $automaticBonusTypes = BonusType::active()->automatic()->get();
+
+        foreach ($automaticBonusTypes as $bonusType) {
+            if ($bonusTypeFilter && $bonusType->type_code !== $bonusTypeFilter) {
+                continue;
+            }
+
+            try {
+                switch ($bonusType->type_code) {
+                    case 'INDIVIDUAL_GOAL':
+                        $allBonuses['individual'] = $this->processIndividualGoalBonuses($month, $year, $dryRun);
+                        break;
+
+                    case 'TEAM_GOAL':
+                        $allBonuses['team'] = $this->processTeamGoalBonuses($month, $year, $dryRun);
+                        break;
+
+                    case 'OFFICE_GOAL':
+                        $allBonuses['office'] = $this->processOfficeGoalBonuses($month, $year, $dryRun);
+                        break;
+
+                    case 'QUARTERLY':
+                        if (in_array($month, [3, 6, 9, 12])) {
+                            $quarter = ceil($month / 3);
+                            $allBonuses['quarterly'] = $this->processQuarterlyBonuses($quarter, $year, $dryRun);
+                        }
+                        break;
+
+                    case 'BIWEEKLY':
+                        $allBonuses['biweekly'] = $this->processBiweeklyBonuses($month, $year, 1, $dryRun);
+                        break;
+
+                    case 'COLLECTION':
+                        $allBonuses['collection'] = $this->processCollectionBonuses($month, $year, $dryRun);
+                        break;
+                }
+            } catch (\Exception $e) {
+                Log::error("Error processing {$bonusType->type_code} bonuses: " . $e->getMessage());
+                $allBonuses[$bonusType->type_code] = ['error' => $e->getMessage()];
+            }
+        }
+
+        return $allBonuses;
+    }
+
+    // =========================================================================
+    // 1. INDIVIDUAL GOAL BONUSES
+    // =========================================================================
+
+    /**
+     * Procesar bonos por meta individual
+     * Cada asesor vs su individual_goal (monto) → % de cumplimiento → bonus escalonado
+     */
+    public function processIndividualGoalBonuses(int $month, int $year, bool $dryRun = false): array
+    {
+        $bonuses = [];
+        $bonusType = BonusType::where('type_code', 'INDIVIDUAL_GOAL')->active()->first();
+
+        if (!$bonusType) {
+            return $bonuses;
+        }
+
+        $processLogic = function () use ($month, $year, $bonusType, &$bonuses, $dryRun) {
+            $employees = Employee::active()->get();
+
+            foreach ($employees as $employee) {
+                if (!$bonusType->isApplicableEmployee($employee)) {
+                    continue;
+                }
+
+                // Skip if already has bonus for this period
+                if ($this->hasExistingBonus($employee->employee_id, $bonusType->bonus_type_id, $month, $year)) {
+                    continue;
+                }
+
+                // Calculate achievement: sales amount / individual_goal * 100
+                $achievement = $employee->calculateGoalAchievement($month, $year);
+
+                // Find the best matching goal tier
+                $bonusGoal = $this->findApplicableBonusGoal($bonusType, $employee, $achievement);
+
+                if (!$bonusGoal || $achievement < $bonusGoal->min_achievement) {
+                    continue;
+                }
+
+                $bonusAmount = $bonusGoal->calculateBonusAmount($achievement, $employee->base_salary);
+
+                if ($bonusAmount <= 0) {
+                    continue;
+                }
+
+                $salesAmount = $employee->calculateMonthlySales($month, $year)->sum('total_price');
+
+                if ($dryRun) {
+                    $bonuses[] = [
+                        'dry_run' => true,
+                        'employee_id' => $employee->employee_id,
+                        'employee_name' => $employee->full_name,
+                        'achievement' => round($achievement, 2),
+                        'goal_name' => $bonusGoal->goal_name,
+                        'bonus_amount' => $bonusAmount,
+                        'target' => $employee->individual_goal,
+                        'achieved' => $salesAmount,
+                    ];
+                    continue;
+                }
+
+                $bonus = $this->bonusRepo->create([
+                    'employee_id' => $employee->employee_id,
+                    'bonus_type_id' => $bonusType->bonus_type_id,
+                    'bonus_goal_id' => $bonusGoal->bonus_goal_id,
+                    'bonus_name' => $bonusGoal->goal_name,
+                    'bonus_amount' => $bonusAmount,
+                    'target_amount' => $employee->individual_goal,
+                    'achieved_amount' => $salesAmount,
+                    'achievement_percentage' => round($achievement, 2),
+                    'payment_status' => 'pendiente',
+                    'period_month' => $month,
+                    'period_year' => $year,
+                    'created_by' => null,
+                    'notes' => "Bono automático por meta individual ({$achievement}%) - {$bonusGoal->goal_name}",
+                ]);
+
+                $bonuses[] = $bonus;
+            }
+        };
+
+        if ($dryRun) {
+            $processLogic();
+        } else {
+            DB::transaction($processLogic);
+        }
+
+        return $bonuses;
+    }
+
+    // =========================================================================
+    // 2. TEAM GOAL BONUSES
+    // =========================================================================
+
+    /**
+     * Procesar bonos por meta de equipo
+     * Cada Team tiene monthly_goal → suma ventas de miembros → % → bono para cada miembro
+     */
+    public function processTeamGoalBonuses(int $month, int $year, bool $dryRun = false): array
+    {
+        $bonuses = [];
+        $bonusType = BonusType::where('type_code', 'TEAM_GOAL')->active()->first();
+
+        if (!$bonusType) {
+            return $bonuses;
+        }
+
+        $processLogic = function () use ($month, $year, $bonusType, &$bonuses, $dryRun) {
+            // Iterate over active teams with a monthly_goal
+            $teams = Team::active()->where('monthly_goal', '>', 0)->get();
+
+            foreach ($teams as $team) {
+                // Calculate team achievement
+                $teamAchievement = $team->calculateMonthlyAchievement($month, $year);
+                $teamSalesAmount = $team->calculateMonthlySalesAmount($month, $year);
+
+                // Find the best matching goal for this team achievement
+                $bonusGoal = $bonusType->bonusGoals()
+                    ->active()
+                    ->valid()
+                    ->where('min_achievement', '<=', $teamAchievement)
+                    ->forTeam($team->team_id)
+                    ->orderBy('min_achievement', 'desc')
+                    ->first();
+
+                if (!$bonusGoal) {
+                    continue;
+                }
+
+                // Give bonus to each eligible team member
+                $members = $team->members()->active()->get();
+
+                foreach ($members as $member) {
+                    if (!$bonusType->isApplicableEmployee($member)) {
+                        continue;
+                    }
+
+                    if ($this->hasExistingBonus($member->employee_id, $bonusType->bonus_type_id, $month, $year)) {
+                        continue;
+                    }
+
+                    $bonusAmount = $bonusGoal->calculateBonusAmount($teamAchievement, $member->base_salary);
+
+                    if ($bonusAmount <= 0) {
+                        continue;
+                    }
+
+                    if ($dryRun) {
+                        $bonuses[] = [
+                            'dry_run' => true,
+                            'employee_id' => $member->employee_id,
+                            'employee_name' => $member->full_name,
+                            'team' => $team->team_name,
+                            'team_achievement' => round($teamAchievement, 2),
+                            'goal_name' => $bonusGoal->goal_name,
+                            'bonus_amount' => $bonusAmount,
+                        ];
+                        continue;
+                    }
+
+                    $bonus = $this->bonusRepo->create([
+                        'employee_id' => $member->employee_id,
+                        'bonus_type_id' => $bonusType->bonus_type_id,
+                        'bonus_goal_id' => $bonusGoal->bonus_goal_id,
+                        'bonus_name' => $bonusGoal->goal_name,
+                        'bonus_amount' => $bonusAmount,
+                        'target_amount' => $team->monthly_goal,
+                        'achieved_amount' => $teamSalesAmount,
+                        'achievement_percentage' => round($teamAchievement, 2),
+                        'payment_status' => 'pendiente',
+                        'period_month' => $month,
+                        'period_year' => $year,
+                        'created_by' => null,
+                        'notes' => "Bono automático por meta de equipo '{$team->team_name}' ({$teamAchievement}%)",
+                    ]);
+
+                    $bonuses[] = $bonus;
+                }
+            }
+        };
+
+        if ($dryRun) {
+            $processLogic();
+        } else {
+            DB::transaction($processLogic);
+        }
+
+        return $bonuses;
+    }
+
+    // =========================================================================
+    // 3. OFFICE GOAL BONUSES
+    // =========================================================================
+
+    /**
+     * Procesar bonos por meta de oficina
+     * Cada Office tiene monthly_goal → suma ventas de empleados → % → bono para cada miembro
+     */
+    public function processOfficeGoalBonuses(int $month, int $year, bool $dryRun = false): array
+    {
+        $bonuses = [];
+        $bonusType = BonusType::where('type_code', 'OFFICE_GOAL')->active()->first();
+
+        if (!$bonusType) {
+            return $bonuses;
+        }
+
+        $processLogic = function () use ($month, $year, $bonusType, &$bonuses, $dryRun) {
+            $offices = Office::active()->where('monthly_goal', '>', 0)->get();
+
+            foreach ($offices as $office) {
+                $officeAchievement = $office->calculateMonthlyAchievement($month, $year);
+                $officeSalesAmount = $office->calculateMonthlySalesAmount($month, $year);
+
+                // Find the best matching goal for this office achievement
+                $bonusGoal = $bonusType->bonusGoals()
+                    ->active()
+                    ->valid()
+                    ->where('min_achievement', '<=', $officeAchievement)
+                    ->forOffice($office->office_id)
+                    ->orderBy('min_achievement', 'desc')
+                    ->first();
+
+                if (!$bonusGoal) {
+                    continue;
+                }
+
+                // Give bonus to each eligible employee in the office
+                $employees = $office->employees()->active()->get();
+
+                foreach ($employees as $employee) {
+                    if (!$bonusType->isApplicableEmployee($employee)) {
+                        continue;
+                    }
+
+                    if ($this->hasExistingBonus($employee->employee_id, $bonusType->bonus_type_id, $month, $year)) {
+                        continue;
+                    }
+
+                    $bonusAmount = $bonusGoal->calculateBonusAmount($officeAchievement, $employee->base_salary);
+
+                    if ($bonusAmount <= 0) {
+                        continue;
+                    }
+
+                    if ($dryRun) {
+                        $bonuses[] = [
+                            'dry_run' => true,
+                            'employee_id' => $employee->employee_id,
+                            'employee_name' => $employee->full_name,
+                            'office' => $office->name,
+                            'office_achievement' => round($officeAchievement, 2),
+                            'goal_name' => $bonusGoal->goal_name,
+                            'bonus_amount' => $bonusAmount,
+                        ];
+                        continue;
+                    }
+
+                    $bonus = $this->bonusRepo->create([
+                        'employee_id' => $employee->employee_id,
+                        'bonus_type_id' => $bonusType->bonus_type_id,
+                        'bonus_goal_id' => $bonusGoal->bonus_goal_id,
+                        'bonus_name' => $bonusGoal->goal_name,
+                        'bonus_amount' => $bonusAmount,
+                        'target_amount' => $office->monthly_goal,
+                        'achieved_amount' => $officeSalesAmount,
+                        'achievement_percentage' => round($officeAchievement, 2),
+                        'payment_status' => 'pendiente',
+                        'period_month' => $month,
+                        'period_year' => $year,
+                        'created_by' => null,
+                        'notes' => "Bono automático por meta de oficina '{$office->name}' ({$officeAchievement}%)",
+                    ]);
+
+                    $bonuses[] = $bonus;
+                }
+            }
+        };
+
+        if ($dryRun) {
+            $processLogic();
+        } else {
+            DB::transaction($processLogic);
+        }
+
+        return $bonuses;
+    }
+
+    // =========================================================================
+    // 4. QUARTERLY BONUSES
+    // =========================================================================
+
+    /**
+     * Procesar bonos trimestrales
+     * Basado en cantidad de ventas acumuladas en el trimestre
+     */
+    public function processQuarterlyBonuses(int $quarter, int $year, bool $dryRun = false): array
+    {
+        $bonuses = [];
+        $bonusType = BonusType::where('type_code', 'QUARTERLY')->active()->first();
+
+        if (!$bonusType) {
+            return $bonuses;
+        }
+
+        $processLogic = function () use ($quarter, $year, $bonusType, &$bonuses, $dryRun) {
+            $employees = Employee::active()->get();
+
+            foreach ($employees as $employee) {
+                if (!$bonusType->isApplicableEmployee($employee)) {
+                    continue;
+                }
+
+                // Check existing quarterly bonus
+                $existingBonus = Bonus::where('employee_id', $employee->employee_id)
+                    ->where('bonus_type_id', $bonusType->bonus_type_id)
+                    ->where('period_quarter', $quarter)
+                    ->where('period_year', $year)
+                    ->first();
+
+                if ($existingBonus) {
+                    continue;
+                }
+
+                $quarterlySales = $this->getQuarterlySalesCount($employee, $quarter, $year);
+
+                // For quarterly, min_achievement = minimum sales count needed
+                $bonusGoal = $bonusType->bonusGoals()
+                    ->active()
+                    ->valid()
+                    ->where('min_achievement', '<=', $quarterlySales)
+                    ->forEmployeeType($employee->employee_type)
+                    ->orderBy('min_achievement', 'desc')
+                    ->first();
+
+                if (!$bonusGoal) {
+                    continue;
+                }
+
+                $bonusAmount = $bonusGoal->calculateBonusAmount($quarterlySales, $employee->base_salary);
+
+                if ($bonusAmount <= 0) {
+                    continue;
+                }
+
+                if ($dryRun) {
+                    $bonuses[] = [
+                        'dry_run' => true,
+                        'employee_id' => $employee->employee_id,
+                        'employee_name' => $employee->full_name,
+                        'quarter' => $quarter,
+                        'quarterly_sales' => $quarterlySales,
+                        'goal_name' => $bonusGoal->goal_name,
+                        'bonus_amount' => $bonusAmount,
+                    ];
+                    continue;
+                }
+
+                $month = $quarter * 3; // Last month of quarter for period_month
+                $bonus = $this->bonusRepo->create([
+                    'employee_id' => $employee->employee_id,
+                    'bonus_type_id' => $bonusType->bonus_type_id,
+                    'bonus_goal_id' => $bonusGoal->bonus_goal_id,
+                    'bonus_name' => $bonusGoal->goal_name,
+                    'bonus_amount' => $bonusAmount,
+                    'target_amount' => $bonusGoal->target_value ?? $bonusGoal->min_achievement,
+                    'achieved_amount' => $quarterlySales,
+                    'achievement_percentage' => $bonusGoal->min_achievement > 0
+                        ? round(($quarterlySales / $bonusGoal->min_achievement) * 100, 2)
+                        : 0,
+                    'payment_status' => 'pendiente',
+                    'period_month' => $month,
+                    'period_quarter' => $quarter,
+                    'period_year' => $year,
+                    'created_by' => null,
+                    'notes' => "Bono automático trimestral Q{$quarter} {$year} - {$quarterlySales} ventas",
+                ]);
+
+                $bonuses[] = $bonus;
+            }
+        };
+
+        if ($dryRun) {
+            $processLogic();
+        } else {
+            DB::transaction($processLogic);
+        }
+
+        return $bonuses;
+    }
+
+    // =========================================================================
+    // 5. BIWEEKLY BONUSES
+    // =========================================================================
+
+    /**
+     * Procesar bonos quincenales
+     * Basado en cantidad de ventas en la quincena
+     */
+    public function processBiweeklyBonuses(int $month, int $year, int $fortnight = 1, bool $dryRun = false): array
+    {
+        $bonuses = [];
+        $bonusType = BonusType::where('type_code', 'BIWEEKLY')->active()->first();
+
+        if (!$bonusType) {
+            return $bonuses;
+        }
+
+        $processLogic = function () use ($month, $year, $fortnight, $bonusType, &$bonuses, $dryRun) {
+            $employees = Employee::active()->get();
+
+            foreach ($employees as $employee) {
+                if (!$bonusType->isApplicableEmployee($employee)) {
+                    continue;
+                }
+
+                // Check existing biweekly bonus (use notes to distinguish fortnights)
+                $existingBonus = Bonus::where('employee_id', $employee->employee_id)
+                    ->where('bonus_type_id', $bonusType->bonus_type_id)
+                    ->where('period_month', $month)
+                    ->where('period_year', $year)
+                    ->where('notes', 'like', "%quincena {$fortnight}%")
+                    ->first();
+
+                if ($existingBonus) {
+                    continue;
+                }
+
+                $salesCount = $employee->calculateFortnightlySalesCount($month, $year, $fortnight);
+
+                // Find applicable goal (min_achievement = minimum sales count)
+                $bonusGoal = $bonusType->bonusGoals()
+                    ->active()
+                    ->valid()
+                    ->where('min_achievement', '<=', $salesCount)
+                    ->forEmployeeType($employee->employee_type)
+                    ->orderBy('min_achievement', 'desc')
+                    ->first();
+
+                if (!$bonusGoal) {
+                    continue;
+                }
+
+                $targetCount = $bonusGoal->target_value ?? $bonusGoal->min_achievement;
+                $bonusAmount = $bonusGoal->calculateBonusAmount($salesCount, $employee->base_salary);
+
+                if ($bonusAmount <= 0) {
+                    continue;
+                }
+
+                $achievement = $targetCount > 0 ? round(($salesCount / $targetCount) * 100, 2) : 0;
+
+                if ($dryRun) {
+                    $bonuses[] = [
+                        'dry_run' => true,
+                        'employee_id' => $employee->employee_id,
+                        'employee_name' => $employee->full_name,
+                        'fortnight' => $fortnight,
+                        'sales_count' => $salesCount,
+                        'target' => $targetCount,
+                        'goal_name' => $bonusGoal->goal_name,
+                        'bonus_amount' => $bonusAmount,
+                    ];
+                    continue;
+                }
+
+                $bonus = $this->bonusRepo->create([
+                    'employee_id' => $employee->employee_id,
+                    'bonus_type_id' => $bonusType->bonus_type_id,
+                    'bonus_goal_id' => $bonusGoal->bonus_goal_id,
+                    'bonus_name' => $bonusGoal->goal_name,
+                    'bonus_amount' => $bonusAmount,
+                    'target_amount' => $targetCount,
+                    'achieved_amount' => $salesCount,
+                    'achievement_percentage' => $achievement,
+                    'payment_status' => 'pendiente',
+                    'period_month' => $month,
+                    'period_year' => $year,
+                    'created_by' => null,
+                    'notes' => "Bono automático quincena {$fortnight} - {$salesCount}/{$targetCount} ventas ({$achievement}%)",
+                ]);
+
+                $bonuses[] = $bonus;
+            }
+        };
+
+        if ($dryRun) {
+            $processLogic();
+        } else {
+            DB::transaction($processLogic);
+        }
+
+        return $bonuses;
+    }
+
+    // =========================================================================
+    // 6. COLLECTION BONUSES
+    // =========================================================================
+
+    /**
+     * Procesar bonos de recaudación
+     * Basado en monto total de ventas del mes
+     */
+    public function processCollectionBonuses(int $month, int $year, bool $dryRun = false): array
+    {
+        $bonuses = [];
+        $bonusType = BonusType::where('type_code', 'COLLECTION')->active()->first();
+
+        if (!$bonusType) {
+            return $bonuses;
+        }
+
+        $processLogic = function () use ($month, $year, $bonusType, &$bonuses, $dryRun) {
+            $employees = Employee::active()->get();
+
+            foreach ($employees as $employee) {
+                if (!$bonusType->isApplicableEmployee($employee)) {
+                    continue;
+                }
+
+                if ($this->hasExistingBonus($employee->employee_id, $bonusType->bonus_type_id, $month, $year)) {
+                    continue;
+                }
+
+                // FIX: calculateMonthlySales returns a Collection → sum total_price
+                $salesAmount = (float) $employee->calculateMonthlySales($month, $year)->sum('total_price');
+
+                // Find applicable goal
+                $bonusGoal = $bonusType->bonusGoals()
+                    ->active()
+                    ->valid()
+                    ->forEmployeeType($employee->employee_type)
+                    ->orderBy('min_achievement', 'desc')
+                    ->first();
+
+                if (!$bonusGoal) {
+                    continue;
+                }
+
+                $targetAmount = $bonusGoal->target_value ?? 50000;
+                $achievement = $targetAmount > 0 ? round(($salesAmount / $targetAmount) * 100, 2) : 0;
+
+                if ($achievement < $bonusGoal->min_achievement) {
+                    continue;
+                }
+
+                $bonusAmount = $bonusGoal->calculateBonusAmount($achievement, $employee->base_salary);
+
+                if ($bonusAmount <= 0) {
+                    continue;
+                }
+
+                if ($dryRun) {
+                    $bonuses[] = [
+                        'dry_run' => true,
+                        'employee_id' => $employee->employee_id,
+                        'employee_name' => $employee->full_name,
+                        'sales_amount' => $salesAmount,
+                        'target' => $targetAmount,
+                        'achievement' => $achievement,
+                        'goal_name' => $bonusGoal->goal_name,
+                        'bonus_amount' => $bonusAmount,
+                    ];
+                    continue;
+                }
+
+                $bonus = $this->bonusRepo->create([
+                    'employee_id' => $employee->employee_id,
+                    'bonus_type_id' => $bonusType->bonus_type_id,
+                    'bonus_goal_id' => $bonusGoal->bonus_goal_id,
+                    'bonus_name' => $bonusGoal->goal_name,
+                    'bonus_amount' => $bonusAmount,
+                    'target_amount' => $targetAmount,
+                    'achieved_amount' => $salesAmount,
+                    'achievement_percentage' => $achievement,
+                    'payment_status' => 'pendiente',
+                    'period_month' => $month,
+                    'period_year' => $year,
+                    'created_by' => null,
+                    'notes' => "Bono automático recaudación - S/" . number_format($salesAmount, 2) . "/S/" . number_format($targetAmount, 2) . " ({$achievement}%)",
+                ]);
+
+                $bonuses[] = $bonus;
+            }
+        };
+
+        if ($dryRun) {
+            $processLogic();
+        } else {
+            DB::transaction($processLogic);
+        }
+
+        return $bonuses;
+    }
+
+    // =========================================================================
+    // APPROVAL & PAYMENT
+    // =========================================================================
 
     /**
      * Pagar múltiples bonos
@@ -399,8 +773,24 @@ class BonusService
         });
     }
 
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
     /**
-     * Encontrar meta de bono aplicable
+     * Check if employee already has a bonus of this type for the period
+     */
+    private function hasExistingBonus(int $employeeId, int $bonusTypeId, int $month, int $year): bool
+    {
+        return Bonus::where('employee_id', $employeeId)
+            ->where('bonus_type_id', $bonusTypeId)
+            ->where('period_month', $month)
+            ->where('period_year', $year)
+            ->exists();
+    }
+
+    /**
+     * Encontrar meta de bono aplicable (el mejor tier que cumple)
      */
     private function findApplicableBonusGoal(BonusType $bonusType, ?Employee $employee, float $achievement): ?BonusGoal
     {
@@ -419,27 +809,6 @@ class BonusService
     }
 
     /**
-     * Calcular cumplimiento de meta de sucursal/empresa
-     */
-    private function calculateBranchGoalAchievement(int $month, int $year): float
-    {
-        $totalGoal = $this->employeeRepo->getAll(['employment_status' => 'activo'])
-            ->sum('individual_goal');
-
-        if ($totalGoal <= 0) {
-            return 0;
-        }
-
-        $totalSales = DB::table('contracts')
-            ->whereYear('sign_date', $year)
-            ->whereMonth('sign_date', $month)
-            ->where('status', 'aprobado')
-            ->sum('total_price');
-
-        return ($totalSales / $totalGoal) * 100;
-    }
-
-    /**
      * Obtener cantidad de ventas trimestrales
      */
     private function getQuarterlySalesCount(Employee $employee, int $quarter, int $year): int
@@ -451,159 +820,13 @@ class BonusService
             ->whereYear('sign_date', $year)
             ->whereMonth('sign_date', '>=', $startMonth)
             ->whereMonth('sign_date', '<=', $endMonth)
-            ->where('status', 'aprobado')
+            ->where('status', 'vigente')
             ->count();
     }
 
-    /**
-     * Procesar bonos quincenales
-     */
-    public function processBiweeklyBonuses(int $month, int $year, int $fortnight = 1): array
-    {
-        $bonuses = [];
-        $bonusType = BonusType::where('type_code', 'BIWEEKLY')->active()->first();
-
-        if (!$bonusType) {
-            return $bonuses;
-        }
-
-        DB::transaction(function () use ($month, $year, $fortnight, $bonusType, &$bonuses) {
-            $employees = $this->employeeRepo->getAll(['employment_status' => 'activo']);
-
-            foreach ($employees as $employee) {
-                if (!$bonusType->isApplicableToEmployee($employee)) {
-                    continue;
-                }
-
-                // Verificar si ya tiene bono quincenal para este período
-                $existingBonus = $this->bonusRepo->getAll([
-                    'employee_id' => $employee->employee_id,
-                    'bonus_type_id' => $bonusType->bonus_type_id,
-                    'period_month' => $month,
-                    'period_year' => $year
-                ])->where('notes', 'like', "%quincena {$fortnight}%")->first();
-
-                if ($existingBonus) {
-                    continue;
-                }
-
-                // Buscar BonusGoal quincenal
-                $bonusGoal = $bonusType->bonusGoals()
-                    ->active()
-                    ->valid()
-                    ->where('goal_name', 'like', '%quincenal%')
-                    ->forEmployeeType($employee->employee_type)
-                    ->first();
-
-                if ($bonusGoal) {
-                    $salesCount = $employee->calculateFortnightlySalesCount($month, $year, $fortnight);
-                    $targetCount = $bonusGoal->target_value ?? 6; // Meta quincenal por defecto
-                    $achievement = $targetCount > 0 ? ($salesCount / $targetCount) * 100 : 0;
-
-                    if ($achievement >= $bonusGoal->min_achievement) {
-                        $bonusAmount = $bonusGoal->calculateBonusAmount($achievement, $employee->base_salary);
-
-                        if ($bonusAmount > 0) {
-                            $bonus = $this->bonusRepo->create([
-                                'employee_id' => $employee->employee_id,
-                                'bonus_type_id' => $bonusType->bonus_type_id,
-                                'bonus_goal_id' => $bonusGoal->bonus_goal_id,
-                                'bonus_name' => $bonusGoal->goal_name,
-                                'bonus_amount' => $bonusAmount,
-                                'target_amount' => $targetCount,
-                                'achieved_amount' => $salesCount,
-                                'achievement_percentage' => $achievement,
-                                'payment_status' => 'pendiente',
-                                'period_month' => $month,
-                                'period_year' => $year,
-                                'created_by' => null,
-                                'notes' => "Bono automático quincena {$fortnight} - {$salesCount}/{$targetCount} ventas ({$achievement}%)"
-                            ]);
-
-                            $bonuses[] = $bonus;
-                        }
-                    }
-                }
-            }
-        });
-
-        return $bonuses;
-    }
-
-    /**
-     * Procesar bonos de recaudación
-     */
-    public function processCollectionBonuses(int $month, int $year): array
-    {
-        $bonuses = [];
-        $bonusType = BonusType::where('type_code', 'COLLECTION')->active()->first();
-
-        if (!$bonusType) {
-            return $bonuses;
-        }
-
-        DB::transaction(function () use ($month, $year, $bonusType, &$bonuses) {
-            $employees = $this->employeeRepo->getAll(['employment_status' => 'activo']);
-
-            foreach ($employees as $employee) {
-                if (!$bonusType->isApplicableToEmployee($employee)) {
-                    continue;
-                }
-
-                // Verificar si ya tiene bono de recaudación para este período
-                $existingBonus = $this->bonusRepo->getAll([
-                    'employee_id' => $employee->employee_id,
-                    'bonus_type_id' => $bonusType->bonus_type_id,
-                    'period_month' => $month,
-                    'period_year' => $year
-                ])->first();
-
-                if ($existingBonus) {
-                    continue;
-                }
-
-                // Buscar BonusGoal de recaudación
-                $bonusGoal = $bonusType->bonusGoals()
-                    ->active()
-                    ->valid()
-                    ->where('goal_name', 'like', '%recaudacion%')
-                    ->forEmployeeType($employee->employee_type)
-                    ->first();
-
-                if ($bonusGoal) {
-                    $salesAmount = $employee->calculateMonthlySales($month, $year);
-                    $targetAmount = $bonusGoal->target_value ?? 500000; // Meta de recaudación por defecto (ventas)
-                    $achievement = $targetAmount > 0 ? ($salesAmount / $targetAmount) * 100 : 0;
-
-                    if ($achievement >= $bonusGoal->min_achievement) {
-                        $bonusAmount = $bonusGoal->calculateBonusAmount($achievement, $employee->base_salary);
-
-                        if ($bonusAmount > 0) {
-                            $bonus = $this->bonusRepo->create([
-                                'employee_id' => $employee->employee_id,
-                                'bonus_type_id' => $bonusType->bonus_type_id,
-                                'bonus_goal_id' => $bonusGoal->bonus_goal_id,
-                                'bonus_name' => $bonusGoal->goal_name,
-                                'bonus_amount' => $bonusAmount,
-                                'target_amount' => $targetAmount,
-                                'achieved_amount' => $salesAmount,
-                                'achievement_percentage' => $achievement,
-                                'payment_status' => 'pendiente',
-                                'period_month' => $month,
-                                'period_year' => $year,
-                                'created_by' => null,
-                                'notes' => "Bono automático recaudación - $" . number_format($salesAmount, 2) . "/$" . number_format($targetAmount, 2) . " ({$achievement}%)"
-                            ]);
-
-                            $bonuses[] = $bonus;
-                        }
-                    }
-                }
-            }
-        });
-
-        return $bonuses;
-    }
+    // =========================================================================
+    // DASHBOARD & REPORTING
+    // =========================================================================
 
     /**
      * Obtener resumen de bonos por período
@@ -612,34 +835,33 @@ class BonusService
     {
         $bonuses = $this->bonusRepo->getAll([
             'period_month' => $month,
-            'period_year' => $year
+            'period_year' => $year,
         ]);
 
         return [
             'total_bonuses' => $bonuses->count(),
             'total_amount' => $bonuses->sum('bonus_amount'),
-            'by_type' => $bonuses->groupBy('bonusType.type_name')->map(function ($group) {
-                return [
-                    'count' => $group->count(),
-                    'amount' => $group->sum('bonus_amount')
-                ];
-            }),
+            'by_type' => $bonuses->groupBy('bonusType.type_name')->map(fn($group) => [
+                'count' => $group->count(),
+                'amount' => $group->sum('bonus_amount'),
+            ]),
             'by_status' => [
                 'pending' => $bonuses->where('payment_status', 'pendiente')->count(),
                 'paid' => $bonuses->where('payment_status', 'pagado')->count(),
-                'cancelled' => $bonuses->where('payment_status', 'cancelado')->count()
+                'cancelled' => $bonuses->where('payment_status', 'cancelado')->count(),
             ],
-            'pending_approval' => $bonuses->filter(function ($bonus) {
-                return $bonus->requiresApproval();
-            })->count()
+            'pending_approval' => $bonuses->filter(fn($b) => $b->requiresApproval())->count(),
         ];
     }
 
+    /**
+     * Bonos para dashboard del empleado
+     */
     public function getBonusesForDashboard(int $employeeId): array
     {
         $bonuses = $this->bonusRepo->getAll([
             'employee_id' => $employeeId,
-            'payment_status' => ['pendiente', 'activo']
+            'payment_status' => ['pendiente', 'activo'],
         ]);
 
         return [
@@ -648,42 +870,40 @@ class BonusService
             'total_amount' => $bonuses->sum('bonus_amount'),
             'by_type' => $bonuses->groupBy('bonusType.type_name')->map(fn($group) => [
                 'count' => $group->count(),
-                'amount' => $group->sum('bonus_amount')
+                'amount' => $group->sum('bonus_amount'),
             ]),
             'by_status' => [
                 'pending' => $bonuses->where('payment_status', 'pendiente')->count(),
                 'paid' => $bonuses->where('payment_status', 'pagado')->count(),
-                'cancelled' => $bonuses->where('payment_status', 'cancelado')->count()
+                'cancelled' => $bonuses->where('payment_status', 'cancelado')->count(),
             ],
-            'pending_approval' => $bonuses->filter(fn($bonus) => $bonus->requiresApproval())->count()
+            'pending_approval' => $bonuses->filter(fn($b) => $b->requiresApproval())->count(),
         ];
     }
 
+    /**
+     * Bonos para dashboard de admin
+     */
     public function getBonusesForAdminDashboard(int $month, int $year): array
     {
         $bonuses = $this->bonusRepo->getAll([
             'period_month' => $month,
-            'period_year' => $year
+            'period_year' => $year,
         ]);
 
         return [
             'total_bonuses' => $bonuses->count(),
             'total_amount' => $bonuses->sum('bonus_amount'),
-            'by_type' => $bonuses->groupBy('bonusType.type_name')->map(function ($group) {
-                return [
-                    'count' => $group->count(),
-                    'amount' => $group->sum('bonus_amount')
-                ];
-            }),
+            'by_type' => $bonuses->groupBy('bonusType.type_name')->map(fn($group) => [
+                'count' => $group->count(),
+                'amount' => $group->sum('bonus_amount'),
+            ]),
             'by_status' => [
                 'pending' => $bonuses->where('payment_status', 'pendiente')->count(),
                 'paid' => $bonuses->where('payment_status', 'pagado')->count(),
-                'cancelled' => $bonuses->where('payment_status', 'cancelado')->count()
+                'cancelled' => $bonuses->where('payment_status', 'cancelado')->count(),
             ],
-            'pending_approval' => $bonuses->filter(function ($bonus) {
-                return $bonus->requiresApproval();
-            })->count()
-
+            'pending_approval' => $bonuses->filter(fn($b) => $b->requiresApproval())->count(),
         ];
     }
 }

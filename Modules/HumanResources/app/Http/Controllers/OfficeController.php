@@ -29,7 +29,7 @@ class OfficeController extends Controller
 
         $offices = $query->withCount(['employees' => function ($q) {
             $q->where('employment_status', 'activo');
-        }])->orderBy('name')->get();
+        }])->with('teams')->orderBy('name')->get();
 
         return response()->json([
             'success' => true,
@@ -47,6 +47,7 @@ class OfficeController extends Controller
             'code' => 'nullable|string|max:50|unique:offices,code',
             'address' => 'nullable|string|max:500',
             'city' => 'nullable|string|max:255',
+            'monthly_goal' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
 
@@ -93,6 +94,7 @@ class OfficeController extends Controller
             'code' => 'nullable|string|max:50|unique:offices,code,' . $office->office_id . ',office_id',
             'address' => 'nullable|string|max:500',
             'city' => 'nullable|string|max:255',
+            'monthly_goal' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
 

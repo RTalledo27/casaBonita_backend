@@ -19,6 +19,7 @@ class Team extends Model
         'team_code',
         'description',
         'team_leader_id',
+        'office_id',
         'is_active',
         'monthly_goal',
     ];
@@ -47,6 +48,11 @@ class Team extends Model
         return $this->belongsTo(Employee::class, 'team_leader_id', 'employee_id');
     }
 
+    public function office()
+    {
+        return $this->belongsTo(Office::class, 'office_id', 'office_id');
+    }
+
     public function employees()
     {
         return $this->hasMany(Employee::class, 'team_id', 'team_id');
@@ -60,11 +66,38 @@ class Team extends Model
     public function calculateMonthlyAchievement($month, $year)
     {
         $totalSales = 0;
-        foreach ($this->members as $member) {
-            $totalSales += $member->calculateMonthlySales($month, $year)->sum('total_price');
+        $totalCount = 0;
+        foreach ($this->members()->active()->get() as $member) {
+            $sales = $member->calculateMonthlySales($month, $year);
+            $totalSales += $sales->sum('total_price');
+            $totalCount += $sales->count();
         }
 
         return $this->monthly_goal > 0 ? ($totalSales / $this->monthly_goal) * 100 : 0;
+    }
+
+    /**
+     * Calculate team monthly sales count
+     */
+    public function calculateMonthlySalesCount($month, $year): int
+    {
+        $total = 0;
+        foreach ($this->members()->active()->get() as $member) {
+            $total += $member->calculateMonthlySalesCount($month, $year);
+        }
+        return $total;
+    }
+
+    /**
+     * Calculate team monthly sales amount
+     */
+    public function calculateMonthlySalesAmount($month, $year): float
+    {
+        $total = 0;
+        foreach ($this->members()->active()->get() as $member) {
+            $total += $member->calculateMonthlySales($month, $year)->sum('total_price');
+        }
+        return $total;
     }
 
     public function getActiveMembersAttribute()

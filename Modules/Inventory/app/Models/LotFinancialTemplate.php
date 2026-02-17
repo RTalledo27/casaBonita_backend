@@ -15,6 +15,8 @@ class LotFinancialTemplate extends Model
         'precio_contado',
         'cuota_balon',
         'bono_bpp',
+        'bono_techo_propio',
+        'precio_total_real',
         'cuota_inicial',
         'ci_fraccionamiento',
         'installments_24',
@@ -30,6 +32,8 @@ class LotFinancialTemplate extends Model
         'precio_contado' => 'decimal:2',
         'cuota_balon' => 'decimal:2',
         'bono_bpp' => 'decimal:2',
+        'bono_techo_propio' => 'decimal:2',
+        'precio_total_real' => 'decimal:2',
         'cuota_inicial' => 'decimal:2',
         'ci_fraccionamiento' => 'decimal:2',
         'installments_24' => 'decimal:2',
@@ -190,9 +194,34 @@ class LotFinancialTemplate extends Model
             'installment_options' => $this->getAvailableInstallmentOptions(),
             'down_payment' => $this->cuota_inicial,
             'balloon_payment' => $this->cuota_balon,
-            'bpp_bonus' => $this->bono_bpp
+            'bpp_bonus' => $this->bono_bpp,
+            'bono_techo_propio' => $this->bono_techo_propio,
+            'precio_total_real' => $this->precio_total_real,
         ];
         
         return $summary;
     }
+
+    /**
+     * Calcula el precio total real (precio venta + bono techo propio)
+     */
+    public function calculatePrecioTotalReal(): float
+    {
+        return (float) $this->precio_venta + (float) $this->bono_techo_propio;
+    }
+
+    /**
+     * Calcula el porcentaje cobrado respecto al precio total real
+     */
+    public function getCollectionPercentage(float $totalCollected): float
+    {
+        $totalReal = $this->calculatePrecioTotalReal();
+        if ($totalReal <= 0) return 0;
+        return round(($totalCollected / $totalReal) * 100, 2);
+    }
+
+    /**
+     * Valor por defecto del bono Techo Propio
+     */
+    public const BONO_TECHO_PROPIO_DEFAULT = 52250.00;
 }

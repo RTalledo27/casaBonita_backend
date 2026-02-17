@@ -45,8 +45,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/sales')->group(function () {
         Route::get('schedules/metrics', [PaymentScheduleController::class, 'getMetrics']);
         Route::get('payments/ledger', [PaymentController::class, 'ledger']);
         Route::get('payments/summary', [PaymentController::class, 'summary']);
+        Route::get('payments/five-percent-report', [PaymentController::class, 'fivePercentReport']);
+        Route::get('payments/five-percent-report/export', [PaymentController::class, 'exportFivePercentReport']);
         Route::post('payments/{payment}/voucher', [PaymentController::class, 'uploadVoucher']);
         Route::get('payments/{payment}/voucher', [PaymentController::class, 'downloadVoucher']);
+        Route::put('payments/schedule/{schedule}', [PaymentController::class, 'updateSchedulePayment']);
+        Route::delete('payments/schedule/{schedule}', [PaymentController::class, 'revertSchedule']);
         Route::post('payment-transactions/{transaction}/voucher', [PaymentTransactionController::class, 'uploadVoucher']);
         Route::get('payment-transactions/{transaction}/voucher', [PaymentTransactionController::class, 'downloadVoucher']);
         Route::apiResource('payments',     PaymentController::class);

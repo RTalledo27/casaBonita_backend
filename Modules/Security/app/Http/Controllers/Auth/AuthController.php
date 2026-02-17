@@ -90,6 +90,9 @@ class AuthController extends Controller
         // Generamos token
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        // Cargamos la relación employee para el dashboard
+        $user->load('employee');
+
         return response()->json([
             'token' => $token,
             'user'  => new UserResource($user),
@@ -143,7 +146,7 @@ class AuthController extends Controller
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
         
         // Recargar las relaciones frescas desde la base de datos
-        $user->load(['roles.permissions', 'permissions']);
+        $user->load(['roles.permissions', 'permissions', 'employee']);
         
         return response()->json([
             'user' => $user,

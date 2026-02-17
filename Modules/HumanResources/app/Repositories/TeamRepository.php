@@ -16,12 +16,12 @@ class TeamRepository
 
     public function getAll(): Collection
     {
-        return $this->model->with(['leader'])->get();
+        return $this->model->with(['leader', 'office'])->get();
     }
 
     public function find(int $id): ?Team
     {
-        return $this->model->with(['leader', 'employees'])->find($id);
+        return $this->model->with(['leader.user', 'employees.user', 'office'])->find($id);
     }
 
     public function create(array $data): Team
@@ -34,7 +34,7 @@ class TeamRepository
         $team = $this->find($id);
         if ($team) {
             $team->update($data);
-            return $team->fresh(['leader', 'employees']);
+            return $team->fresh(['leader', 'employees', 'office']);
         }
         return null;
     }

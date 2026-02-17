@@ -86,7 +86,7 @@ class ReservationRepository
     {
         $reservation->update([
             'deposit_paid_at' => now(),
-            'status' => 'confirmada', // O el estado que corresponda después del pago
+            'status' => 'completada',
             'deposit_method' => $data['deposit_method'] ?? $reservation->deposit_method,
             'deposit_reference' => $data['deposit_reference'] ?? $reservation->deposit_reference,
         ]);

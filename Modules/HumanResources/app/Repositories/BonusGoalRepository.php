@@ -15,11 +15,11 @@ class BonusGoalRepository
     }
 
     public function getAll() : Collection {
-        return $this->model->all();
+        return $this->model->with(['bonusType', 'team', 'office'])->get();
     }
 
     public function find(int $id) : ?BonusGoal {
-        return $this->model->find($id);
+        return $this->model->with(['bonusType', 'team', 'office'])->find($id);
     }
 
     public function create(array $data): BonusGoal

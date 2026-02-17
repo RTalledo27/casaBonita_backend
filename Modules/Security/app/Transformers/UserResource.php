@@ -43,6 +43,10 @@ class UserResource extends JsonResource
             'password_changed_at' => $this->password_changed_at,
             'last_login_at' => $this->last_login_at,
 
+            // Employee data for role-based dashboards
+            'employee_id'   => $this->employee?->employee_id,
+            'employee_type' => $this->employee?->employee_type,
+
             'roles'        => $this->roles->pluck('name')->toArray(),
             'permissions'    => $this->getAllPermissions()                              // Spatie permisos
                 ->pluck('name')

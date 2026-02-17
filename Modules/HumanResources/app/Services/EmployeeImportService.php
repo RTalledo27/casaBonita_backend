@@ -204,38 +204,46 @@ class EmployeeImportService
         // Procesar salario
         $baseSalary = $this->parseDecimal($row['SUELDO BASICO'] ?? 0);
         
-        // Log para debugging del salario
-        Log::info("Procesando salario para {$row['COLABORADOR']}", [
-            'salario_base_raw' => $row['SUELDO BASICO'] ?? 'NO_EXISTE',
-            'salario_base_parsed' => $baseSalary
-        ]);
-        
-        // Obtener/Crear Office ID (case-insensitive firstOrCreate)
+        // Helper para normalizar texto (eliminar espacios dobles)
+        $normalizeText = function($text) {
+            return trim(preg_replace('/\s+/', ' ', $text ?? ''));
+        };
+
+        // Obtener/Crear Office ID
         $officeId = null;
-        if (!empty($row['OFICINA'])) {
-            $office = Office::findOrCreateByName($row['OFICINA']);
+        $officeName = $normalizeText($row['OFICINA'] ?? '');
+        if (!empty($officeName)) {
+            $office = Office::findOrCreateByName($officeName);
             $officeId = $office->office_id;
+            Log::info("Office Found/Created: {$officeName} -> ID: {$officeId}");
         }
 
-        // Obtener/Crear Area ID (case-insensitive firstOrCreate)
+        // Obtener/Crear Area ID
         $areaId = null;
-        if (!empty($row['AREA'])) {
-            $area = Area::findOrCreateByName($row['AREA']);
+        $areaName = $normalizeText($row['AREA'] ?? '');
+        if (!empty($areaName)) {
+            $area = Area::findOrCreateByName($areaName);
             $areaId = $area->area_id;
+            Log::info("Area Found/Created: {$areaName} -> ID: {$areaId}");
         }
 
-        // Obtener/Crear Team ID (case-insensitive firstOrCreate)
+        // Obtener/Crear Team ID
         $teamId = null;
-        if (!empty($row['EQUIPO'])) {
-            $team = Team::findOrCreateByName($row['EQUIPO']);
+        $teamName = $normalizeText($row['EQUIPO'] ?? '');
+        if (!empty($teamName)) {
+            $team = Team::findOrCreateByName($teamName);
             $teamId = $team->team_id;
+            Log::info("Team Found/Created: {$teamName} -> ID: {$teamId}");
         }
 
         // Obtener/Crear Position ID usando findOrCreateSmart
-        $positionId = null;
-        if (!empty($row['CARGO'])) {
-            $position = Position::findOrCreateSmart($row['CARGO']);
+        $positionNameRaw = $normalizeText($row['CARGO'] ?? '');
+        $positionName = $this->normalizePositionName($positionNameRaw);
+        
+        if (!empty($positionName)) {
+            $position = Position::findOrCreateSmart($positionName);
             $positionId = $position->position_id;
+            Log::info("Position Found/Created: {$positionName} (Raw: {$positionNameRaw}) -> ID: {$positionId} (Category: {$position->category})");
         }
 
         return [
@@ -250,14 +258,14 @@ class EmployeeImportService
                 'dni' => $row['DNI'] ?? null,
                 'phone' => $row['TELEFONO'] ?? null,
                 'birth_date' => $birthDate,
-                'position' => $row['CARGO'] ?? null,
-                'department' => $row['AREA'] ?? null, // Mantener string en user también
+                'position' => $positionName,
+                'department' => $areaName, 
                 'address' => $row['DIRECCION'] ?? null,
                 'hire_date' => $hireDate,
             ],
             'employee_data' => [
                 'employee_code' => $employeeCode,
-                'employee_type' => $this->mapEmployeeType($row['CARGO'] ?? ''),
+                'employee_type' => $this->mapEmployeeType($positionName),
                 'base_salary' => $baseSalary,
                 'hire_date' => $hireDate,
                 'employment_status' => 'activo',
@@ -269,9 +277,9 @@ class EmployeeImportService
                 'is_commission_eligible' => 1,
                 'is_bonus_eligible' => 1,
                 'team_id' => $teamId,
-                'office_id' => $officeId,  // Nuevo: FK a offices
-                'area_id' => $areaId,       // Nuevo: FK a areas
-                'position_id' => $positionId, // Nuevo: FK a positions
+                'office_id' => $officeId,
+                'area_id' => $areaId,
+                'position_id' => $positionId,
             ],
             'roles' => $row['ACCESOS'] ?? null
         ];
@@ -432,6 +440,7 @@ class EmployeeImportService
 
     /**
      * Mapear cargo a tipo de empleado
+     * Trabaja con nombres YA normalizados por normalizePositionName()
      */
     private function mapEmployeeType(string $cargo): string
     {
@@ -440,17 +449,24 @@ class EmployeeImportService
         $cargo = $this->removeAccents($cargo);
         
         // Mapeo específico de cargos a tipos de empleado
-        if (str_contains($cargo, 'asesor') && str_contains($cargo, 'inmobiliario')) {
+        // Nota: Los nombres llegan ya normalizados (ej: "Asesor Inmobiliario", "Jefe de Ventas")
+        if (str_contains($cargo, 'asesor') && (str_contains($cargo, 'inmobiliario') || str_contains($cargo, 'ventas'))) {
             return 'asesor_inmobiliario';
+        }
+        if (str_contains($cargo, 'jefe') && str_contains($cargo, 'ventas')) {
+            return 'jefa_de_ventas';
         }
         if (str_contains($cargo, 'jefa') && str_contains($cargo, 'ventas')) {
             return 'jefa_de_ventas';
         }
-        if (str_contains($cargo, 'arquitecto') && !str_contains($cargo, 'arquitecta')) {
-            return 'arquitecto';
+        if (str_contains($cargo, 'gerente') && str_contains($cargo, 'ventas')) {
+            return 'jefa_de_ventas';
         }
         if (str_contains($cargo, 'arquitecta')) {
             return 'arquitecta';
+        }
+        if (str_contains($cargo, 'arquitecto')) {
+            return 'arquitecto';
         }
         if ((str_contains($cargo, 'community') || str_contains($cargo, 'comunity')) && str_contains($cargo, 'manager')) {
             return 'community_manager_corporativo';
@@ -458,10 +474,13 @@ class EmployeeImportService
         if (str_contains($cargo, 'ingeniero') && str_contains($cargo, 'sistemas')) {
             return 'ingeniero_de_sistemas';
         }
-        if (str_contains($cargo, 'disenador') && str_contains($cargo, 'audiovisual')) {
-            return 'diseñador_audiovisual_area_de_marketing';
+        if (str_contains($cargo, 'ing.') && str_contains($cargo, 'sistemas')) {
+            return 'ingeniero_de_sistemas';
         }
-        if (str_contains($cargo, 'disenador') && str_contains($cargo, 'marketing')) {
+        if (str_contains($cargo, 'analista') && str_contains($cargo, 'datos')) {
+            return 'ingeniero_de_sistemas';
+        }
+        if (str_contains($cargo, 'audiovisual') || (str_contains($cargo, 'disenador') && str_contains($cargo, 'marketing'))) {
             return 'diseñador_audiovisual_area_de_marketing';
         }
         if (str_contains($cargo, 'encargado') && str_contains($cargo, 'ti')) {
@@ -470,14 +489,29 @@ class EmployeeImportService
         if (str_contains($cargo, 'director')) {
             return 'director';
         }
-        if (str_contains($cargo, 'analista') && str_contains($cargo, 'administracion')) {
+        if (str_contains($cargo, 'gerente general')) {
+            return 'director';
+        }
+        if (str_contains($cargo, 'jefe') && str_contains($cargo, 'administracion')) {
+            return 'analista_de_administracion';
+        }
+        if (str_contains($cargo, 'finanzas') || (str_contains($cargo, 'analista') && str_contains($cargo, 'administracion'))) {
+            return 'analista_de_administracion';
+        }
+        if (str_contains($cargo, 'contadora') || str_contains($cargo, 'contador')) {
+            return 'contadora_junior';
+        }
+        if (str_contains($cargo, 'gestor') && str_contains($cargo, 'cobranza')) {
+            return 'analista_de_administracion';
+        }
+        if (str_contains($cargo, 'backoffice') || str_contains($cargo, 'back office')) {
+            return 'analista_de_administracion';
+        }
+        if (str_contains($cargo, 'servicio') && str_contains($cargo, 'cliente')) {
             return 'analista_de_administracion';
         }
         if (str_contains($cargo, 'tracker')) {
             return 'tracker';
-        }
-        if (str_contains($cargo, 'contadora') && str_contains($cargo, 'junior')) {
-            return 'contadora_junior';
         }
         
         // Por defecto, si no coincide con ningún patrón específico, asignar asesor inmobiliario
@@ -617,6 +651,108 @@ class EmployeeImportService
     }
 
     /**
+     * Normalizar nombre del cargo basado en reglas de negocio
+     * Los nombres retornados deben coincidir con los name_normalized de la tabla positions
+     */
+    private function normalizePositionName(string $positionName): string
+    {
+        $normalized = mb_strtolower(trim($positionName), 'UTF-8');
+        $normalized = $this->removeAccents($normalized);
+
+        // Regla 1: Unificar Asesores
+        if ($normalized === 'asesor de ventas' || $normalized === 'asesor inmobiliario' || $normalized === 'asesora inmobiliaria' || $normalized === 'asesora de ventas') {
+            return 'Asesor Inmobiliario';
+        }
+
+        // Regla 2: Unificar Jefes de Ventas (remover oficinas específicas)
+        // Ejemplo: "Jefe de Ventas Of Piura" -> "Jefe de Ventas"
+        if (str_contains($normalized, 'jefe de ventas') || str_contains($normalized, 'jefa de ventas')) {
+            return 'Jefe de Ventas';
+        }
+
+        // Regla 3: Gerente de Ventas
+        if (str_contains($normalized, 'gerente de ventas') || str_contains($normalized, 'gerente ventas')) {
+            return 'Gerente de Ventas';
+        }
+
+        // Regla 4: Gerente General
+        if (str_contains($normalized, 'gerente general')) {
+            return 'Gerente General';
+        }
+
+        // Regla 5: Ingeniero de Sistemas y Analista de Datos SON DISTINTOS
+        if (str_contains($normalized, 'analista de datos') || str_contains($normalized, 'analista datos')) {
+            return 'Ing. Sistemas y Analista de Datos'; 
+        }
+
+        // Regla 6: Ingeniero de Sistemas (solo)
+        if (str_contains($normalized, 'ingeniero de sistemas') || str_contains($normalized, 'ingeniero sistemas') || str_contains($normalized, 'encargado de ti') || str_contains($normalized, 'encargado ti')) {
+            return 'Ingeniero de Sistemas';
+        }
+
+        // Regla 7: Community Manager
+        if (str_contains($normalized, 'community') && str_contains($normalized, 'manager')) {
+            return 'Community Manager';
+        }
+
+        // Regla 8: Arquitectos - mantener género separado (así están en la DB)
+        if (str_contains($normalized, 'arquitecta')) {
+            return 'Arquitecta'; 
+        }
+        if (str_contains($normalized, 'arquitecto')) {
+            return 'Arquitecto'; 
+        }
+
+        // Regla 9: Audiovisual / Diseñador (en DB está como "Audiovisual")
+        if (str_contains($normalized, 'audiovisual') || (str_contains($normalized, 'disenador') && str_contains($normalized, 'marketing'))) {
+            return 'Audiovisual';
+        }
+
+        // Regla 10: Director de Tecnología
+        if (str_contains($normalized, 'director') && (str_contains($normalized, 'tecnologia') || str_contains($normalized, 'ti') || str_contains($normalized, 'tech'))) {
+            return 'Director de Tecnología';
+        }
+
+        // Regla 11: Director de Desarrollo Comercial
+        if (str_contains($normalized, 'director') && (str_contains($normalized, 'comercial') || str_contains($normalized, 'desarrollo'))) {
+            return 'Director de Desarrollo Comercial e Institucional';
+        }
+
+        // Regla 12: Jefe de Administración y Finanzas (ANTES de la regla general de Finanzas)
+        if (str_contains($normalized, 'jefe') && str_contains($normalized, 'administracion')) {
+            return 'Jefe de Administración y Finanzas';
+        }
+
+        // Regla 13: Finanzas / Contadora / Analista de Administración
+        if (str_contains($normalized, 'finanzas') || str_contains($normalized, 'contadora') || str_contains($normalized, 'contador') || (str_contains($normalized, 'analista') && str_contains($normalized, 'administracion'))) {
+            return 'Finanzas';
+        }
+
+        // Regla 14: Gestor de Cobranzas
+        if (str_contains($normalized, 'gestor') && str_contains($normalized, 'cobranza')) {
+            return 'Gestor de Cobranzas';
+        }
+
+        // Regla 15: Servicio al Cliente
+        if (str_contains($normalized, 'servicio') && str_contains($normalized, 'cliente')) {
+            return 'Servicio al Cliente';
+        }
+
+        // Regla 16: BackOffice
+        if (str_contains($normalized, 'backoffice') || str_contains($normalized, 'back office')) {
+            return 'BackOffice';
+        }
+
+        // Regla 17: Tracker
+        if (str_contains($normalized, 'tracker')) {
+            return 'Tracker';
+        }
+
+        // Default: Retornar nombre original limpio con mayúsculas iniciales
+        return mb_convert_case($positionName, MB_CASE_TITLE, "UTF-8");
+    }
+
+    /**
      * Validar estructura del archivo Excel
      */
     public function validateExcelStructure(array $headers): array
@@ -681,6 +817,11 @@ class EmployeeImportService
         $positionNames = [];
         $processedEmployees = [];
 
+        // Helper para normalizar texto (eliminar espacios dobles)
+        $normalizeText = function($text) {
+            return trim(preg_replace('/\s+/', ' ', $text ?? ''));
+        };
+
         foreach ($excelData as $index => $row) {
             // Contar empleados nuevos vs existentes
             $dni = $row['DNI'] ?? null;
@@ -701,6 +842,13 @@ class EmployeeImportService
                 $status = 'new';
             }
 
+            $officeName = $normalizeText($row['OFICINA'] ?? '');
+            $teamName = $normalizeText($row['EQUIPO'] ?? '');
+            $areaName = $normalizeText($row['AREA'] ?? '');
+            $positionNameRaw = $normalizeText($row['CARGO'] ?? '');
+            // Normalizar el cargo igual que en la importación real
+            $positionName = !empty($positionNameRaw) ? $this->normalizePositionName($positionNameRaw) : '';
+
             // Agregar al preview de empleados (máximo 15 filas)
             if (count($processedEmployees) < 15) {
                 $processedEmployees[] = [
@@ -708,32 +856,32 @@ class EmployeeImportService
                     'name' => $row['COLABORADOR'] ?? 'Sin nombre',
                     'dni' => $dni,
                     'email' => $email,
-                    'office' => $row['OFICINA'] ?? '-',
-                    'team' => $row['EQUIPO'] ?? '-',
-                    'area' => $row['AREA'] ?? '-',
-                    'position' => $row['CARGO'] ?? '-',
+                    'office' => $officeName ?: '-',
+                    'team' => $teamName ?: '-',
+                    'area' => $areaName ?: '-',
+                    'position' => $positionName ?: '-',
                     'status' => $status,
                 ];
             }
 
-            // Recolectar oficinas únicas
-            if (!empty($row['OFICINA']) && !in_array(strtolower(trim($row['OFICINA'])), array_map('strtolower', $officeNames))) {
-                $officeNames[] = trim($row['OFICINA']);
+            // Recolectar oficinas únicas (case insensitive check)
+            if (!empty($officeName) && !in_array(mb_strtolower($officeName), array_map('mb_strtolower', $officeNames))) {
+                $officeNames[] = $officeName;
             }
 
             // Recolectar equipos únicos
-            if (!empty($row['EQUIPO']) && !in_array(strtolower(trim($row['EQUIPO'])), array_map('strtolower', $teamNames))) {
-                $teamNames[] = trim($row['EQUIPO']);
+            if (!empty($teamName) && !in_array(mb_strtolower($teamName), array_map('mb_strtolower', $teamNames))) {
+                $teamNames[] = $teamName;
             }
 
             // Recolectar áreas únicas
-            if (!empty($row['AREA']) && !in_array(strtolower(trim($row['AREA'])), array_map('strtolower', $areaNames))) {
-                $areaNames[] = trim($row['AREA']);
+            if (!empty($areaName) && !in_array(mb_strtolower($areaName), array_map('mb_strtolower', $areaNames))) {
+                $areaNames[] = $areaName;
             }
 
             // Recolectar cargos únicos
-            if (!empty($row['CARGO']) && !in_array(strtolower(trim($row['CARGO'])), array_map('strtolower', $positionNames))) {
-                $positionNames[] = trim($row['CARGO']);
+            if (!empty($positionName) && !in_array(mb_strtolower($positionName), array_map('mb_strtolower', $positionNames))) {
+                $positionNames[] = $positionName;
             }
         }
 
@@ -764,9 +912,10 @@ class EmployeeImportService
             ];
         }
 
-        // Verificar qué cargos existen
+        // Verificar qué cargos existen (usando nombre normalizado)
         foreach ($positionNames as $name) {
-            $exists = Position::where('name_normalized', strtolower($name))->exists();
+            $normalizedCheck = mb_strtolower(trim($name), 'UTF-8');
+            $exists = Position::where('name_normalized', $normalizedCheck)->exists();
             $category = Position::guessCategoryFromName($name);
             $preview['positions'][] = [
                 'name' => $name,

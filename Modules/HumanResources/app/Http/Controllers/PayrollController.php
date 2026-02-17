@@ -3,6 +3,7 @@
 namespace Modules\HumanResources\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\HumanResources\Repositories\PayrollRepository;
@@ -13,7 +14,8 @@ class PayrollController extends Controller
 {
     public function __construct(
         protected PayrollRepository $payrollRepo,
-        protected PayrollService $payrollService
+        protected PayrollService $payrollService,
+        protected NotificationService $notificationService
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -94,6 +96,9 @@ class PayrollController extends Controller
                     $request->boolean('include_overtime', true)
                 );
 
+                // Notificar a cada empleado cuya nómina se generó exitosamente
+                $this->notifyEmployeesPayroll($result['success'], $request->month, $request->year);
+
                 return response()->json([
                     'success' => true,
                     'data' => [
@@ -112,6 +117,9 @@ class PayrollController extends Controller
                     $request->month,
                     $request->year
                 );
+
+                // Notificar a todos los empleados
+                $this->notifyEmployeesPayroll($payrolls, $request->month, $request->year);
 
                 return response()->json([
                     'success' => true,
@@ -203,6 +211,46 @@ class PayrollController extends Controller
                 'success' => false,
                 'message' => 'Error al procesar nóminas: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Notificar a los empleados que su nómina fue generada
+     */
+    private function notifyEmployeesPayroll(array $payrolls, int $month, int $year): void
+    {
+        $months = [
+            1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+            5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+            9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre'
+        ];
+
+        $monthName = $months[$month] ?? $month;
+
+        foreach ($payrolls as $payroll) {
+            try {
+                $employee = $payroll->employee;
+                if (!$employee || !$employee->user_id) {
+                    continue;
+                }
+
+                $netSalary = number_format($payroll->net_salary, 2, '.', ',');
+
+                $this->notificationService->create([
+                    'user_id'        => $employee->user_id,
+                    'type'           => 'success',
+                    'priority'       => 'high',
+                    'title'          => "Nómina {$monthName} {$year} Generada",
+                    'message'        => "Tu nómina del período {$monthName} {$year} ha sido generada. Salario neto: S/ {$netSalary}. Revisa los detalles en tu portal.",
+                    'related_module' => 'payroll',
+                    'related_id'     => $payroll->payroll_id ?? $payroll->id,
+                    'related_url'    => '/hr/payroll',
+                    'icon'           => 'dollar-sign',
+                ]);
+            } catch (\Exception $e) {
+                // No interrumpir el flujo si falla una notificación
+                \Log::warning("No se pudo notificar al empleado {$payroll->employee_id}: " . $e->getMessage());
+            }
         }
     }
 }

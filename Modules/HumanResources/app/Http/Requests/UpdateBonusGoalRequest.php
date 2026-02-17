@@ -15,12 +15,15 @@ class UpdateBonusGoalRequest extends FormRequest
         return [
             'bonus_type_id' => 'sometimes|integer|exists:bonus_types,bonus_type_id',
             'goal_name' => 'sometimes|string|max:255',
+            'description' => 'nullable|string|max:1000',
+            'target_value' => 'nullable|numeric|min:0',
             'min_achievement' => 'sometimes|numeric|min:0',
             'max_achievement' => 'nullable|numeric|gte:min_achievement',
             'bonus_amount' => 'nullable|numeric|min:0',
             'bonus_percentage' => 'nullable|numeric|min:0|max:100',
             'employee_type' => 'nullable|string|max:50',
             'team_id' => 'nullable|integer|exists:teams,team_id',
+            'office_id' => 'nullable|integer|exists:offices,office_id',
             'is_active' => 'sometimes|boolean',
             'valid_from' => 'sometimes|date',
             'valid_until' => 'nullable|date|after_or_equal:valid_from'

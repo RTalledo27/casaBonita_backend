@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Models\Reservation;
+use Modules\Sales\Models\Payment;
 use Modules\CRM\Models\Client;
 use Modules\Inventory\Models\Lot;
 use Modules\HumanResources\Models\Employee;
@@ -986,6 +987,7 @@ class LogicwareContractImporter
             $updatedCount = 0;
             $skippedCount = 0;
             $paidCount = 0;
+            $paymentsCreatedCount = 0;
 
             foreach ($installments as $inst) {
                 $installmentNumber = (int)($inst['installmentNumber'] ?? 0);
@@ -1027,19 +1029,27 @@ class LogicwareContractImporter
                     // Si localmente está pagado, NO sobrescribir con estado de Logicware
                     $finalStatus = $existingSchedule->status === 'pagado' ? 'pagado' : $logicwareStatus;
                     $finalPaidDate = $existingSchedule->paid_date ?? $paidDate;
-                    $finalPaidAmount = $existingSchedule->paid_amount ?? ($isPaid ? $totalPaid : null);
+                    $finalPaidAmount = $existingSchedule->amount_paid ?? ($isPaid ? ($totalPaid > 0 ? $totalPaid : $payment) : null);
                     
                     // Actualizar datos de la cuota (montos, fechas) pero respetar pagos locales
                     $existingSchedule->update([
                         'due_date' => $dueDate,
                         'amount' => $payment,
+                        'amount_paid' => $finalStatus === 'pagado' ? ($finalPaidAmount ?? $payment) : $existingSchedule->amount_paid,
                         'status' => $finalStatus,
                         'type' => $type,
                         'notes' => $inst['label'] ?? $existingSchedule->notes,
                         'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
-                        'logicware_paid_amount' => $isPaid ? $totalPaid : null,
+                        'logicware_paid_amount' => $isPaid ? ($totalPaid > 0 ? $totalPaid : $payment) : null,
                         'paid_date' => $finalPaidDate
                     ]);
+                    
+                    // Si la cuota está pagada, crear registro de pago si no existe
+                    if ($finalStatus === 'pagado') {
+                        if ($this->createPaymentForSchedule($existingSchedule, $contract, $totalPaid, $finalPaidDate)) {
+                            $paymentsCreatedCount++;
+                        }
+                    }
                     
                     $updatedCount++;
                     
@@ -1051,19 +1061,27 @@ class LogicwareContractImporter
                     ]);
                 } else {
                     // Crear nueva cuota
-                    \Modules\Sales\Models\PaymentSchedule::create([
+                    $newSchedule = \Modules\Sales\Models\PaymentSchedule::create([
                         'contract_id' => $contract->contract_id,
                         'installment_number' => $installmentNumber,
                         'due_date' => $dueDate,
                         'amount' => $payment,
+                        'amount_paid' => $isPaid ? ($totalPaid > 0 ? $totalPaid : $payment) : null,
                         'status' => $logicwareStatus,
                         'type' => $type,
                         'currency' => $contract->currency ?? 'PEN',
                         'notes' => $inst['label'] ?? null,
                         'logicware_schedule_det_id' => $inst['scheduleDetId'] ?? null,
-                        'logicware_paid_amount' => $totalPaid > 0 ? $totalPaid : null,
+                        'logicware_paid_amount' => $totalPaid > 0 ? $totalPaid : ($isPaid ? $payment : null),
                         'paid_date' => $paidDate
                     ]);
+
+                    // Si la cuota viene pagada desde Logicware, crear registro de pago
+                    if ($isPaid && $totalPaid > 0) {
+                        if ($this->createPaymentForSchedule($newSchedule, $contract, $totalPaid, $paidDate)) {
+                            $paymentsCreatedCount++;
+                        }
+                    }
 
                     $createdCount++;
                 }
@@ -1075,6 +1093,7 @@ class LogicwareContractImporter
                 'cuotas_creadas' => $createdCount,
                 'cuotas_actualizadas' => $updatedCount,
                 'cuotas_pagadas' => $paidCount,
+                'pagos_creados' => $paymentsCreatedCount,
                 'total_procesadas' => $createdCount + $updatedCount
             ]);
 
@@ -1085,6 +1104,7 @@ class LogicwareContractImporter
                 'created' => $createdCount,
                 'updated' => $updatedCount,
                 'paid' => $paidCount,
+                'payments_created' => $paymentsCreatedCount ?? 0,
                 'skipped' => $skippedCount
             ];
 
@@ -1100,6 +1120,67 @@ class LogicwareContractImporter
                 'message' => 'Error sincronizando cronograma: ' . $e->getMessage(),
                 'total_installments' => 0
             ];
+        }
+    }
+
+    /**
+     * Crear registro de pago para una cuota pagada (importación/sincronización)
+     * 
+     * Verifica que no exista ya un pago para evitar duplicados.
+     * El modelo Payment dispara automáticamente syncWithCollections()
+     * y addPaymentRecordToCurrentCut() en su evento boot::created.
+     *
+     * @param \Modules\Sales\Models\PaymentSchedule $schedule
+     * @param Contract $contract
+     * @param float $amount
+     * @param string|null $paidDate
+     * @return bool True si se creó el pago, false si ya existía
+     */
+    protected function createPaymentForSchedule($schedule, Contract $contract, float $amount, ?string $paidDate): bool
+    {
+        try {
+            // Verificar que no exista ya un pago para esta cuota
+            $existingPayment = Payment::where('schedule_id', $schedule->schedule_id)
+                ->where('contract_id', $contract->contract_id)
+                ->first();
+
+            if ($existingPayment) {
+                Log::debug('[LogicwareImporter] Pago ya existe para cuota, omitiendo', [
+                    'schedule_id' => $schedule->schedule_id,
+                    'payment_id' => $existingPayment->payment_id
+                ]);
+                return false;
+            }
+
+            $paymentAmount = $amount > 0 ? $amount : $schedule->amount;
+            $paymentDate = $paidDate ?? $schedule->due_date ?? now()->toDateString();
+
+            Payment::create([
+                'schedule_id' => $schedule->schedule_id,
+                'contract_id' => $contract->contract_id,
+                'payment_date' => $paymentDate,
+                'amount' => $paymentAmount,
+                'method' => 'importacion_logicware',
+                'reference' => 'LGW-SYNC-' . $contract->contract_number . '-C' . $schedule->installment_number
+            ]);
+
+            Log::info('[LogicwareImporter] ✅ Pago creado para cuota pagada', [
+                'schedule_id' => $schedule->schedule_id,
+                'contract_id' => $contract->contract_id,
+                'installment' => $schedule->installment_number,
+                'amount' => $paymentAmount,
+                'date' => $paymentDate
+            ]);
+
+            return true;
+
+        } catch (\Exception $e) {
+            Log::error('[LogicwareImporter] Error creando pago para cuota', [
+                'schedule_id' => $schedule->schedule_id,
+                'contract_id' => $contract->contract_id,
+                'error' => $e->getMessage()
+            ]);
+            return false;
         }
     }
 

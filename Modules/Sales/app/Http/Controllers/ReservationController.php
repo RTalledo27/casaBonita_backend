@@ -15,6 +15,8 @@ use Modules\Sales\Repositories\ReservationRepository;
 use Modules\Sales\Transformers\ContractResource;
 use Modules\Sales\Transformers\ReservationResource;
 use Modules\Services\PusherNotifier;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ReservationController extends Controller
 {
@@ -104,16 +106,186 @@ class ReservationController extends Controller
     public function convert(ConvertReservationRequest $request, Reservation $reservation)
     {
         if ($reservation->contract) {
-            return response()->json(['message' => 'Reservation already converted'], 409);
+            return response()->json(['message' => 'Esta reserva ya fue convertida a contrato'], 409);
         }
-        $reservation->update(['status' => 'convertida']); // Mark reservation as converted
-        $contract = $this->contracts->create(array_merge($request->validated(), [
-            'reservation_id' => $reservation->reservation_id,
-            'status'         => 'vigente',
-        ])); // Create the new contract
-        // Broadcast conversion event
-        $this->pusher->notify('reservation-channel', 'converted', ['reservation' => new ReservationResource($reservation)]);
-        return new ContractResource($contract);
+
+        // Validar que el cliente no tenga ya un contrato vigente
+        $existingClientContract = \Modules\Sales\Models\Contract::where('status', 'vigente')
+            ->where(function ($q) use ($reservation) {
+                // Contratos directos (client_id en contracts)
+                $q->where('client_id', $reservation->client_id)
+                  // Contratos desde reserva (client_id en reservations)
+                  ->orWhereHas('reservation', function ($rq) use ($reservation) {
+                      $rq->where('client_id', $reservation->client_id);
+                  });
+            })
+            ->first();
+
+        if ($existingClientContract) {
+            return response()->json([
+                'message' => 'Este cliente ya tiene un contrato vigente (Nº ' . $existingClientContract->contract_number . '). No se puede crear otro.',
+            ], 422);
+        }
+
+        // Validar que el lote no esté ya vendido en otro contrato
+        $existingLotContract = \Modules\Sales\Models\Contract::where('status', 'vigente')
+            ->where(function ($q) use ($reservation) {
+                $q->where('lot_id', $reservation->lot_id)
+                  ->orWhereHas('reservation', function ($rq) use ($reservation) {
+                      $rq->where('lot_id', $reservation->lot_id);
+                  });
+            })
+            ->first();
+
+        if ($existingLotContract) {
+            return response()->json([
+                'message' => 'Este lote ya tiene un contrato vigente (Nº ' . $existingLotContract->contract_number . '). No se puede vender dos veces.',
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $validated = $request->validated();
+
+            // Separar campos de cronograma de los datos del contrato
+            $scheduleStartDate = $validated['schedule_start_date'] ?? null;
+            $scheduleFrequency = $validated['schedule_frequency'] ?? null;
+            unset($validated['schedule_start_date'], $validated['schedule_frequency']);
+
+            $reservation->update(['status' => 'convertida']);
+
+            // chk_contract_source: cuando hay reservation_id, client_id y lot_id deben ser NULL
+            // (el cliente y lote se obtienen a través de la relación reservation)
+            $contract = $this->contracts->create(array_merge($validated, [
+                'reservation_id' => $reservation->reservation_id,
+                'client_id'      => null,
+                'lot_id'         => null,
+                'advisor_id'     => $reservation->advisor_id,
+                'status'         => 'vigente',
+            ]));
+
+            // Actualizar lote a 'vendido'
+            if ($lot = $reservation->lot) {
+                $lot->update(['status' => 'vendido']);
+            }
+
+            // Generar cronograma automáticamente si se proporcionan los datos
+            $schedulesGenerated = 0;
+            if ($scheduleStartDate && $scheduleFrequency) {
+                $startDate = new \DateTime($scheduleStartDate);
+                $financingAmount = $contract->financing_amount;
+                $interestRate = $contract->interest_rate;
+                $termMonths = $contract->term_months;
+
+                // Calcular cuota mensual
+                if ($interestRate == 0) {
+                    $monthlyPayment = $financingAmount / $termMonths;
+                } else {
+                    $monthlyRate = $interestRate / 100 / 12;
+                    $monthlyPayment = $financingAmount * ($monthlyRate * pow(1 + $monthlyRate, $termMonths)) / (pow(1 + $monthlyRate, $termMonths) - 1);
+                }
+
+                // Ajustar según frecuencia
+                $paymentAmount = $monthlyPayment;
+                $intervalDays = 30;
+                $totalPayments = $termMonths;
+
+                switch ($scheduleFrequency) {
+                    case 'biweekly':
+                        $paymentAmount = $monthlyPayment / 2;
+                        $intervalDays = 14;
+                        $totalPayments = $termMonths * 2;
+                        break;
+                    case 'weekly':
+                        $paymentAmount = $monthlyPayment / 4;
+                        $intervalDays = 7;
+                        $totalPayments = $termMonths * 4;
+                        break;
+                }
+
+                $schedules = [];
+                $currentDate = clone $startDate;
+                $installmentNumber = 1;
+
+                // Cuota inicial (enganche)
+                $initialQuota = $contract->down_payment ?? 0;
+                if ($initialQuota > 0) {
+                    $schedules[] = [
+                        'contract_id' => $contract->contract_id,
+                        'installment_number' => $installmentNumber,
+                        'due_date' => $currentDate->format('Y-m-d'),
+                        'amount' => round($initialQuota, 2),
+                        'status' => 'pendiente',
+                        'notes' => 'Cuota inicial',
+                        'type' => 'inicial',
+                    ];
+                    $installmentNumber++;
+                    $currentDate->add(new \DateInterval('P' . $intervalDays . 'D'));
+                }
+
+                // Cuotas regulares
+                for ($i = $installmentNumber; $i <= $totalPayments + ($initialQuota > 0 ? 1 : 0); $i++) {
+                    $schedules[] = [
+                        'contract_id' => $contract->contract_id,
+                        'installment_number' => $i,
+                        'due_date' => $currentDate->format('Y-m-d'),
+                        'amount' => round($paymentAmount, 2),
+                        'status' => 'pendiente',
+                        'type' => 'financiamiento',
+                    ];
+                    $currentDate->add(new \DateInterval('P' . $intervalDays . 'D'));
+                }
+
+                // Cuota balón si existe
+                $balloonPayment = $contract->balloon_payment ?? 0;
+                if ($balloonPayment > 0) {
+                    $schedules[] = [
+                        'contract_id' => $contract->contract_id,
+                        'installment_number' => count($schedules) + 1,
+                        'due_date' => $currentDate->format('Y-m-d'),
+                        'amount' => round($balloonPayment, 2),
+                        'status' => 'pendiente',
+                        'notes' => 'Cuota balón',
+                        'type' => 'balon',
+                    ];
+                }
+
+                if (!empty($schedules)) {
+                    \Modules\Collections\Models\PaymentSchedule::insert($schedules);
+                    $schedulesGenerated = count($schedules);
+                }
+
+                Log::info('[Reservation→Contract] Cronograma generado', [
+                    'contract_id' => $contract->contract_id,
+                    'schedules' => $schedulesGenerated,
+                    'frequency' => $scheduleFrequency,
+                ]);
+            }
+
+            DB::commit();
+
+            // Recargar contrato con relaciones
+            $contract->load(['reservation.client', 'reservation.lot', 'client', 'lot', 'advisor', 'schedules']);
+
+            $this->pusher->notify('reservation-channel', 'converted', [
+                'reservation' => new ReservationResource($reservation),
+                'schedules_generated' => $schedulesGenerated,
+            ]);
+
+            return new ContractResource($contract);
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error('[Reservation→Contract] Error en conversión', [
+                'reservation_id' => $reservation->reservation_id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'message' => 'Error al convertir reserva',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
 

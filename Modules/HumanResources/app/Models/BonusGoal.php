@@ -26,8 +26,10 @@ class BonusGoal extends Model
         'max_achievement',
         'bonus_amount',
         'bonus_percentage',
+        'target_value',
         'employee_type',
         'team_id',
+        'office_id',
         'is_active',
         'valid_from',
         'valid_until'
@@ -39,6 +41,7 @@ class BonusGoal extends Model
         'max_achievement' => 'decimal:2',
         'bonus_amount' => 'decimal:2',
         'bonus_percentage' => 'decimal:2',
+        'target_value' => 'decimal:2',
         'is_active' => 'boolean',
         'valid_from' => 'date',
         'valid_until' => 'date'
@@ -53,6 +56,11 @@ class BonusGoal extends Model
     public function team()
     {
         return $this->belongsTo(Team::class, 'team_id', 'team_id');
+    }
+
+    public function office()
+    {
+        return $this->belongsTo(Office::class, 'office_id', 'office_id');
     }
 
     public function bonuses()
@@ -89,6 +97,14 @@ class BonusGoal extends Model
         return $query->where(function ($q) use ($teamId) {
             $q->whereNull('team_id')
                 ->orWhere('team_id', $teamId);
+        });
+    }
+
+    public function scopeForOffice($query, $officeId)
+    {
+        return $query->where(function ($q) use ($officeId) {
+            $q->whereNull('office_id')
+                ->orWhere('office_id', $officeId);
         });
     }
 
@@ -133,6 +149,10 @@ class BonusGoal extends Model
         }
         // Verificar equipo
         if ($this->team_id && $employee->team_id !== $this->team_id) {
+            return false;
+        }
+        // Verificar oficina
+        if ($this->office_id && $employee->office_id !== $this->office_id) {
             return false;
         }
         return true;
