@@ -845,7 +845,7 @@ class EmployeeImportService
      */
     private function sendWelcomeEmail(User $user, string $temporaryPassword): void
     {
-        $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
+        $loginUrl = env('FRONTEND_URL', config('app.url', 'https://app.casabonita.pe'));
         
         if (config('infobip.email_via_api')) {
             app(\App\Services\InfobipMailer::class)->send(

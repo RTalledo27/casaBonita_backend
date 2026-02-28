@@ -138,7 +138,7 @@ class UserController extends Controller
                     $user->must_change_password = true;
                     $user->save();
                 }
-                $loginUrl = config('app.frontend_url') ?? env('FRONTEND_URL', 'http://localhost:4200');
+                $loginUrl = env('FRONTEND_URL', config('app.url', 'https://app.casabonita.pe'));
                 if (config('clicklab.email_via_api')) {
                     $html = view('emails.new-user-credentials', [
                         'user' => $user,
@@ -247,7 +247,7 @@ class UserController extends Controller
                 $user->password_changed_at = null;
                 $user->save();
 
-                $loginUrl = config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:4200')) . '/login';
+                $loginUrl = env('FRONTEND_URL', config('app.url', 'https://app.casabonita.pe')) . '/login';
                 if (config('clicklab.email_via_api')) {
                     $html = view('emails.new-user-credentials', [
                         'user' => $user,
