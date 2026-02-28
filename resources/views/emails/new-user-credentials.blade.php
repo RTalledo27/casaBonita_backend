@@ -267,7 +267,7 @@
         <!-- Header -->
         <div class="header">
             <div class="logo-container">
-                <img src="{{ $message->embed(public_path('assets/img/casaBonitaTransparente.png')) }}" alt="Casa Bonita Residencial" style="max-width: 200px; height: auto;" />
+                <img src="{{ config('app.url') }}/assets/img/casaBonitaTransparente.png" alt="Casa Bonita Residencial" style="max-width: 200px; height: auto;" />
             </div>
             <h1 class="header-title">¡Bienvenido al Equipo!</h1>
         </div>
