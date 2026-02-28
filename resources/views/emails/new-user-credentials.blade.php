@@ -266,12 +266,8 @@
     <div class="email-container">
         <!-- Header -->
         <div class="header">
-            <div class="header-emoji">🎉</div>
             <div class="logo-container">
-                <div class="logo-box">
-                    <div class="logo-text">CASA BONITA</div>
-                </div>
-                <div class="logo-subtitle">R E S I D E N C I A L</div>
+                <img src="{{ $message->embed(public_path('assets/img/casaBonitaTransparente.png')) }}" alt="Casa Bonita Residencial" style="max-width: 200px; height: auto;" />
             </div>
             <h1 class="header-title">¡Bienvenido al Equipo!</h1>
         </div>
