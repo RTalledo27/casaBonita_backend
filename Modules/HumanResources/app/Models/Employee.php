@@ -45,6 +45,8 @@ class Employee extends Model
         'social_security_number',
         'afp_code',
         'cuspp',
+        'has_family_allowance',
+        'number_of_children',
         'health_insurance',
         'notes'
     ];
@@ -56,6 +58,8 @@ class Employee extends Model
         'individual_goal' => 'decimal:2',
         'is_commission_eligible' => 'boolean',
         'is_bonus_eligible' => 'boolean',
+        'has_family_allowance' => 'boolean',
+        'number_of_children' => 'integer',
         'hire_date' => 'date',
         'termination_date' => 'date'
     ];

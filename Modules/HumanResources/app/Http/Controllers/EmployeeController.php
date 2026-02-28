@@ -213,6 +213,9 @@ class EmployeeController extends Controller
             $dashboard['bonuses'] = $this->bonusService->getBonusesForAdminDashboard($month, $year);
             //$dashboard['employees'] = $this->employeeRepo->getAdvisors();
             $dashboard['employees'] = $this->employeeRepo->getAll(['month' => $month, 'year' => $year]);
+               // Agregar totales de nómina
+               $period = sprintf('%04d-%02d', $year, $month);
+               $dashboard['payroll_totals'] = app(\Modules\HumanResources\Repositories\PayrollRepository::class)->getGlobalTotals(['period' => $period]);
 
             return response()->json([
                 'success' => true,

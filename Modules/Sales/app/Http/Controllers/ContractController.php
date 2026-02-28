@@ -13,7 +13,9 @@ use Modules\Sales\Http\Requests\UpdateContractRequest;
 use Modules\Sales\Models\Contract;
 use Modules\Sales\Repositories\ContractRepository;
 use Modules\Sales\Transformers\ContractResource;
+use Modules\Sales\Services\ContractExportService;
 use Modules\Services\PusherNotifier;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContractController extends Controller
 {
@@ -471,5 +473,22 @@ class ContractController extends Controller
                 'message' => 'Error obteniendo contratos con financiamiento: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Exportar todos los contratos a un archivo Excel.
+     */
+    public function exportExcel(ContractExportService $exportService): StreamedResponse
+    {
+        $filePath = $exportService->generate();
+        $filename = basename($filePath);
+
+        return response()->streamDownload(function () use ($filePath) {
+            readfile($filePath);
+            // Eliminar archivo temporal después de enviarlo
+            @unlink($filePath);
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
     }
 }

@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Modules\Reports\Services\ReportsService;
 use Modules\Reports\Services\ExportService;
+use Illuminate\Support\Facades\Storage;
 
 class ReportsController extends Controller
 {
@@ -105,56 +106,25 @@ class ReportsController extends Controller
 
                     \Log::info('Export result:', $result);
 
-                    // Normalize the file path for Windows
-                    $normalizedPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $result['file_path']);
-                    
-                    // Get the file path from storage
-                    $filePath = storage_path('app' . DIRECTORY_SEPARATOR . $normalizedPath);
-                    
-                    \Log::info('Looking for file at: ' . $filePath);
-                    \Log::info('File exists: ' . (file_exists($filePath) ? 'YES' : 'NO'));
-                    
+                    // Get absolute path from public disk
+                    $filePath = Storage::disk('public')->path($result['file_path']);
+
                     if (!file_exists($filePath)) {
-                        // Try alternative path
-                        $alternativePath = storage_path($result['file_path']);
-                        \Log::info('Trying alternative path: ' . $alternativePath);
-                        
-                        if (file_exists($alternativePath)) {
-                            $filePath = $alternativePath;
-                        } else {
-                            return response()->json([
-                                'success' => false,
-                                'message' => 'Archivo no encontrado',
-                                'debug' => [
-                                    'result' => $result,
-                                    'tried_paths' => [
-                                        storage_path('app/' . $result['file_path']),
-                                        $alternativePath
-                                    ]
-                                ]
-                            ], 404);
-                        }
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Archivo no encontrado',
+                            'debug' => [
+                                'file_path' => $result['file_path'],
+                                'full_path' => $filePath
+                            ]
+                        ], 404);
                     }
 
-                    // Determine content type based on format
-                    $contentType = match($format) {
-                        'excel' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        'csv' => 'text/csv',
-                        'pdf' => 'application/pdf',
-                        default => 'application/octet-stream'
-                    };
-
-                    // Generate filename
-                    $filename = basename($result['file_path']);
-
-                    // Return file download response
-                    return response()->download($filePath, $filename, [
-                        'Content-Type' => $contentType,
-                        'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-                        'Cache-Control' => 'no-cache, must-revalidate',
-                        'Pragma' => 'no-cache',
-                        'Expires' => '0'
-                    ])->deleteFileAfterSend(true);
+                    // Return JSON with filename — frontend navigates to GET endpoint to download
+                    return response()->json([
+                        'success' => true,
+                        'file_name' => basename($result['file_path'])
+                    ]);
             }
             
             // For projected reports, generate Excel file
@@ -178,10 +148,6 @@ class ReportsController extends Controller
                 // Return file download response for projected reports
                 return response()->download($filePath, $fileName, [
                     'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-                    'Cache-Control' => 'no-cache, must-revalidate',
-                    'Pragma' => 'no-cache',
-                    'Expires' => '0'
                 ])->deleteFileAfterSend(true);
             }
 
@@ -191,6 +157,28 @@ class ReportsController extends Controller
                 'message' => 'Error al generar el reporte: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Download a generated export file via direct browser GET request.
+     * Content-Disposition is always respected since the browser navigates directly.
+     */
+    public function downloadExport(Request $request, $filename)
+    {
+        $filename = basename($filename);
+        $filePath = Storage::disk('public')->path('exports/' . $filename);
+
+        if (!file_exists($filePath)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Archivo no encontrado'
+            ], 404);
+        }
+
+        return response()->file($filePath, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
     }
 
     /**

@@ -324,7 +324,7 @@ class LogicwareLotImportService
 
     protected function resolveStreetTypeId(array $unit): int
     {
-        $name = $unit['street_type'] ?? $unit['streetType'] ?? $unit['streetTypeName'] ?? $unit['roadType'] ?? null;
+        $name = $unit['modelName'] ?? $unit['model_name'] ?? $unit['street_type'] ?? $unit['streetType'] ?? $unit['streetTypeName'] ?? $unit['roadType'] ?? null;
         if (is_array($name)) {
             $name = $name['name'] ?? ($name['label'] ?? null);
         }
@@ -369,8 +369,9 @@ class LogicwareLotImportService
             'sold' => 'vendido',
             'reservado' => 'reservado',
             'reserved' => 'reservado',
-            'bloqueado' => 'reservado',
-            'blocked' => 'reservado',
+            'bloqueado' => 'bloqueado',
+            'blocked' => 'bloqueado',
+            'no vendible' => 'bloqueado',
         ];
 
         return $statusMap[$normalized] ?? 'disponible';

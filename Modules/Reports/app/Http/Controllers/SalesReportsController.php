@@ -126,6 +126,96 @@ class SalesReportsController extends Controller
     }
 
     /**
+     * Get sales performance by employee
+     */
+    public function getSalesPerformance(Request $request): JsonResponse
+    {
+        $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'department' => 'nullable|string'
+        ]);
+
+        try {
+            $data = $this->salesReportsService->getSalesPerformance(
+                $request->input('date_from'),
+                $request->input('date_to'),
+                $request->input('department')
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener rendimiento de ventas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get conversion funnel data
+     */
+    public function getConversionFunnel(Request $request): JsonResponse
+    {
+        $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'employee_id' => 'nullable|integer'
+        ]);
+
+        try {
+            $data = $this->salesReportsService->getConversionFunnel(
+                $request->input('date_from'),
+                $request->input('date_to'),
+                $request->input('employee_id')
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener embudo de conversión: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get top selling products/lots
+     */
+    public function getTopProducts(Request $request): JsonResponse
+    {
+        $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+            'limit' => 'nullable|integer|min:1|max:50'
+        ]);
+
+        try {
+            $data = $this->salesReportsService->getTopProducts(
+                $request->input('date_from'),
+                $request->input('date_to'),
+                $request->input('limit', 10)
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al obtener productos top: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Export sales report to Excel
      */
     public function exportToExcel(Request $request)

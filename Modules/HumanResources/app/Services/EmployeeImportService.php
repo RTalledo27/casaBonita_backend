@@ -42,6 +42,29 @@ class EmployeeImportService
             foreach ($excelData as $index => $row) {
                 $rowNumber = $index + 2; // +2 porque empezamos en fila 2 (después del header)
                 
+                // --- PRE-PROCESAMIENTO DE DATOS ---
+                
+                // 1. Limpiar y Generar Email Dummy si está vacío
+                $email = $row['CORREO'] ?? '';
+                $email = $this->cleanEmail($email);
+                
+                if (empty($email)) {
+                    // Generar email dummy: sinemail{aleatorio}@sinemail.com
+                    $dummyId = mt_rand(10000, 99999);
+                    $email = "sinemail{$dummyId}@sinemail.com";
+                    Log::info("Generado email dummy para fila {$rowNumber}: {$email}");
+                }
+                $row['CORREO'] = $email;
+
+                // 2. Limpiar DNI/Documento
+                // Eliminar espacios y caracteres no imprimibles del documento
+                $dni = $row['DNI'] ?? '';
+                // Mantener solo caracteres alfanuméricos (eliminar guiones, puntos, espacios)
+                $dni = preg_replace('/[^a-zA-Z0-9]/', '', $dni);
+                $row['DNI'] = $dni;
+
+                // --- FIN PRE-PROCESAMIENTO ---
+                
                 try {
                     // Validar datos requeridos
                     $validationResult = $this->validateRowData($row, $rowNumber);
@@ -149,7 +172,7 @@ class EmployeeImportService
         // Validar campos requeridos
         $requiredFields = [
             'COLABORADOR' => 'El nombre del colaborador es requerido',
-            'DNI' => 'El DNI es requerido',
+            'DNI' => 'El DNI/CE es requerido',
             'CORREO' => 'El correo es requerido',
             'AREA' => 'El Área (Departamento) es requerida',
             'EQUIPO' => 'El Equipo es requerido',
@@ -163,12 +186,31 @@ class EmployeeImportService
             }
         }
         
-        if (!empty($row['DNI']) && (strlen($row['DNI']) !== 8 || !is_numeric($row['DNI']))) {
-            $errors[] = "El DNI debe tener 8 dígitos";
+        // Validar documento de identidad: DNI (8 dígitos) o Carnet de Extranjería (9-12 caracteres alfanuméricos)
+        if (!empty($row['DNI'])) {
+            $doc = trim((string) $row['DNI']);
+            $docLen = strlen($doc);
+            if ($docLen === 8) {
+                // DNI peruano: exactamente 8 dígitos numéricos
+                if (!is_numeric($doc)) {
+                    $errors[] = "El DNI debe contener solo dígitos";
+                }
+            } elseif ($docLen >= 9 && $docLen <= 12) {
+                // Carnet de Extranjería: 9-12 caracteres alfanuméricos
+                if (!ctype_alnum($doc)) {
+                    $errors[] = "El Carnet de Extranjería debe ser alfanumérico";
+                }
+            } else {
+                $errors[] = "El documento debe ser DNI (8 dígitos) o Carnet de Extranjería (9-12 caracteres)";
+            }
         }
         
-        if (!empty($row['CORREO']) && !filter_var($row['CORREO'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = "El formato del correo es inválido";
+        // Limpiar y validar correo
+        if (!empty($row['CORREO'])) {
+            $email = $this->cleanEmail($row['CORREO']);
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $errors[] = "El formato del correo es inválido: '{$row['CORREO']}'";
+            }
         }
 
         // Ya NO validamos duplicados aquí porque ahora actualizamos si existe.
@@ -246,16 +288,20 @@ class EmployeeImportService
             Log::info("Position Found/Created: {$positionName} (Raw: {$positionNameRaw}) -> ID: {$positionId} (Category: {$position->category})");
         }
 
+        // Limpiar correo y documento
+        $cleanedEmail = $this->cleanEmail($row['CORREO'] ?? '');
+        $cleanedDni = trim((string) ($row['DNI'] ?? ''));
+
         return [
             'user_data' => [
                 'username' => $username,
                 // 'password_hash' se asignará en el importador dependiendo si es nuevo o no
-                'email' => $row['CORREO'],
+                'email' => $cleanedEmail,
                 'status' => 'active', // El import siempre activa
                 'must_change_password' => true,
                 'first_name' => $this->removeAccents($nameParts['first_name']),
                 'last_name' => $this->removeAccents($nameParts['last_name']),
-                'dni' => $row['DNI'] ?? null,
+                'dni' => $cleanedDni,
                 'phone' => $row['TELEFONO'] ?? null,
                 'birth_date' => $birthDate,
                 'position' => $positionName,
@@ -636,6 +682,24 @@ class EmployeeImportService
     }
 
     /**
+     * Limpiar correo electrónico de caracteres invisibles y espacios
+     * Excel a veces añade caracteres BOM, espacios extra o caracteres invisibles
+     */
+    private function cleanEmail(string $email): string
+    {
+        // Eliminar BOM y caracteres invisibles Unicode
+        $email = preg_replace('/[\x{FEFF}\x{200B}\x{200C}\x{200D}\x{00A0}]/u', '', $email);
+        // Eliminar espacios, tabs, newlines
+        $email = preg_replace('/\s+/', '', $email);
+        // Lowercase
+        $email = mb_strtolower(trim($email), 'UTF-8');
+        // Remover acentos (nuevo requisito)
+        $email = $this->removeAccents($email);
+        
+        return $email;
+    }
+
+    /**
      * Remover acentos - Mejorado para normalizar nombres completos
      * Ahora se usa tanto para usernames como para nombres y apellidos
      */
@@ -823,10 +887,24 @@ class EmployeeImportService
         };
 
         foreach ($excelData as $index => $row) {
-            // Contar empleados nuevos vs existentes
-            $dni = $row['DNI'] ?? null;
-            $email = $row['CORREO'] ?? null;
+            // --- PRE-PROCESAMIENTO DE DATOS (Igual que en importFromExcel) ---
             
+            // 1. Limpiar y Generar Email Dummy si está vacío
+            $email = $row['CORREO'] ?? '';
+            $email = $this->cleanEmail($email);
+            
+            if (empty($email)) {
+                $dummyId = mt_rand(10000, 99999);
+                $email = "sinemail{$dummyId}@sinemail.com";
+            }
+
+            // 2. Limpiar DNI/Documento
+            $dni = $row['DNI'] ?? '';
+            $dni = preg_replace('/[^a-zA-Z0-9]/', '', $dni);
+
+            // --- FIN PRE-PROCESAMIENTO ---
+
+            // Contar empleados nuevos vs existentes
             $existingUser = null;
             if ($dni || $email) {
                 $existingUser = User::where('dni', $dni)

@@ -911,7 +911,10 @@ class CommissionService
                 ]
             ],
             'bonuses_summary' => $bonusSummary,
-            'top_performers' => $topPerformers
+            'top_performers' => $topPerformers,
+            'sales_summary' => $this->getSalesSummary($month, $year),
+            'monthly_trend' => $this->getMonthlyTrend($month, $year),
+            'alerts' => $this->getAlerts($month, $year)
         ];
     }
 
@@ -1131,6 +1134,188 @@ class CommissionService
 
         // 3. Si es nuevo (sin historial), meta base de 10 contratos para asesores nuevos
         return 10;
+    }
+
+    /**
+     * Obtiene resumen de ventas (contratos) del período
+     */
+    public function getSalesSummary(int $month, int $year): array
+    {
+        $contracts = Contract::with(['advisor.user'])
+            ->whereMonth('sign_date', $month)
+            ->whereYear('sign_date', $year)
+            ->where('status', 'vigente')
+            ->get();
+
+        $totalContracts = $contracts->count();
+        $totalSalesAmount = $contracts->sum('total_price');
+
+        // Desglose por tipo de venta
+        $bySaleType = $contracts->groupBy('sale_type');
+        $cashContracts = $bySaleType->get('cash', collect());
+        $financedContracts = $bySaleType->get('financed', collect());
+
+        // Top 5 asesores por cantidad de contratos
+        $topByContracts = $contracts->groupBy('advisor_id')
+            ->map(function ($advisorContracts, $advisorId) {
+                $advisor = $advisorContracts->first()->advisor;
+                $userName = $advisor && $advisor->user
+                    ? $advisor->user->first_name . ' ' . $advisor->user->last_name
+                    : 'Sin nombre';
+                return [
+                    'advisor_id' => $advisorId,
+                    'advisor_name' => $userName,
+                    'contracts_count' => $advisorContracts->count(),
+                    'total_amount' => $advisorContracts->sum('total_price'),
+                    'cash_count' => $advisorContracts->where('sale_type', 'cash')->count(),
+                    'financed_count' => $advisorContracts->where('sale_type', 'financed')->count(),
+                ];
+            })
+            ->sortByDesc('contracts_count')
+            ->take(5)
+            ->values()
+            ->toArray();
+
+        return [
+            'total_contracts' => $totalContracts,
+            'total_amount' => $totalSalesAmount,
+            'average_ticket' => $totalContracts > 0 ? round($totalSalesAmount / $totalContracts, 2) : 0,
+            'by_sale_type' => [
+                'cash' => [
+                    'count' => $cashContracts->count(),
+                    'amount' => $cashContracts->sum('total_price'),
+                ],
+                'financed' => [
+                    'count' => $financedContracts->count(),
+                    'amount' => $financedContracts->sum('total_price'),
+                ],
+            ],
+            'top_advisors_by_contracts' => $topByContracts,
+        ];
+    }
+
+    /**
+     * Obtiene tendencia mensual de los últimos N meses
+     */
+    public function getMonthlyTrend(int $month, int $year, int $months = 6): array
+    {
+        $trend = [];
+
+        for ($i = $months - 1; $i >= 0; $i--) {
+            $trendMonth = $month - $i;
+            $trendYear = $year;
+
+            while ($trendMonth <= 0) {
+                $trendMonth += 12;
+                $trendYear--;
+            }
+
+            // Contratos del mes
+            $contractsCount = Contract::whereMonth('sign_date', $trendMonth)
+                ->whereYear('sign_date', $trendYear)
+                ->where('status', 'vigente')
+                ->count();
+
+            $contractsAmount = Contract::whereMonth('sign_date', $trendMonth)
+                ->whereYear('sign_date', $trendYear)
+                ->where('status', 'vigente')
+                ->sum('total_price');
+
+            // Comisiones del mes
+            $commissionsAmount = $this->commissionRepo->getAll([
+                'period_month' => $trendMonth,
+                'period_year' => $trendYear
+            ])->sum('commission_amount');
+
+            // Bonos del mes
+            $bonusService = app(\Modules\HumanResources\Services\BonusService::class);
+            $bonusSummary = $bonusService->getBonusSummary($trendMonth, $trendYear);
+            $bonusesAmount = $bonusSummary['total_amount'] ?? 0;
+
+            $trend[] = [
+                'month' => $trendMonth,
+                'year' => $trendYear,
+                'label' => $this->getMonthLabel($trendMonth),
+                'short_label' => mb_substr($this->getMonthLabel($trendMonth), 0, 3),
+                'contracts' => $contractsCount,
+                'contracts_amount' => (float)$contractsAmount,
+                'commissions' => (float)$commissionsAmount,
+                'bonuses' => (float)$bonusesAmount,
+            ];
+        }
+
+        return $trend;
+    }
+
+    /**
+     * Genera alertas de atención para el dashboard admin
+     */
+    public function getAlerts(int $month, int $year): array
+    {
+        $alerts = [];
+
+        // 1. Asesores activos sin ventas en el mes actual
+        $activeAdvisors = Employee::active()->advisors()->with('user')->get();
+
+        foreach ($activeAdvisors as $advisor) {
+            $salesCount = $advisor->calculateMonthlySalesCount($month, $year);
+            if ($salesCount === 0) {
+                $name = $advisor->user
+                    ? $advisor->user->first_name . ' ' . $advisor->user->last_name
+                    : 'Empleado #' . $advisor->employee_id;
+                $alerts[] = [
+                    'type' => 'warning',
+                    'category' => 'sin_ventas',
+                    'title' => 'Asesor sin ventas',
+                    'message' => "{$name} no tiene ventas en {$this->getMonthLabel($month)}",
+                    'employee_id' => $advisor->employee_id,
+                ];
+            }
+        }
+
+        // 2. Empleados temporales con más de 6 meses (posible renovación)
+        $sixMonthsAgo = now()->subMonths(6)->toDateString();
+        $temporalEmployees = Employee::active()
+            ->where('contract_type', 'temporal')
+            ->where('hire_date', '<=', $sixMonthsAgo)
+            ->with('user')
+            ->get();
+
+        foreach ($temporalEmployees as $emp) {
+            $name = $emp->user
+                ? $emp->user->first_name . ' ' . $emp->user->last_name
+                : 'Empleado #' . $emp->employee_id;
+            $monthsWorked = now()->diffInMonths($emp->hire_date);
+            $alerts[] = [
+                'type' => 'info',
+                'category' => 'contrato_temporal',
+                'title' => 'Contrato temporal prolongado',
+                'message' => "{$name} lleva {$monthsWorked} meses con contrato temporal",
+                'employee_id' => $emp->employee_id,
+            ];
+        }
+
+        // 3. Comisiones pendientes de pago
+        $pendingCommissions = $this->commissionRepo->getAll([
+            'period_month' => $month,
+            'period_year' => $year
+        ])->where('payment_status', 'pendiente');
+
+        $pendingCount = $pendingCommissions->count();
+        $pendingAmount = $pendingCommissions->sum('commission_amount');
+
+        if ($pendingCount > 0) {
+            $alerts[] = [
+                'type' => 'danger',
+                'category' => 'comisiones_pendientes',
+                'title' => 'Comisiones pendientes de pago',
+                'message' => "{$pendingCount} comisiones pendientes por S/ " . number_format($pendingAmount, 2),
+                'count' => $pendingCount,
+                'amount' => $pendingAmount,
+            ];
+        }
+
+        return $alerts;
     }
 
 }

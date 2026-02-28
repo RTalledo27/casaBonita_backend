@@ -666,6 +666,9 @@ class ExternalLotImportService
         }
 
         $candidates = [
+            // Priorizar modelName de Logicware (BOULEVARD, CALLE, PEATONAL, etc.)
+            $property['modelName'] ?? null,
+            $property['model_name'] ?? null,
             $property['street_type'] ?? null,
             $property['streetType'] ?? null,
             $property['streetTypeName'] ?? null,

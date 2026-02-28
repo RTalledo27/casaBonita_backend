@@ -8,6 +8,8 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Writer\Csv;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Modules\Reports\Repositories\PaymentsRepository;
+use Illuminate\Support\Facades\App;
 
 class ExportService
 {
@@ -60,7 +62,7 @@ class ExportService
     {
         $headers = [
             'sales' => ['Fecha', 'Cliente', 'Lote', 'Monto', 'Asesor', 'Estado'],
-            'payment_schedules' => ['Contrato', 'N° Cuota', 'Fecha Vencimiento', 'Monto', 'Estado'],
+            'payment_schedules' => ['N° Cuota (ID)', 'Cliente', 'Correo', 'Lote', 'Fecha Vencimiento', 'Monto Cuota', 'Monto Venta', 'Estado'],
             'projections' => ['Mes', 'Ingresos Proyectados', 'Ventas Proyectadas', 'Confianza'],
             'collections' => ['Contrato', 'Cliente', 'Monto Adeudado', 'Días Vencidos', 'Estado'],
             'inventory' => ['Manzana', 'Lote', 'Estado', 'Precio', 'Área']
@@ -86,7 +88,34 @@ class ExportService
      */
     private function getPaymentSchedulesData($filters, $dateFrom, $dateTo)
     {
-        return [];
+        $repository = App::make(PaymentsRepository::class);
+        $status = $filters['status'] ?? null;
+        $clientId = $filters['clientId'] ?? null;
+        
+        $options = [
+            'searchTerm' => $filters['searchTerm'] ?? null,
+            'sortField' => $filters['sortField'] ?? null,
+            'sortDirection' => $filters['sortDirection'] ?? null,
+        ];
+
+        // Use a large per_page to get all records for export, limit to 5000 for server safety
+        $response = $repository->getByStatus($status, $dateFrom, $dateTo, $clientId, 1, 5000, $options);
+        
+        $exportData = [];
+        foreach ($response['data'] as $item) {
+            $exportData[] = [
+                $item->schedule_id,
+                $item->client_name ?? '-',
+                $item->client_email ?? '-',
+                $item->lot_number ?? '-',
+                $item->due_date,
+                '$' . number_format($item->amount, 2),
+                $item->sale_amount ? '$' . number_format($item->sale_amount, 2) : '-',
+                ucfirst($item->status)
+            ];
+        }
+        
+        return $exportData;
     }
 
     /**
@@ -162,22 +191,17 @@ class ExportService
         $writer = new Xlsx($spreadsheet);
         $filePath = 'exports/' . $filename . '.xlsx';
         
-        // Save directly to storage/app
-        $fullPath = storage_path('app/' . $filePath);
+        // Save to public disk
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean();
         
-        // Ensure directory exists
-        $directory = dirname($fullPath);
-        if (!file_exists($directory)) {
-            mkdir($directory, 0755, true);
-        }
-        
-        // Save the file
-        $writer->save($fullPath);
+        Storage::disk('public')->put($filePath, $content);
         
         return [
             'file_path' => $filePath,
-            'file_size' => filesize($fullPath),
-            'download_url' => '/storage/' . $filePath
+            'file_size' => strlen($content),
+            'download_url' => Storage::disk('public')->url($filePath)
         ];
     }
 
@@ -203,12 +227,12 @@ class ExportService
         fclose($output);
         
         $filePath = 'exports/' . $filename . '.csv';
-        Storage::put($filePath, $content);
+        Storage::disk('public')->put($filePath, $content);
         
         return [
             'file_path' => $filePath,
             'file_size' => strlen($content),
-            'download_url' => Storage::url($filePath)
+            'download_url' => Storage::disk('public')->url($filePath)
         ];
     }
 
@@ -223,12 +247,12 @@ class ExportService
         $content = $pdf->output();
         
         $filePath = 'exports/' . $filename . '.pdf';
-        Storage::put($filePath, $content);
+        Storage::disk('public')->put($filePath, $content);
         
         return [
             'file_path' => $filePath,
             'file_size' => strlen($content),
-            'download_url' => Storage::url($filePath)
+            'download_url' => Storage::disk('public')->url($filePath)
         ];
     }
 

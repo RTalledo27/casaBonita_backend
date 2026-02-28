@@ -25,6 +25,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/export', [ReportsController::class, 'export']);
         Route::get('/status/{reportId}', [ReportsController::class, 'getReportStatus']);
         Route::get('/download/{reportId}', [ReportsController::class, 'download']);
+        Route::get('/download-export/{filename}', [ReportsController::class, 'downloadExport']);
         Route::get('/history', [ReportsController::class, 'getReportsHistory']);
         
         // Specific Excel Export Routes (Sales)
@@ -79,6 +80,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/charts/cashflow', [\Modules\Reports\app\Http\Controllers\ProjectedReportController::class, 'getCashFlowChart']);
         Route::post('/export', [\Modules\Reports\app\Http\Controllers\ProjectedReportController::class, 'exportToExcel']);
         Route::post('/export-payment-schedule', [\Modules\Reports\app\Http\Controllers\ProjectedReportController::class, 'exportPaymentScheduleProjection']);
-        Route::get('/{id}', [\Modules\Reports\app\Http\Controllers\ProjectedReportController::class, 'show']);
+        Route::get('/cash-flow', [ProjectionsController::class, 'getCashFlowProjections']);
+        Route::get('/{id}', [\Modules\Reports\app\Http\Controllers\ProjectedReportController::class, 'show'])->whereNumber('id');
     });
 });

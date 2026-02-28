@@ -24,7 +24,7 @@ return [
     // Encabezados: permite todos para simplificar
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['Content-Disposition'],
 
     'max_age' => 0,
 

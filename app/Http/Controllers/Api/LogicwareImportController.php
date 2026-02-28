@@ -235,52 +235,60 @@ class LogicwareImportController extends Controller
             // Obtener stock completo
             $stockData = $logicwareService->getFullStockData($forceRefresh);
 
-            $totalUnits = isset($stockData['data']) ? count($stockData['data']) : 0;
+            // Normalizar cada unidad para que coincida con la interfaz del frontend
+            $normalizedUnits = [];
+            if (isset($stockData['data']) && is_array($stockData['data'])) {
+                foreach ($stockData['data'] as $unit) {
+                    $normalizedUnits[] = $this->normalizeUnit($unit);
+                }
+            }
 
-            // Analizar datos para estadísticas
+            $totalUnits = count($normalizedUnits);
+
+            // Analizar datos para estadísticas (usando datos normalizados)
             $stats = [
                 'total_units' => $totalUnits,
                 'by_status' => [],
                 'with_seller' => 0,
+                'with_advisor' => 0,
                 'with_client' => 0,
                 'with_reservation' => 0,
                 'data_source' => isset($stockData['cached_at']) ? 'cache' : 'api'
             ];
 
-            if (isset($stockData['data']) && is_array($stockData['data'])) {
-                foreach ($stockData['data'] as $unit) {
-                    // Contar por estado
-                    $status = $unit['status'] ?? 'unknown';
-                    $stats['by_status'][$status] = ($stats['by_status'][$status] ?? 0) + 1;
+            foreach ($normalizedUnits as $unit) {
+                // Contar por estado (ya normalizado a lowercase)
+                $status = $unit['status'] ?? 'unknown';
+                $stats['by_status'][$status] = ($stats['by_status'][$status] ?? 0) + 1;
 
-                    // Contar unidades con vendedor
-                    if (!empty($unit['seller']) || !empty($unit['sellerName'])) {
-                        $stats['with_seller']++;
-                    }
+                // Contar unidades con asesor
+                if (!empty($unit['advisor']['name'])) {
+                    $stats['with_advisor']++;
+                    $stats['with_seller']++;
+                }
 
-                    // Contar unidades con cliente
-                    if (!empty($unit['client']) || !empty($unit['clientName'])) {
-                        $stats['with_client']++;
-                    }
+                // Contar unidades con cliente
+                if (!empty($unit['client']['name'])) {
+                    $stats['with_client']++;
+                }
 
-                    // Contar unidades con reserva
-                    if (!empty($unit['reservation']) || !empty($unit['reservationDate'])) {
-                        $stats['with_reservation']++;
-                    }
+                // Contar unidades con reserva
+                if (!empty($unit['reservation'])) {
+                    $stats['with_reservation']++;
                 }
             }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Stock completo obtenido exitosamente',
-                'data' => $stockData['data'] ?? [],  // Extraer el array directamente
-                'statistics' => $stats,  // Cambiar de 'stats' a 'statistics'
+                'data' => $normalizedUnits,
+                'statistics' => $stats,
                 'cache_info' => [
                     'cached_at' => $stockData['cached_at'] ?? null,
                     'cache_expires_at' => $stockData['cache_expires_at'] ?? null,
                     'is_cached' => isset($stockData['cached_at'])
                 ],
-                'api_info' => [  // Cambiar de 'api_usage' a 'api_info'
+                'api_info' => [
                     'daily_requests_used' => $logicwareService->getDailyRequestCount(),
                     'daily_requests_limit' => 4,
                     'has_available_requests' => $logicwareService->getDailyRequestCount() < 4
@@ -299,5 +307,141 @@ class LogicwareImportController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Normalizar una unidad del API de Logicware al formato esperado por el frontend
+     * 
+     * Mapea campos como: salableArea → area, totalPrice → price,
+     * status "Vendido" → "vendido", etc.
+     */
+    private function normalizeUnit(array $unit): array
+    {
+        // Extraer block y lot del código (ej: "E-0013" → block: "E", lot: "13")
+        $code = $unit['code'] ?? '';
+        $block = '';
+        $lot = '';
+        if (preg_match('/^([A-Z]+\d*)[-_]?(\d+)$/i', $code, $matches)) {
+            $block = strtoupper($matches[1]);
+            $lot = ltrim($matches[2], '0') ?: '0'; // "0013" → "13"
+        }
+
+        // Normalizar estado
+        $status = $this->normalizeStatus($unit['status'] ?? '', $unit['lockType'] ?? '');
+
+        // Construir nombre legible
+        $name = $unit['name'] ?? ($unit['remarks'] ?? "Lote {$code}");
+
+        // Extraer info del asesor/vendedor si existe
+        $advisor = null;
+        if (!empty($unit['sellerName']) || !empty($unit['seller'])) {
+            $advisor = [
+                'id' => $unit['sellerId'] ?? null,
+                'name' => $unit['sellerName'] ?? $unit['seller'] ?? null,
+                'email' => $unit['sellerEmail'] ?? null,
+                'phone' => $unit['sellerPhone'] ?? null,
+            ];
+        }
+
+        // Extraer info del cliente si existe
+        $client = null;
+        if (!empty($unit['clientName']) || !empty($unit['client'])) {
+            $clientData = is_array($unit['client'] ?? null) ? $unit['client'] : [];
+            $client = [
+                'id' => $unit['clientId'] ?? ($clientData['id'] ?? null),
+                'name' => $unit['clientName'] ?? ($clientData['name'] ?? ($clientData['firstName'] ?? '') . ' ' . ($clientData['lastName'] ?? '')),
+                'document' => $unit['clientDocument'] ?? ($clientData['documentNumber'] ?? null),
+                'email' => $unit['clientEmail'] ?? ($clientData['email'] ?? null),
+                'phone' => $unit['clientPhone'] ?? ($clientData['phone'] ?? null),
+            ];
+            // Limpiar nombre si está vacío
+            if (trim($client['name']) === '') {
+                $client = null;
+            }
+        }
+
+        // Extraer info de reserva si existe
+        $reservation = null;
+        if (!empty($unit['reservationDate']) || !empty($unit['reservation'])) {
+            $resData = is_array($unit['reservation'] ?? null) ? $unit['reservation'] : [];
+            $reservation = [
+                'id' => $resData['id'] ?? null,
+                'date' => $unit['reservationDate'] ?? ($resData['date'] ?? null),
+                'amount' => $unit['reservationAmount'] ?? ($resData['amount'] ?? null),
+                'status' => $resData['status'] ?? null,
+            ];
+        }
+
+        // Extraer info financiera
+        $financial = null;
+        if (!empty($unit['initialPayment']) || !empty($unit['monthlyPayment']) || !empty($unit['roofBonus'])) {
+            $financial = [
+                'initial_payment' => $unit['initialPayment'] ?? null,
+                'monthly_payment' => $unit['monthlyPayment'] ?? null,
+                'num_installments' => $unit['installments'] ?? null,
+                'total_amount' => $unit['totalPrice'] ?? null,
+                'down_payment_percentage' => $unit['downPaymentPercentage'] ?? null,
+                'roof_bonus' => $unit['roofBonus'] ?? null,
+            ];
+        }
+
+        return [
+            'id' => $unit['id'] ?? null,
+            'code' => $code,
+            'name' => $name,
+            'status' => $status,
+            'block' => $block,
+            'lot' => $lot,
+            'area' => $unit['salableArea'] ?? ($unit['area'] ?? null),
+            'price' => $unit['totalPrice'] ?? ($unit['price'] ?? 0),
+            'price_per_sqm' => $unit['pricePerSqm'] ?? null,
+            'model_name' => $unit['modelName'] ?? null,
+            'stage_name' => $unit['stageName'] ?? null,
+            'project_name' => $unit['projectName'] ?? null,
+            'project_code' => $unit['projectCode'] ?? null,
+            'type_name' => $unit['typeName'] ?? null,
+            'is_corner' => $unit['isCorner'] ?? false,
+            'front_length' => $unit['frontLength'] ?? null,
+            'left_length' => $unit['leftLength'] ?? null,
+            'right_length' => $unit['rightLength'] ?? null,
+            'garden_area' => $unit['gardenArea'] ?? null,
+            'terrace_area' => $unit['terraceArea'] ?? null,
+            'orientation' => $unit['orientation'] ?? null,
+            'remarks' => $unit['remarks'] ?? null,
+            'lock_type' => $unit['lockType'] ?? null,
+            'lock_description' => $unit['lockDescription'] ?? null,
+            'roof_code' => $unit['roofCode'] ?? null,
+            'roof_bonus' => $unit['roofBonus'] ?? null,
+            'advisor' => $advisor,
+            'client' => $client,
+            'reservation' => $reservation,
+            'financial' => $financial,
+            'updated_at' => $unit['updatedAt'] ?? null,
+        ];
+    }
+
+    /**
+     * Normalizar el estado de Logicware al formato esperado por el frontend
+     * 
+     * Logicware devuelve: "Disponible", "Vendido", "Bloqueado", "No Vendible", "Separado", etc.
+     * Frontend espera: "disponible", "reservado", "vendido"
+     */
+    private function normalizeStatus(string $rawStatus, string $lockType = ''): string
+    {
+        $status = mb_strtolower(trim($rawStatus));
+
+        // Mapeo de estados de Logicware a estados del sistema
+        $statusMap = [
+            'disponible' => 'disponible',
+            'vendido' => 'vendido',
+            'separado' => 'reservado',
+            'reservado' => 'reservado',
+            'bloqueado' => 'bloqueado',
+            'no vendible' => 'bloqueado',
+            'en proceso' => 'reservado',
+            'pre-venta' => 'disponible',
+        ];
+
+        return $statusMap[$status] ?? 'disponible';
     }
 }

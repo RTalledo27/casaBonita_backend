@@ -22,7 +22,7 @@ class ProjectionsController extends Controller
     public function getSalesProjections(Request $request): JsonResponse
     {
         $request->validate([
-            'period' => 'required|string|in:monthly,quarterly,yearly',
+            'period' => 'nullable|string|in:monthly,quarterly,yearly',
             'months_ahead' => 'nullable|integer|min:1|max:24',
             'project_id' => 'nullable|integer',
             'employee_id' => 'nullable|integer'
@@ -30,7 +30,7 @@ class ProjectionsController extends Controller
 
         try {
             $data = $this->projectionsService->getSalesProjections(
-                $request->input('period'),
+                $request->input('period', 'monthly'),
                 $request->input('months_ahead', 12),
                 $request->input('project_id'),
                 $request->input('employee_id')
@@ -54,14 +54,14 @@ class ProjectionsController extends Controller
     public function getCashFlowProjections(Request $request): JsonResponse
     {
         $request->validate([
-            'period' => 'required|string|in:monthly,quarterly,yearly',
+            'period' => 'nullable|string|in:monthly,quarterly,yearly',
             'months_ahead' => 'nullable|integer|min:1|max:24',
             'include_pending' => 'nullable|boolean'
         ]);
 
         try {
             $data = $this->projectionsService->getCashFlowProjections(
-                $request->input('period'),
+                $request->input('period', 'monthly'),
                 $request->input('months_ahead', 12),
                 $request->input('include_pending', true)
             );
@@ -174,7 +174,7 @@ class ProjectionsController extends Controller
     public function getScenarioAnalysis(Request $request): JsonResponse
     {
         $request->validate([
-            'scenario_type' => 'required|string|in:optimistic,realistic,pessimistic',
+            'scenario_type' => 'nullable|string|in:optimistic,realistic,pessimistic',
             'project_id' => 'nullable|integer',
             'months_ahead' => 'nullable|integer|min:1|max:24',
             'variables' => 'nullable|array'
@@ -182,7 +182,7 @@ class ProjectionsController extends Controller
 
         try {
             $data = $this->projectionsService->getScenarioAnalysis(
-                $request->input('scenario_type'),
+                $request->input('scenario_type', 'realistic'),
                 $request->input('project_id'),
                 $request->input('months_ahead', 12),
                 $request->input('variables', [])

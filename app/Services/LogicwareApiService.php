@@ -671,7 +671,6 @@ class LogicwareApiService
                         'body' => $response->body()
                     ]);
                     
-                    $expiredCache = Cache::get($cacheKey);
                     if ($expiredCache) {
                         Log::info('[LogicwareAPI] Usando caché expirado debido a rate limit');
                         return $expiredCache;
@@ -982,6 +981,8 @@ class LogicwareApiService
             'mock_reason' => 'Rate limit exceeded - Using mock data for development'
         ];
     }
+
+
 
     /**
      * Obtener etapas (stages) de un proyecto

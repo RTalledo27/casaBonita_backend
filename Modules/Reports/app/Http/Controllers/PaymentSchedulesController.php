@@ -52,7 +52,7 @@ class PaymentSchedulesController extends Controller
     public function getByStatus(Request $request): JsonResponse
     {
         $request->validate([
-            'status' => 'required|string|in:pending,paid,overdue,cancelled',
+            'status' => 'nullable|string|in:pending,paid,overdue,cancelled,pendiente,pagado,vencido',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date',
             'client_id' => 'nullable|integer',
@@ -120,14 +120,14 @@ class PaymentSchedulesController extends Controller
     public function getPaymentTrends(Request $request): JsonResponse
     {
         $request->validate([
-            'period' => 'required|string|in:daily,weekly,monthly,quarterly',
+            'period' => 'nullable|string|in:daily,weekly,monthly,quarterly',
             'date_from' => 'nullable|date',
             'date_to' => 'nullable|date'
         ]);
 
         try {
             $data = $this->paymentSchedulesService->getPaymentTrends(
-                $request->input('period'),
+                $request->input('period', 'monthly'),
                 $request->input('date_from'),
                 $request->input('date_to')
             );

@@ -122,16 +122,29 @@ class PayrollCalculationService
             'total_pension' => 0,
         ];
 
-        // Si no tiene sistema de pensiones definido, retornar vacío
-        if (!$employee->pension_system) {
-            return $result;
+        // Determinar sistema de pensiones a partir de afp_code del empleado
+        $afpCode = strtoupper(trim($employee->afp_code ?? ''));
+        
+        // Mapear afp_code a pension_system y afp_provider
+        $afpProviders = ['PRIMA', 'INTEGRA', 'PROFUTURO', 'HABITAT'];
+        
+        if (in_array($afpCode, $afpProviders)) {
+            $pensionSystem = 'AFP';
+            $afpProvider = $afpCode;
+        } elseif ($afpCode === 'ONP') {
+            $pensionSystem = 'ONP';
+            $afpProvider = null;
+        } else {
+            // 'NO REGISTRA', vacío u otro: default a ONP
+            $pensionSystem = 'ONP';
+            $afpProvider = null;
         }
 
-        $result['system'] = $employee->pension_system;
+        $result['system'] = $pensionSystem;
 
-        if (strtolower($employee->pension_system) === 'afp') {
+        if ($pensionSystem === 'AFP') {
             // ===== CÁLCULO AFP =====
-            $result['afp_provider'] = $employee->afp_provider;
+            $result['afp_provider'] = $afpProvider;
 
             // 1. Aporte AFP (10% del salario bruto)
             $result['afp_contribution'] = $grossSalary * ($taxParams->afp_contribution_rate / 100);
@@ -140,13 +153,13 @@ class PayrollCalculationService
             $result['afp_insurance'] = $grossSalary * ($taxParams->afp_insurance_rate / 100);
 
             // 3. Comisión AFP (variable según proveedor)
-            $commissionRate = $this->getAfpCommissionRate($employee->afp_provider, $taxParams);
+            $commissionRate = $this->getAfpCommissionRate($afpProvider, $taxParams);
             $result['afp_commission'] = $grossSalary * ($commissionRate / 100);
 
             // Total AFP
             $result['total_pension'] = $result['afp_contribution'] + $result['afp_insurance'] + $result['afp_commission'];
 
-        } elseif (strtolower($employee->pension_system) === 'onp') {
+        } elseif ($pensionSystem === 'ONP') {
             // ===== CÁLCULO ONP =====
             // ONP: 13% del salario bruto
             $result['onp_contribution'] = $grossSalary * ($taxParams->onp_rate / 100);

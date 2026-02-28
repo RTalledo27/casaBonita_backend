@@ -27,8 +27,14 @@ class LotImportService
      * Estados válidos para los lotes
      */
     protected array $validStatuses = [
-        'disponible', 'reservado', 'vendido', 'cancelado', 'no_disponible'
+        'disponible', 'reservado', 'vendido', 'cancelado', 'no_disponible', 'bloqueado'
     ];
+
+    /**
+     * Cache local de unidades de Logicware para evitar consultas repetitivas
+     * Key: "MANZANA-LOTE" (ej: "A-01")
+     */
+    protected array $logicwareUnits = [];
 
     /**
      * Procesa el archivo Excel y realiza la importación de lotes
@@ -55,6 +61,10 @@ class LotImportService
             $spreadsheet = IOFactory::load($file->getPathname());
             $worksheet = $spreadsheet->getActiveSheet();
             $rows = $worksheet->toArray();
+
+            // Cargar caché de Logicware
+            $this->loadLogicwareCache();
+
 
             // Extraer headers y fila de valores de financiamiento
             $headers = $rows[0];
@@ -342,6 +352,20 @@ class LotImportService
         // Mapear datos de la fila
         $data = array_combine($headers, $row);
         
+        // Buscar coincidencia en Logicware
+        $manzanaLetter = $data['MZNA'] ?? '';
+        $loteNumber = $data['LOTE'] ?? '';
+        $data['logicware_data'] = $this->findLogicwareUnit($manzanaLetter, $loteNumber);
+
+        if ($data['logicware_data']) {
+            \Log::info("[LotImport] Match con Logicware encontrado", [
+                'manzana' => $manzanaLetter,
+                'lote' => $loteNumber,
+                'external_id' => $data['logicware_data']['id'],
+                'status' => $data['logicware_data']['status'] ?? 'N/A'
+            ]);
+        }
+        
         \Log::debug("[LotImport] Procesando fila", [
             'row_data_sample' => array_slice($row, 0, 10),
             'extracted_manzana' => $data['MZNA'] ?? 'NO_EXTRAIDA',
@@ -444,16 +468,49 @@ class LotImportService
         }
         
         // Crear tipo de calle automáticamente si no existe
-        $streetType = StreetType::where('name', $data['UBICACIÓN'])->first();
-        if (!$streetType) {
-            $streetType = StreetType::create([
-                'name' => $data['UBICACIÓN'],
-                'description' => 'Creado automáticamente durante importación'
-            ]);
+
+        
+        // Detectar tipo de calle inteligentemente desde UBICACIÓN
+        $rawLocation = $data['UBICACIÓN'] ?? '';
+        
+        // Priorizar modelName de Logicware para tipo de calle (más confiable)
+        // Fallback: usar UBICACIÓN del Excel
+        $logicwareModelName = null;
+        if (isset($data['logicware_data'])) {
+            $logicwareModelName = $data['logicware_data']['modelName'] 
+                ?? $data['logicware_data']['model_name'] 
+                ?? null;
+        }
+
+        if ($logicwareModelName) {
+            // Usar directamente: "BOULEVARD" → "Boulevard", "PEATONAL" → "Peatonal"
+            $streetTypeName = mb_convert_case(mb_strtolower(trim($logicwareModelName)), MB_CASE_TITLE);
+        } else {
+            $streetTypeName = $this->detectStreetType($rawLocation);
         }
         
+        $streetType = StreetType::firstOrCreate(
+            ['name' => $streetTypeName],
+            ['description' => 'Creado automáticamente durante importación']
+        );
+        
         // Validar y limpiar el estado del lote
+        // Si Logicware dice que está vendido/reservado/bloqueado, usar ese estado
         $status = $this->validateAndCleanStatus($data['ESTADO'] ?? 'disponible');
+        
+        if (isset($data['logicware_data']['status'])) {
+            $lwStatus = strtolower($data['logicware_data']['status']);
+            $lwStatusMap = [
+                'vendido' => 'vendido',
+                'reservado' => 'reservado',
+                'separado' => 'reservado',
+                'bloqueado' => 'bloqueado',
+                'no vendible' => 'bloqueado',
+            ];
+            if (isset($lwStatusMap[$lwStatus])) {
+                $status = $lwStatusMap[$lwStatus];
+            }
+        }
         
         return Lot::updateOrCreate(
             [
@@ -465,7 +522,11 @@ class LotImportService
                 'area_m2' => $this->cleanNumericValue($data['ÁREA LOTE']),
                 'total_price' => $this->cleanNumericValue($data['PRECIO LISTA']),
                 'currency' => 'PEN',
-                'status' => $status
+                'status' => $status,
+                // Datos de integración Logicware
+                'external_id' => $data['logicware_data']['id'] ?? null,
+                'external_code' => $data['logicware_data']['code'] ?? null,
+                'external_sync_at' => isset($data['logicware_data']) ? now() : null
             ]
         );
     }
@@ -774,7 +835,10 @@ class LotImportService
             'canceled' => 'cancelado',
             'no disponible' => 'no_disponible',
             'not available' => 'no_disponible',
-            'no_disponible' => 'no_disponible'
+            'no_disponible' => 'no_disponible',
+            'bloqueado' => 'bloqueado',
+            'blocked' => 'bloqueado',
+            'no vendible' => 'bloqueado'
         ];
         
         // Buscar el estado en el mapeo
@@ -1137,12 +1201,142 @@ class LotImportService
     /**
      * Verifica si un valor de financiamiento es válido
      */
-    protected function isValidFinancingValue(string $value): bool
+    public function isValidFinancingValue(string $value): bool
     {
-        $upperValue = strtoupper(trim($value));
-        return $upperValue === 'CONTADO' || 
-               $upperValue === 'CASH' || 
+        return strtoupper($value) === 'CONTADO' || 
+               strtoupper($value) === 'CASH' || 
                (is_numeric($value) && (int)$value > 0);
     }
 
+    /**
+     * Detecta el tipo de calle (Calle, Avenida, Jirón, etc.) a partir de un texto
+     */
+    protected function detectStreetType(string $rawLocation): string
+    {
+        $normalized = $this->normalizeStreetTypeName($rawLocation);
+        
+        if ($normalized === '') {
+            return 'Sin Especificar';
+        }
+
+        // Intentar mapear a un tipo conocido
+        $mapped = $this->mapStreetTypeSynonym($normalized);
+        
+        if ($mapped) {
+            return $mapped;
+        }
+
+        // Si no se pudo mapear, capitalizar el texto normalizado como fallback
+        // o retornar 'Sin Especificar' si prefieres ser estricto.
+        // En este caso, retornamos el texto capitalizado para no perder información
+        // si es un tipo de calle nuevo.
+        return $this->titleizeStreetType($normalized) ?: 'Sin Especificar';
+    }
+
+    protected function normalizeStreetTypeName(string $value): string
+    {
+        $v = trim($value);
+        $v = preg_replace('/\s+/', ' ', $v);
+        $v = mb_strtolower($v);
+        $v = str_replace(['.', ',', ';', ':', '-', '_', '/', '\\'], ' ', $v);
+        $v = preg_replace('/\s+/', ' ', $v);
+
+        // Remover acentos para facilitar la detección
+        $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $v);
+        if (is_string($ascii) && $ascii !== '') {
+            $v = $ascii;
+        }
+
+        return trim($v);
+    }
+
+    protected function mapStreetTypeSynonym(string $normalized): ?string
+    {
+        $n = trim($normalized);
+
+        // Mapeo directo de nombres de modelo de Logicware
+        $directMap = [
+            'boulevard' => 'Boulevard',
+            'peatonal' => 'Peatonal',
+            'calle' => 'Calle',
+            'parque' => 'Parque',
+            'avenida' => 'Avenida',
+        ];
+
+        if (isset($directMap[$n])) {
+            return $directMap[$n];
+        }
+
+        // Patrones regex para detectar tipos de calle comunes en direcciones
+        if (preg_match('/^(av|avd|avda|avenida)\b/', $n)) return 'Avenida';
+        if (preg_match('/^(cl|calle)\b/', $n)) return 'Calle';
+        if (preg_match('/^(jr|jiron|jiron)\b/', $n)) return 'Jirón';
+        if (preg_match('/^(psj|pje|pasaje)\b/', $n)) return 'Pasaje';
+        if (preg_match('/^(mlcn|malecon)\b/', $n)) return 'Malecón';
+        if (preg_match('/^(al|alameda)\b/', $n)) return 'Alameda';
+        if (preg_match('/^(car|carretera)\b/', $n)) return 'Carretera';
+        if (preg_match('/^(prq|parque)\b/', $n)) return 'Parque';
+        if (preg_match('/^(plz|plaza)\b/', $n)) return 'Plaza';
+        if (preg_match('/^(ov|ovalo)\b/', $n)) return 'Óvalo';
+        if (preg_match('/^(blvd|boulevard)\b/', $n)) return 'Boulevard';
+        if (preg_match('/^(peatonal)\b/', $n)) return 'Peatonal';
+        
+        return null;
+    }
+
+    protected function titleizeStreetType(string $normalized): string
+    {
+        $n = trim($normalized);
+        if ($n === '') return $n;
+        $words = array_map(fn ($w) => $w === '' ? '' : mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), explode(' ', $n));
+        return implode(' ', $words);
+    }
+
+    /**
+     * Carga el stock completo de Logicware desde caché
+     */
+    protected function loadLogicwareCache(): void
+    {
+        try {
+            $subdomain = config('services.logicware.subdomain');
+            $cacheKey = "logicware_full_stock_{$subdomain}";
+            
+            if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                $cachedData = \Illuminate\Support\Facades\Cache::get($cacheKey);
+                $units = $cachedData['data'] ?? [];
+                
+                // Indexar unidades por Manzana-Lote para búsqueda rápida
+                foreach ($units as $unit) {
+                    $code = $unit['code'] ?? ''; // Ejemplo: "E-01" o "E-0013"
+                    
+                    // Parsear código
+                    if (preg_match('/^([A-Z]+\d*)[-_]?(\d+)$/i', $code, $matches)) {
+                        $manzana = strtoupper($matches[1]);
+                        $lote = (int)$matches[2]; // Convertir "0013" a 13
+                        
+                        $key = "{$manzana}-{$lote}";
+                        $this->logicwareUnits[$key] = $unit;
+                    }
+                }
+                
+                \Log::info("[LotImport] Caché de Logicware cargado", [
+                    'total_units_cached' => count($units),
+                    'total_units_indexed' => count($this->logicwareUnits)
+                ]);
+            } else {
+                \Log::warning("[LotImport] No se encontró caché de Logicware ({$cacheKey})");
+            }
+        } catch (Exception $e) {
+            \Log::error("[LotImport] Error cargando caché de Logicware: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Busca una unidad en el índice local de Logicware
+     */
+    protected function findLogicwareUnit(string $manzana, string $lote): ?array
+    {
+        $key = strtoupper($manzana) . '-' . (int)$lote;
+        return $this->logicwareUnits[$key] ?? null;
+    }
 }
