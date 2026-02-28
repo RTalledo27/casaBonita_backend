@@ -347,7 +347,7 @@ class EmployeeController extends Controller
                 $user->save();
             }
 
-            $loginUrl = env('FRONTEND_URL', config('app.url', 'https://app.casabonita.pe'));
+            $loginUrl = env('FRONTEND_URL', 'https://app.casabonita.pe');
             if (config('clicklab.email_via_api')) {
                 $html = view('emails.new-user-credentials', [
                     'user' => $user,
@@ -434,7 +434,7 @@ class EmployeeController extends Controller
                 // Enviar correo de bienvenida con credenciales
                 $emailSent = false;
                 try {
-                    $loginUrl = env('FRONTEND_URL', config('app.url', 'https://app.casabonita.pe'));
+                    $loginUrl = env('FRONTEND_URL', 'https://app.casabonita.pe');
                     if (config('clicklab.email_via_api')) {
                         $html = view('emails.new-user-credentials', [
                             'user' => $user,
