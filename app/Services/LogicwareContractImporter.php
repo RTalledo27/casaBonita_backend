@@ -573,7 +573,8 @@ class LogicwareContractImporter
             'lot_id' => $lot->lot_id,
             'advisor_id' => $advisor->employee_id,
             'contract_number' => $document['correlative'] ?? $this->generateContractNumber(),
-            'sign_date' => $contractDate,  // ← CORREGIDO: era 'contract_date'
+            'contract_date' => $contractDate,
+            'sign_date' => $contractDate,
             'base_price' => $listPrice,  // Precio base del lote
             'unit_price' => $unitPrice,  // Precio unitario de venta
             'discount' => $discount,     // Descuento aplicado
@@ -645,6 +646,7 @@ class LogicwareContractImporter
             'client_id' => $client->client_id,
             'advisor_id' => $advisor->employee_id,
             'contract_number' => $document['correlative'] ?? $contract->contract_number,
+            'contract_date' => $contractDate,
             'sign_date' => $contractDate,
             'base_price' => $listPrice,
             'unit_price' => $unitPrice,
@@ -1077,8 +1079,9 @@ class LogicwareContractImporter
                     ]);
 
                     // Si la cuota viene pagada desde Logicware, crear registro de pago
-                    if ($isPaid && $totalPaid > 0) {
-                        if ($this->createPaymentForSchedule($newSchedule, $contract, $totalPaid, $paidDate)) {
+                    if ($isPaid) {
+                        $paymentAmount = $totalPaid > 0 ? $totalPaid : $payment;
+                        if ($this->createPaymentForSchedule($newSchedule, $contract, $paymentAmount, $paidDate)) {
                             $paymentsCreatedCount++;
                         }
                     }

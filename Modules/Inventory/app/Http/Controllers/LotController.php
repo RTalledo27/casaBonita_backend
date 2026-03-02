@@ -17,6 +17,9 @@ use Modules\Inventory\Repositories\LotRepository;
 use Modules\Inventory\Transformers\LotResource;
 use Modules\services\PusherNotifier;
 use Pusher\Pusher;
+use App\Events\LotStatusChanged;
+use App\Services\NotificationService;
+use Modules\Security\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Modules\Inventory\Services\LotImportService;
@@ -470,6 +473,151 @@ class LotController extends Controller
                 'message' => 'Error en diagnóstico: ' . $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ], 500);
+        }
+    }
+
+    /**
+     * Bloquear un lote (proceso de venta/reserva)
+     */
+    public function lock(Request $request, $lotId): JsonResponse
+    {
+        try {
+            $lot = Lot::with('manzana')->findOrFail($lotId);
+            $user = $request->user();
+
+            // Verificar si ya está bloqueado por otro usuario
+            if ($lot->isLocked() && !$lot->isLockedBy($user->user_id)) {
+                $lockedUser = User::find($lot->locked_by);
+                $lockedUserName = $lockedUser->name ?? 'otro asesor';
+                return response()->json([
+                    'success' => false,
+                    'message' => "Este lote ya está siendo atendido por {$lockedUserName}",
+                    'locked_by' => $lot->locked_by,
+                    'locked_by_name' => $lockedUser->name ?? 'Desconocido',
+                    'locked_at' => $lot->locked_at,
+                ], 409); // Conflict
+            }
+
+            $previousStatus = $lot->status;
+            $reason = $request->input('reason', 'Proceso de venta');
+
+            $lot->lockFor($user->user_id, $reason);
+
+            // Broadcast en tiempo real a todos
+            event(new LotStatusChanged([
+                'lot_id' => $lot->lot_id,
+                'status' => 'en_proceso',
+                'previous_status' => $previousStatus,
+                'locked_by' => $user->user_id,
+                'locked_by_name' => $user->name,
+                'lock_reason' => $reason,
+                'manzana_name' => $lot->manzana->name ?? null,
+                'num_lot' => $lot->num_lot,
+            ]));
+
+            // Notificar a todos los asesores (excepto al que bloqueó)
+            $this->notifyAdvisorsLotLocked($lot, $user, $reason);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lote bloqueado correctamente',
+                'lot' => new LotResource($lot->fresh()->load(['manzana', 'streetType', 'media', 'lockedByUser'])),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Error al bloquear lote: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al bloquear el lote',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Desbloquear un lote
+     */
+    public function unlock(Request $request, $lotId): JsonResponse
+    {
+        try {
+            $lot = Lot::with('manzana')->findOrFail($lotId);
+            $user = $request->user();
+
+            // Solo el usuario que bloqueó o un admin puede desbloquear
+            if ($lot->isLocked() && !$lot->isLockedBy($user->user_id)) {
+                $hasPermission = $user->hasPermissionTo('inventory.lots.update');
+                if (!$hasPermission) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Solo quien bloqueó el lote o un administrador puede desbloquearlo',
+                    ], 403);
+                }
+            }
+
+            $previousStatus = $lot->status;
+            $newStatus = $request->input('new_status', 'disponible');
+            $lot->unlock($newStatus);
+
+            // Broadcast en tiempo real
+            event(new LotStatusChanged([
+                'lot_id' => $lot->lot_id,
+                'status' => $newStatus,
+                'previous_status' => $previousStatus,
+                'locked_by' => null,
+                'locked_by_name' => null,
+                'lock_reason' => null,
+                'manzana_name' => $lot->manzana->name ?? null,
+                'num_lot' => $lot->num_lot,
+            ]));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lote desbloqueado correctamente',
+                'lot' => new LotResource($lot->fresh()->load(['manzana', 'streetType', 'media', 'lockedByUser'])),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Error al desbloquear lote: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al desbloquear el lote',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Notificar a asesores que un lote fue bloqueado
+     */
+    private function notifyAdvisorsLotLocked(Lot $lot, $lockingUser, string $reason): void
+    {
+        try {
+            $notificationService = app(NotificationService::class);
+            $manzanaName = $lot->manzana->name ?? 'N/A';
+
+            // Obtener usuarios con permiso de ventas (asesores) excepto el que bloqueó
+            $advisorUsers = User::whereHas('roles', function ($q) {
+                $q->whereHas('permissions', function ($pq) {
+                    $pq->where('name', 'like', 'sales.%');
+                });
+            })->where('user_id', '!=', $lockingUser->user_id)
+              ->pluck('user_id')
+              ->toArray();
+
+            if (empty($advisorUsers)) return;
+
+            $notificationService->createForUsers($advisorUsers, [
+                'type' => 'warning',
+                'priority' => 'high',
+                'title' => 'Lote en Proceso de Venta',
+                'message' => "El Lote {$lot->num_lot} (Mz. {$manzanaName}) está siendo atendido por {$lockingUser->name}. {$reason}",
+                'related_module' => 'inventory',
+                'related_id' => $lot->lot_id,
+                'related_url' => '/inventory',
+                'icon' => 'lock',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Error al notificar bloqueo de lote: ' . $e->getMessage());
         }
     }
 }

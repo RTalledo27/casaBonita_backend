@@ -22,6 +22,10 @@ Route::middleware(['auth:sanctum'])->prefix('v1/inventory')->group(function () {
         Route::apiResource('lots',        LotController::class);
         Route::apiResource('lot-media',   LotMediaController::class);
         
+        // Lock/Unlock de lotes (proceso de venta)
+        Route::post('lots/{lot}/lock', [LotController::class, 'lock'])->name('lots.lock');
+        Route::post('lots/{lot}/unlock', [LotController::class, 'unlock'])->name('lots.unlock');
+        
         // Rutas adicionales para lotes
         Route::get('lots/catalog', [LotController::class, 'catalog'])->name('lots.catalog');
         Route::post('lots/financing-simulator', [LotController::class, 'financingSimulator'])->name('lots.financing-simulator');

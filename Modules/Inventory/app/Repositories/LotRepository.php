@@ -11,7 +11,7 @@ class LotRepository
 
     public function paginate(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        return Lot::with(['manzana', 'streetType', 'media'])
+        return Lot::with(['manzana', 'streetType', 'media', 'lockedByUser'])
             ->when($filters['status'] ?? null, fn($q, $s) => $q->where('status', $s))
             ->when($filters['manzana_id'] ?? null, fn($q, $m) => $q->where('manzana_id', $m))
             ->when($filters['street_type_id'] ?? null, fn($q, $s) => $q->where('street_type_id', $s))

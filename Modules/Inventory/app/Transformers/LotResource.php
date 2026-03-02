@@ -22,6 +22,14 @@ class LotResource extends JsonResource
             'total_price'          => $this->total_price,  // Precio base del lote
             'currency'             => $this->currency,
             'status'               => $this->status,
+            // Lock fields
+            'locked_by'            => $this->locked_by,
+            'lock_reason'          => $this->lock_reason,
+            'locked_at'            => $this->locked_at?->toISOString(),
+            'locked_by_user'       => $this->when($this->locked_by, function () {
+                $user = $this->lockedByUser;
+                return $user ? ['id' => $user->user_id, 'name' => $user->name] : null;
+            }),
             // Campos financieros removidos: funding, BPP, BFH, initial_quota
             
             // Relaciones

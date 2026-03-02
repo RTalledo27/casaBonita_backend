@@ -25,3 +25,8 @@ Broadcast::channel('servicedesk.updates', function () {
 Broadcast::channel('webhooks', function () {
     return true; // Público para todos
 });
+
+// Canal público de lotes (actualizaciones de estado en tiempo real)
+Broadcast::channel('lots', function () {
+    return true; // Público para todos los autenticados
+});
