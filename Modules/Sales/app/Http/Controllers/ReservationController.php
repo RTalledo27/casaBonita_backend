@@ -54,7 +54,28 @@ class ReservationController extends Controller
             'reservation_date_to',
         ]);
 
-        return ReservationResource::collection($this->reservations->paginate($perPage, $filters));
+        $paginated = $this->reservations->paginate($perPage, $filters);
+
+        // Global KPI counts (independent of filters/pagination)
+        $statusCounts = Reservation::selectRaw("
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'pendiente_pago' THEN 1 ELSE 0 END) as pendientes,
+            SUM(CASE WHEN status = 'completada' THEN 1 ELSE 0 END) as completadas,
+            SUM(CASE WHEN status = 'cancelada' THEN 1 ELSE 0 END) as canceladas,
+            SUM(CASE WHEN status = 'convertida' THEN 1 ELSE 0 END) as convertidas,
+            COALESCE(SUM(deposit_amount), 0) as total_depositos
+        ")->first();
+
+        return ReservationResource::collection($paginated)->additional([
+            'counts' => [
+                'total' => (int) $statusCounts->total,
+                'pendientes' => (int) $statusCounts->pendientes,
+                'completadas' => (int) $statusCounts->completadas,
+                'canceladas' => (int) $statusCounts->canceladas,
+                'convertidas' => (int) $statusCounts->convertidas,
+                'total_depositos' => (float) $statusCounts->total_depositos,
+            ],
+        ]);
     }
 
     /**
