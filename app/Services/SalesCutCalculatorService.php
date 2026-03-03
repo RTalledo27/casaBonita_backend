@@ -79,24 +79,6 @@ class SalesCutCalculatorService
             ->leftJoin('manzanas as m', 'l.manzana_id', '=', 'm.manzana_id')
             ->whereBetween('c.sign_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->where(function ($q) {
-                $q->where(function ($qq) {
-                    $qq->where('c.source', 'logicware')
-                        ->where(function ($q2) {
-                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
-                        });
-                })->orWhere(function ($qq) {
-                    $qq->where(function ($q2) {
-                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
-                    })->whereNotNull('c.pdf_path')
-                        ->where('c.pdf_path', '!=', '');
-                });
-            })
             ->select(
                 'c.contract_id',
                 'c.total_price',
@@ -129,24 +111,6 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->where(function ($q) {
-                $q->where(function ($qq) {
-                    $qq->where('c.source', 'logicware')
-                        ->where(function ($q2) {
-                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
-                        });
-                })->orWhere(function ($qq) {
-                    $qq->where(function ($q2) {
-                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
-                    })->whereNotNull('c.pdf_path')
-                        ->where('c.pdf_path', '!=', '');
-                });
-            })
             ->select(
                 'p.payment_id',
                 'ps.contract_id',
@@ -201,25 +165,7 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->where(function ($q) {
-                $q->where(function ($qq) {
-                    $qq->where('c.source', 'logicware')
-                        ->where(function ($q2) {
-                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
-                        });
-                })->orWhere(function ($qq) {
-                    $qq->where(function ($q2) {
-                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
-                    })->whereNotNull('c.pdf_path')
-                        ->where('c.pdf_path', '!=', '');
-                });
-            })
-            ->where('p.method', 'efectivo')
+            ->whereIn('p.method', ['efectivo', 'cash'])
             ->sum('p.amount') ?? 0;
 
         $bankBalance = DB::table('payments as p')
@@ -227,25 +173,7 @@ class SalesCutCalculatorService
             ->join('contracts as c', 'ps.contract_id', '=', 'c.contract_id')
             ->whereBetween('p.payment_date', [$startDate, $endDate])
             ->where('c.status', 'vigente')
-            ->where(function ($q) {
-                $q->where(function ($qq) {
-                    $qq->where('c.source', 'logicware')
-                        ->where(function ($q2) {
-                            $q2->whereRaw("JSON_EXTRACT(c.logicware_data,'$.saleStartDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.saleDate') IS NOT NULL")
-                                ->orWhereRaw("JSON_EXTRACT(c.logicware_data,'$.sale_date') IS NOT NULL")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.status'))) IN ('venta','vendido','sold','sale','firmado','contrato')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.documentType'))) IN ('venta','sale')")
-                                ->orWhereRaw("LOWER(JSON_UNQUOTE(JSON_EXTRACT(c.logicware_data,'$.type'))) IN ('venta','sale')");
-                        });
-                })->orWhere(function ($qq) {
-                    $qq->where(function ($q2) {
-                        $q2->whereNull('c.source')->orWhere('c.source', '!=', 'logicware');
-                    })->whereNotNull('c.pdf_path')
-                        ->where('c.pdf_path', '!=', '');
-                });
-            })
-            ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin'])
+            ->whereIn('p.method', ['transferencia', 'tarjeta', 'yape', 'plin', 'importacion_logicware', 'deposito'])
             ->sum('p.amount') ?? 0;
 
         return [
