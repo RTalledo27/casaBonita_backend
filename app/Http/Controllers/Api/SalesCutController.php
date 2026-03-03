@@ -115,7 +115,7 @@ class SalesCutController extends Controller
         try {
             $cut = SalesCut::with([
                 'items.contract.client',
-                'items.contract.lot',
+                'items.contract.lot.manzana',
                 'items.employee.user',
                 'items.paymentSchedule',
                 'closedBy',
