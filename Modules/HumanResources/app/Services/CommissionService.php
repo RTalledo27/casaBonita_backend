@@ -391,6 +391,7 @@ class CommissionService
                 'total_commission_amount' => $totalAmount,
                 'sales_count' => $salesCount,
                 'is_payable' => true, // División pagable
+                'requires_client_payment_verification' => true, // Parte 1 se paga solo si el cliente pagó su 1ª cuota
                 'financial_source' => $financialSource,
                 'template_version_id' => $templateVersionId,
                 'calculation_date' => $calculationDate,
@@ -435,6 +436,7 @@ class CommissionService
                 'total_commission_amount' => $totalAmount,
                 'sales_count' => $salesCount,
                 'is_payable' => true, // División pagable
+                'requires_client_payment_verification' => true, // Parte 2 se paga solo si el cliente pagó su 2ª cuota
                 'financial_source' => $financialSource,
                 'template_version_id' => $templateVersionId,
                 'calculation_date' => $calculationDate,

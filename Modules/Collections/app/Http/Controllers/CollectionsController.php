@@ -568,6 +568,35 @@ class CollectionsController extends Controller
                 $query->where('contract_number', 'like', '%' . $request->input('contract_number') . '%');
             }
 
+            // ── Resumen global (antes de paginar) ──
+            $allContracts = (clone $query)->get();
+            $globalSummary = [
+                'total_schedules'  => 0,
+                'paid_schedules'   => 0,
+                'pending_schedules'=> 0,
+                'overdue_schedules'=> 0,
+                'total_amount'     => 0,
+                'paid_amount'      => 0,
+                'pending_amount'   => 0,
+                'overdue_amount'   => 0,
+            ];
+            foreach ($allContracts as $c) {
+                $sched = $c->paymentSchedules;
+                $globalSummary['total_schedules']   += $sched->count();
+                $globalSummary['paid_schedules']    += $sched->where('status', 'pagado')->count();
+                $globalSummary['overdue_schedules'] += $sched->filter(fn($s) => $s->due_date < now() && $s->status != 'pagado')->count();
+                $globalSummary['pending_schedules'] += $sched->filter(fn($s) => $s->status != 'pagado' && $s->due_date >= now())->count();
+                $globalSummary['total_amount']      += (float) $sched->sum('amount');
+                $globalSummary['paid_amount']       += (float) $sched->sum('amount_paid');
+                $globalSummary['overdue_amount']    += (float) $sched->filter(fn($s) => $s->due_date < now() && $s->status != 'pagado')
+                    ->sum(fn($s) => max(0, (float) $s->amount - (float) ($s->amount_paid ?? 0)));
+                $globalSummary['pending_amount']    += (float) $sched->filter(fn($s) => $s->status != 'pagado' && $s->due_date >= now())
+                    ->sum(fn($s) => max(0, (float) $s->amount - (float) ($s->amount_paid ?? 0)));
+            }
+            $globalSummary['collection_rate'] = $globalSummary['total_amount'] > 0
+                ? round(($globalSummary['paid_amount'] / $globalSummary['total_amount']) * 100, 2)
+                : 0;
+
             // Paginación
             $perPage = $request->input('per_page', 10); // Default 10 items per page
             $perPage = min(max($perPage, 1), 100); // Limit between 1 and 100
@@ -692,6 +721,7 @@ class CollectionsController extends Controller
                 'success' => true,
                 'message' => 'Contratos con cronogramas obtenidos exitosamente',
                 'data' => $contractsSummary->values(),
+                'summary' => $globalSummary,
                 'pagination' => [
                     'current_page' => $contracts->currentPage(),
                     'last_page' => $contracts->lastPage(),
