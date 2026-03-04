@@ -587,7 +587,12 @@ class CollectionsController extends Controller
                 $globalSummary['overdue_schedules'] += $sched->filter(fn($s) => $s->due_date < now() && $s->status != 'pagado')->count();
                 $globalSummary['pending_schedules'] += $sched->filter(fn($s) => $s->status != 'pagado' && $s->due_date >= now())->count();
                 $globalSummary['total_amount']      += (float) $sched->sum('amount');
-                $globalSummary['paid_amount']       += (float) $sched->sum('amount_paid');
+                $globalSummary['paid_amount']       += (float) $sched->sum(function($s) {
+                    if ($s->status === 'pagado') {
+                        return (float)($s->amount_paid ?? $s->amount);
+                    }
+                    return (float)($s->amount_paid ?? 0);
+                });
                 $globalSummary['overdue_amount']    += (float) $sched->filter(fn($s) => $s->due_date < now() && $s->status != 'pagado')
                     ->sum(fn($s) => max(0, (float) $s->amount - (float) ($s->amount_paid ?? 0)));
                 $globalSummary['pending_amount']    += (float) $sched->filter(fn($s) => $s->status != 'pagado' && $s->due_date >= now())
@@ -619,7 +624,13 @@ class CollectionsController extends Controller
                 })->count();
                 
                 $totalAmount = $schedules->sum('amount');
-                $paidAmount = $schedules->sum('amount_paid');
+                // Fallback: si status=pagado pero amount_paid es null, usar amount
+                $paidAmount = $schedules->sum(function($s) {
+                    if ($s->status === 'pagado') {
+                        return (float)($s->amount_paid ?? $s->amount);
+                    }
+                    return (float)($s->amount_paid ?? 0);
+                });
                 
                 // Calcular montos vencidos dinámicamente
                 $overdueAmount = $schedules->filter(function($schedule) {
@@ -697,13 +708,17 @@ class CollectionsController extends Controller
                             $daysOverdue = $currentDate->diffInDays($dueDate);
                         }
                         
+                        $effectivePaid = $schedule->status === 'pagado'
+                            ? (float)($schedule->amount_paid ?? $schedule->amount)
+                            : (float)($schedule->amount_paid ?? 0);
+                        
                         return [
                             'schedule_id' => $schedule->schedule_id,
                             'installment_number' => $schedule->installment_number,
                             'due_date' => $schedule->due_date,
                             'amount' => $schedule->amount,
-                            'amount_paid' => $schedule->amount_paid,
-                            'remaining_amount' => max(0, (float) $schedule->amount - (float) ($schedule->amount_paid ?? 0)),
+                            'amount_paid' => $effectivePaid,
+                            'remaining_amount' => max(0, (float) $schedule->amount - $effectivePaid),
                             'status' => $actualStatus,
                             'payment_date' => $schedule->payment_date,
                             'payment_method' => $schedule->payment_method,
