@@ -1092,9 +1092,40 @@ class ExternalLotImportService
             
             $currency = strtoupper($financing['currency'] ?? $unit['currency'] ?? 'PEN');
             $docStatus = strtolower(trim((string) ($document['status'] ?? $document['state'] ?? '')));
-            $isSale = in_array($unitStatus, ['vendido', 'venta', 'sale', 'sold'], true)
+            // Document type puede venir como "resuelto" / "cancelado" en algunos APIs
+            $docType = strtolower(trim((string) ($document['documentType'] ?? $document['document_type'] ?? $document['type'] ?? '')));
+
+            // Revisar todos los campos donde Logicware podría enviar estado de resolución (si no viene en status/state)
+            $docResolution = strtolower(trim((string) (
+                $document['resolutionStatus'] ?? $document['resolution_status'] ?? $document['documentStatus'] ?? $document['document_status']
+                ?? $document['stage'] ?? $document['phase'] ?? $document['workflowState'] ?? $document['contractState'] ?? ''
+            )));
+            $unitResolution = strtolower(trim((string) (
+                $unit['resolutionStatus'] ?? $unit['resolution_status'] ?? $unit['stage'] ?? $unit['phase'] ?? ''
+            )));
+            $financingResolution = strtolower(trim((string) (
+                $financing['resolutionStatus'] ?? $financing['resolution_status'] ?? $financing['status'] ?? ''
+            )));
+
+            // Contrato resuelto = cancelado/desistimiento/dejó de pagar → no cuenta como venta, se mantiene en historial
+            // Si Logicware no envía estado "resuelto" en ningún campo, pedir que lo agreguen (ej. resolutionStatus) o usar lista manual en BD.
+            $resolvedStatuses = ['resuelto', 'resolved', 'cancelado', 'cancelled', 'canceled', 'anulado', 'rescinded', 'terminated', 'closed_cancelled'];
+            $isResolved = in_array($unitStatus, $resolvedStatuses, true)
+                || in_array($docStatus, $resolvedStatuses, true)
+                || in_array($docType, $resolvedStatuses, true)
+                || in_array($docResolution, $resolvedStatuses, true)
+                || in_array($unitResolution, $resolvedStatuses, true)
+                || in_array($financingResolution, $resolvedStatuses, true);
+
+            $isSale = !$isResolved && (
+                in_array($unitStatus, ['vendido', 'venta', 'sale', 'sold'], true)
                 || !empty($document['saleStartDate'])
-                || in_array($docStatus, ['venta', 'vendido', 'sold', 'sale', 'firmado', 'contrato'], true);
+                || in_array($docStatus, ['venta', 'vendido', 'sold', 'sale', 'firmado', 'contrato'], true)
+            );
+
+            // Estado del contrato: resuelto (historial, no venta), vigente (venta activa), o pendiente
+            $contractStatus = $isResolved ? 'resuelto' : ($isSale ? 'vigente' : 'pendiente_aprobacion');
+
             $saleDate = $document['saleStartDate']
                 ?? $document['saleDate']
                 ?? $document['sale_date']
@@ -1210,7 +1241,7 @@ class ExternalLotImportService
                 'term_months' => $termMonths,
                 'monthly_payment' => $this->parseNumericValue($monthlyPayment) ?? 0,
                 'currency' => $currency,
-                'status' => $isSale ? 'vigente' : 'pendiente_aprobacion',
+                'status' => $contractStatus,
                 'source' => 'logicware', // 🔥 Identificar fuente
                 'logicware_data' => json_encode(array_replace_recursive($document, [
                     'unit_status' => $unitStatus ?: null,
@@ -1224,12 +1255,21 @@ class ExternalLotImportService
                 // 🔄 ACTUALIZAR CONTRATO EXISTENTE
                 // ⚠️ NO actualizamos reservation_id en contratos existentes para no violar constraint
                 unset($contractData['reservation_id']); // Remover reservation_id del update
-                if (($existingContract->source ?? null) !== 'logicware' && $existingContract->status === 'vigente' && !$isSale) {
+                if (($existingContract->source ?? null) !== 'logicware' && $existingContract->status === 'vigente' && !$isSale && !$isResolved) {
+                    unset($contractData['status']);
+                }
+                // Si Logicware no envía "resuelto" pero en Casa Bonita ya está marcado como resuelto, no sobrescribir a vigente
+                if ($existingContract->status === 'resuelto' && $contractStatus !== 'resuelto') {
                     unset($contractData['status']);
                 }
                 $existingContract->update($contractData);
                 $contract = $existingContract;
                 $this->stats['updated']++;
+
+                if ($contractStatus === 'resuelto' && $lotId) {
+                    \Modules\Inventory\Models\Lot::where('lot_id', $lotId)->update(['status' => 'disponible']);
+                    Log::info('[ExternalLotImport] 📋 Contrato resuelto: lote liberado a disponible', ['lot_id' => $lotId]);
+                }
 
                 Log::info('[ExternalLotImport] 🔄 Contrato actualizado con datos desde Logicware', [
                     'contract_id' => $contract->contract_id,
@@ -1258,6 +1298,11 @@ class ExternalLotImportService
                     'balloon_payment' => $balloonPayment,
                     'bpp' => $bppBonus
                 ]);
+
+                if ($contractStatus === 'resuelto' && $lotId) {
+                    \Modules\Inventory\Models\Lot::where('lot_id', $lotId)->update(['status' => 'disponible']);
+                    Log::info('[ExternalLotImport] 📋 Contrato resuelto (nuevo): lote liberado a disponible', ['lot_id' => $lotId]);
+                }
             }
 
             // 🔄 SINCRONIZAR CRONOGRAMA DESDE LOGICWARE (incluye estado de pagos)
