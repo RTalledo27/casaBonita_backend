@@ -451,12 +451,12 @@ class LogicwareImportController extends Controller
      * No toca el caché de full stock. Opcionalmente devuelve lotes "vendido" a "disponible".
      *
      * POST /api/logicware/clear-contracts
-     * Body: { "reset_lot_status": true } (opcional, default true)
+     * Body: { "reset_lot_status": true } (opcional, default false; no toca lotes por defecto)
      */
     public function clearContracts(Request $request): JsonResponse
     {
         try {
-            $resetLotStatus = $request->boolean('reset_lot_status', true);
+            $resetLotStatus = $request->boolean('reset_lot_status', false);
 
             Log::info('[LogicwareImportAPI] Limpieza de contratos solicitada', [
                 'user_id' => auth()->id() ?? 'N/A',

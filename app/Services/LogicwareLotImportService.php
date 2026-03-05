@@ -85,7 +85,7 @@ class LogicwareLotImportService
         } catch (Exception $e) {
             DB::rollBack();
 
-            Log::error('[LogicwareLotImport] ÿÿÿ Error en importaci?n', [
+            Log::error('[LogicwareLotImport] ï¿½ï¿½ï¿½ Error en importaci?n', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);

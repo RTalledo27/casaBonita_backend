@@ -2,12 +2,33 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+// Limpiar solo contratos y cronogramas (no toca lotes)
+Artisan::command('logicware:clear-contracts', function () {
+    $this->info('Limpiando contratos y cronogramas (los lotes no se modifican ni se eliminan)...');
+    DB::beginTransaction();
+    try {
+        $contractIds = \Modules\Sales\Models\Contract::query()->pluck('contract_id');
+        $paymentSchedulesDeleted = 0;
+        if ($contractIds->isNotEmpty()) {
+            $paymentSchedulesDeleted = \Modules\Sales\Models\PaymentSchedule::whereIn('contract_id', $contractIds->toArray())->delete();
+        }
+        $contractsDeleted = \Modules\Sales\Models\Contract::query()->delete();
+        DB::commit();
+        $this->info("Listo: {$contractsDeleted} contratos y {$paymentSchedulesDeleted} cronogramas eliminados. Lotes sin cambios.");
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        $this->error('Error: ' . $e->getMessage());
+        throw $e;
+    }
+})->purpose('Eliminar solo contratos y cronogramas para re-importar desde Logicware (no modifica lotes)');
 
 // =======================================================================================
 // CORTES DE VENTAS DIARIOS AUTOMÁTICOS

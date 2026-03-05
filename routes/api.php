@@ -152,7 +152,7 @@ Route::middleware(['auth:sanctum'])->prefix('logicware')->group(function () {
     // Importación de Contratos desde Logicware
     Route::post('/import-contracts', [LogicwareImportController::class, 'importContracts'])
         ->middleware('permission:sales.contracts.store');
-    Route::post('/clear-contracts', [LogicwareImportController::class, 'clearContracts'])
+    Route::match(['get', 'post'], '/clear-contracts', [LogicwareImportController::class, 'clearContracts'])
         ->middleware('permission:sales.contracts.store');
     
     Route::get('/status', [LogicwareImportController::class, 'getStatus']);
