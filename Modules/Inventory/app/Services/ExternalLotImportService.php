@@ -21,6 +21,7 @@ use Exception;
 class ExternalLotImportService
 {
     protected LogicwareApiService $apiService;
+    /** @var array<string, array{status: string, resolved_by_lock: bool}>|null Cache: unitNumber => status + si es resuelto por lock (disponible + lock "por resolucion"/Bloqueo Comercial) */
     protected ?array $fullStockByUnitNumber = null;
     protected bool $currentForceRefresh = false;
     protected array $stats = [
@@ -69,6 +70,11 @@ class ExternalLotImportService
         return $block . '-' . $lotPart;
     }
 
+    /**
+     * Carga el full stock usando la MISMA fuente que el modal "Stock completo" (getFullStockData),
+     * para reutilizar la caché logicware_full_stock_{subdomain} y tener lock_type/lock_description.
+     * Cruce: mismo lote (code/unitNumber) + disponible + lock "por resolución"/"Bloqueo Comercial" → resuelto.
+     */
     protected function ensureFullStockLoaded(bool $forceRefresh = false): void
     {
         if ($this->fullStockByUnitNumber !== null) {
@@ -76,27 +82,58 @@ class ExternalLotImportService
         }
 
         try {
-            $res = $this->apiService->getProperties([], $forceRefresh);
-            $units = $res['data']['data'] ?? $res['data'] ?? [];
-            
+            // Usar getFullStockData() = misma caché que Ventas → Stock completo (no getProperties)
+            $res = $this->apiService->getFullStockData($forceRefresh);
+            // Soportar varias estructuras: { data: [] }, { data: { data: [] } }, { data: { units: [] } }
+            $units = $res['data'] ?? [];
+            if (is_array($units) && isset($units['data'])) {
+                $units = $units['data'];
+            } elseif (is_array($units) && isset($units['units'])) {
+                $units = $units['units'];
+            } elseif (!is_array($units)) {
+                $units = [];
+            }
 
             $index = [];
+            $resolvedCount = 0;
+            $firstUnitKeys = null;
             if (is_array($units)) {
                 foreach ($units as $u) {
-                    $unitNumber = $this->normalizeUnitNumber((string) ($u['unitNumber'] ?? ''));
+                    if ($firstUnitKeys === null && is_array($u)) {
+                        $firstUnitKeys = array_keys($u);
+                    }
+                    $unitNumber = $this->normalizeUnitNumber((string) ($u['unitNumber'] ?? $u['code'] ?? $u['unit_number'] ?? ''));
                     if (!$unitNumber) {
                         continue;
                     }
 
                     $status = strtolower(trim((string) ($u['status'] ?? '')));
-                    $index[$unitNumber] = $status;
+                    if (in_array($status, ['available', 'libre'], true)) {
+                        $status = 'disponible';
+                    }
+                    $lockType = (string) ($u['lockType'] ?? $u['lock_type'] ?? '');
+                    $lockDesc = (string) ($u['lockDescription'] ?? $u['lock_description'] ?? '');
+                    // Lote disponible con bloqueo "por resolución" o "Bloqueo Comercial" = contrato resuelto en Logicware
+                    $resolvedByLock = ($status === 'disponible'
+                        && (stripos($lockType, 'Bloqueo Comercial') !== false || stripos($lockDesc, 'por resolucion') !== false));
+                    if ($resolvedByLock) {
+                        $resolvedCount++;
+                    }
+
+                    $index[$unitNumber] = ['status' => $status, 'resolved_by_lock' => $resolvedByLock];
                 }
             }
 
             $this->fullStockByUnitNumber = $index;
+            Log::info('[ExternalLotImport] Full stock cargado (misma fuente que Stock completo)', [
+                'units' => count($index),
+                'resolved_by_lock_count' => $resolvedCount,
+                'first_unit_keys_sample' => $firstUnitKeys,
+            ]);
         } catch (\Throwable $e) {
             Log::warning('[ExternalLotImport] No se pudo cargar full stock (se continuará sin estado)', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
             $this->fullStockByUnitNumber = [];
         }
@@ -106,11 +143,26 @@ class ExternalLotImportService
     {
         $this->ensureFullStockLoaded($forceRefresh);
         $key = $this->normalizeUnitNumber($unitNumber);
-        if (!$key) {
+        if (!$key || !isset($this->fullStockByUnitNumber[$key])) {
             return null;
         }
+        $entry = $this->fullStockByUnitNumber[$key];
+        return is_array($entry) ? ($entry['status'] ?? null) : (string) $entry;
+    }
 
-        return $this->fullStockByUnitNumber[$key] ?? null;
+    /**
+     * Indica si en el full stock de Logicware el lote está disponible con lock "por resolución" o "Bloqueo Comercial"
+     * (contrato resuelto en Logicware). Se usa para marcar el contrato como resuelto al importar si no viene en el documento.
+     */
+    protected function getUnitIsResolvedByLockFromFullStock(?string $unitNumber, bool $forceRefresh = false): bool
+    {
+        $this->ensureFullStockLoaded($forceRefresh);
+        $key = $this->normalizeUnitNumber($unitNumber);
+        if (!$key || !isset($this->fullStockByUnitNumber[$key])) {
+            return false;
+        }
+        $entry = $this->fullStockByUnitNumber[$key];
+        return is_array($entry) && !empty($entry['resolved_by_lock']);
     }
 
     public function importSalesWithProgress(\App\Models\AsyncImportProcess $importProcess, ?string $startDate = null, ?string $endDate = null, bool $forceRefresh = false): array
@@ -153,6 +205,9 @@ class ExternalLotImportService
                     'total_documents' => $totalDocuments,
                 ]),
             ]);
+
+            // Cargar full stock UNA VEZ al inicio (misma fuente que Stock completo) para cruce resuelto por lock
+            $this->ensureFullStockLoaded($forceRefresh);
 
             $processed = 0;
             $successful = 0;
@@ -265,23 +320,35 @@ class ExternalLotImportService
         ];
     }
 
+    /**
+     * Importar lotes desde el mismo caché de Stock completo (getFullStockData).
+     * Así se reutiliza logicware_full_stock_{subdomain} y se obtiene model_name → Tipo de calle.
+     */
     public function importLotsFromFullStock(bool $forceRefresh = false, array $options = []): array
     {
         $this->resetStats();
 
         try {
-            Log::info('[ExternalLotImport] Iniciando importación de lotes desde FULL STOCK', [
+            Log::info('[ExternalLotImport] Iniciando importación de lotes desde FULL STOCK (misma fuente que Stock completo)', [
                 'force_refresh' => $forceRefresh
             ]);
 
-            $properties = $this->apiService->getProperties([], $forceRefresh);
-            $units = $properties['data']['data'] ?? $properties['data'] ?? [];
+            $res = $this->apiService->getFullStockData($forceRefresh);
+            $units = $res['data'] ?? [];
+            if (is_array($units) && isset($units['data'])) {
+                $units = $units['data'];
+            } elseif (is_array($units) && isset($units['units'])) {
+                $units = $units['units'];
+            } elseif (!is_array($units)) {
+                $units = [];
+            }
 
-            if (!is_array($units)) {
-                throw new Exception('Formato de respuesta inesperado del API (full stock)');
+            if (empty($units)) {
+                throw new Exception('Formato de respuesta inesperado del API (full stock) o sin unidades');
             }
 
             $this->stats['total'] = count($units);
+            Log::info('[ExternalLotImport] Unidades obtenidas del caché full stock', ['total' => count($units)]);
 
             DB::beginTransaction();
             try {
@@ -465,19 +532,20 @@ class ExternalLotImportService
             default => 'disponible',
         };
 
-        // Extraer precios según estructura de Logicware
-        $basePrice = $this->parseNumericValue($property['basePrice'] ?? $property['price'] ?? 0);
-        $unitPrice = $this->parseNumericValue($property['unitPrice'] ?? $property['price'] ?? 0);
+        // Extraer precios según estructura Logicware / full stock (cache: price, price_per_sqm; API: basePrice, unitPrice)
+        $basePrice = $this->parseNumericValue($property['basePrice'] ?? $property['base_price'] ?? $property['price'] ?? 0);
+        $unitPrice = $this->parseNumericValue($property['unitPrice'] ?? $property['unit_price'] ?? $property['price'] ?? 0);
         $discount = $this->parseNumericValue($property['discount'] ?? 0);
         
         // 🔥 CORRECCIÓN: total_price = unitPrice - discount (igual que en contratos)
-        // Este es el valor de venta real después del descuento
         $totalPrice = $unitPrice - $discount;
+        
+        $areaM2 = $this->parseNumericValue($property['area'] ?? $property['areaSqm'] ?? $property['area_sqm'] ?? 0);
         
         return [
             'manzana_id' => $manzana->manzana_id,
             'num_lot' => (int) $parsed['lote'],
-            'area_m2' => $this->parseNumericValue($property['area'] ?? 0),
+            'area_m2' => $areaM2,
             'area_construction_m2' => $this->parseNumericValue($property['construction_area'] ?? null),
             'total_price' => $totalPrice, // 🔥 Precio final = unitPrice - descuento
             'currency' => strtoupper($property['currency'] ?? 'PEN'),
@@ -492,9 +560,10 @@ class ExternalLotImportService
                 'name' => $property['name'] ?? null,
                 'block' => $property['block'] ?? null,
                 'project' => $property['project'] ?? null,
-                'base_price' => $basePrice, // Guardar en metadata
-                'unit_price' => $unitPrice, // Guardar en metadata
-                'discount' => $discount,    // Guardar en metadata
+                'model_name' => $property['model_name'] ?? $property['modelName'] ?? null, // Tipo de calle en full stock
+                'base_price' => $basePrice,
+                'unit_price' => $unitPrice,
+                'discount' => $discount,
                 'raw_data' => $property
             ]
         ];
@@ -665,10 +734,10 @@ class ExternalLotImportService
             $unitModelName = $unitModel['modName'] ?? $unitModel['name'] ?? null;
         }
 
+        // Priorizar model_name del caché full stock (BOULEVARD, PEATONAL, CALLE = Tipo de calle)
         $candidates = [
-            // Priorizar modelName de Logicware (BOULEVARD, CALLE, PEATONAL, etc.)
-            $property['modelName'] ?? null,
             $property['model_name'] ?? null,
+            $property['modelName'] ?? null,
             $property['street_type'] ?? null,
             $property['streetType'] ?? null,
             $property['streetTypeName'] ?? null,
@@ -1022,7 +1091,7 @@ class ExternalLotImportService
 
             // Obtener unidad/lote del primer unit del documento
             $unit = $document['units'][0] ?? null;
-            $unitNumber = $unit['unitNumber'] ?? null;
+            $unitNumber = $unit['unitNumber'] ?? $unit['code'] ?? null;
             $lotId = null;
             $fullStockStatus = $this->getUnitStatusFromFullStock($unitNumber, $this->currentForceRefresh);
 
@@ -1117,6 +1186,52 @@ class ExternalLotImportService
                 || in_array($unitResolution, $resolvedStatuses, true)
                 || in_array($financingResolution, $resolvedStatuses, true);
 
+            // Combinar stock completo + contrato: si el lote está disponible y tiene lock "por resolución"/"Bloqueo Comercial" → resuelto (historial sí, ventas/comisiones no)
+            $this->ensureFullStockLoaded($this->currentForceRefresh);
+            $normalizedKey = $unitNumber ? $this->normalizeUnitNumber($unitNumber) : null;
+            $keyInIndex = $normalizedKey && $this->fullStockByUnitNumber !== null && isset($this->fullStockByUnitNumber[$normalizedKey]);
+            $resolvedKeysSample = null;
+            if (!$keyInIndex && $normalizedKey && $this->fullStockByUnitNumber !== null) {
+                $resolvedKeysSample = array_slice(array_keys(array_filter($this->fullStockByUnitNumber, function ($e) {
+                    return is_array($e) && !empty($e['resolved_by_lock']);
+                })), 0, 5);
+           }
+            Log::debug('[ExternalLotImport] Procesando contrato (resolución)', [
+                'contract_correlative' => $document['correlative'] ?? null,
+                'unit_number_raw' => $unitNumber,
+                'unit_number_normalized' => $normalizedKey,
+                'key_in_full_stock_index' => $keyInIndex,
+                'is_resolved_before_lock_check' => $isResolved,
+                'resolved_keys_sample' => $resolvedKeysSample,
+            ]);
+            if (!$isResolved && $unitNumber) {
+                $resolvedByLock = $this->getUnitIsResolvedByLockFromFullStock($unitNumber, $this->currentForceRefresh);
+                Log::debug('[ExternalLotImport] Resultado getUnitIsResolvedByLockFromFullStock', [
+                    'unit_number' => $unitNumber,
+                    'resolved_by_lock' => $resolvedByLock,
+                ]);
+                if ($resolvedByLock) {
+                    $isResolved = true;
+                    Log::info('[ExternalLotImport] Contrato marcado como resuelto por lock en full stock', ['unit_number' => $unitNumber]);
+                }
+            }
+            // Fallback: el documento/unit trae lock y el estado del lote es disponible (misma lógica sin depender del cache de stock)
+            $unitLockType = (string) ($unit['lockType'] ?? $unit['lock_type'] ?? '');
+            $unitLockDesc = (string) ($unit['lockDescription'] ?? $unit['lock_description'] ?? '');
+            $lotAvailable = ($unitStatus === 'disponible' || $fullStockStatus === 'disponible');
+            Log::debug('[ExternalLotImport] Fallback lock (documento/unit)', [
+                'unit_number' => $unitNumber,
+                'unit_status' => $unitStatus,
+                'full_stock_status' => $fullStockStatus,
+                'lock_type' => $unitLockType,
+                'lock_description' => $unitLockDesc,
+                'lot_available' => $lotAvailable,
+            ]);
+            if (!$isResolved && $lotAvailable && (stripos($unitLockType, 'Bloqueo Comercial') !== false || stripos($unitLockDesc, 'por resolucion') !== false)) {
+                $isResolved = true;
+                Log::info('[ExternalLotImport] Contrato marcado como resuelto por lock en documento/unit', ['unit_number' => $unitNumber]);
+            }
+
             $isSale = !$isResolved && (
                 in_array($unitStatus, ['vendido', 'venta', 'sale', 'sold'], true)
                 || !empty($document['saleStartDate'])
@@ -1136,7 +1251,68 @@ class ExternalLotImportService
             $monthlyPayment = $financingAmount > 0 && $termMonths > 0 ? ($financingAmount / $termMonths) : 0;
 
             $contractNumber = $document['correlative'] ?? null;
-            
+
+            // 🏷️ RESERVA NO ES CONTRATO: Si no hay número de contrato (correlativo), es solo reserva en Logicware.
+            // No crear Contract; solo crear/actualizar Reservation y estado del lote. Así no inflamos "Total contratos" ni contamos reservas como ventas.
+            $reservationStatuses = ['reservado', 'reserved', 'reserva', 'separación', 'separation', 'bloqueado', 'blocked'];
+            $isReservationStatus = in_array($unitStatus, $reservationStatuses, true) || in_array($docStatus, $reservationStatuses, true);
+            $hasContractEvidence = !empty($contractNumber)
+                || !empty($document['saleStartDate'])
+                || in_array($docStatus, ['venta', 'vendido', 'sold', 'sale', 'firmado', 'contrato'], true)
+                || in_array($unitStatus, ['vendido', 'venta', 'sale', 'sold'], true);
+
+            if (empty($contractNumber) && ($isReservationStatus || $reservationAmount > 0) && !$hasContractEvidence) {
+                // Solo reserva: actualizar lote a reservado, crear/actualizar Reservation, NO crear Contract
+                if ($lotId) {
+                    \Modules\Inventory\Models\Lot::where('lot_id', $lotId)->update(['status' => 'reservado']);
+                }
+                if ($reservationAmount > 0 && $lotId && $advisorId) {
+                    $reservation = \Modules\Sales\Models\Reservation::where('lot_id', $lotId)
+                        ->where('client_id', $client->client_id)
+                        ->whereIn('status', ['activa', 'convertida'])
+                        ->first();
+                    if (!$reservation) {
+                        $reservationDate = isset($document['separationStartDate'])
+                            ? \Carbon\Carbon::parse($document['separationStartDate'])->format('Y-m-d')
+                            : substr($document['separationStartDate'] ?? now()->toDateString(), 0, 10);
+                        $expirationDate = isset($document['separationEndDate'])
+                            ? \Carbon\Carbon::parse($document['separationEndDate'])->format('Y-m-d')
+                            : \Carbon\Carbon::parse($reservationDate)->addDays(30)->format('Y-m-d');
+                        \Modules\Sales\Models\Reservation::create([
+                            'lot_id' => $lotId,
+                            'client_id' => $client->client_id,
+                            'advisor_id' => $advisorId,
+                            'reservation_date' => $reservationDate,
+                            'expiration_date' => $expirationDate,
+                            'deposit_amount' => $reservationAmount,
+                            'status' => 'activa',
+                        ]);
+                        Log::info('[ExternalLotImport] 🏷️ Solo reserva: Reservation creada (NO se crea Contract)', [
+                            'lot_id' => $lotId,
+                            'client_id' => $client->client_id,
+                            'deposit_amount' => $reservationAmount,
+                        ]);
+                    }
+                } else {
+                    Log::info('[ExternalLotImport] 🏷️ Solo reserva: documento sin correlativo, solo actualizando lote/reserva (NO Contract)', [
+                        'unit_number' => $unitNumber,
+                        'lot_id' => $lotId,
+                        'has_reservation_amount' => $reservationAmount > 0,
+                    ]);
+                }
+                return true;
+            }
+
+            // Si no hay correlativo pero el documento parece venta (inconsistente), no crear Contract sin número
+            if (empty($contractNumber)) {
+                Log::info('[ExternalLotImport] ⏭️ Documento sin número de contrato (correlativo), omitiendo creación de Contract', [
+                    'unit_number' => $unitNumber,
+                    'doc_status' => $docStatus,
+                    'unit_status' => $unitStatus,
+                ]);
+                return true;
+            }
+
             // 🔍 VERIFICAR SI EL CONTRATO YA EXISTE
             // Prioridad 1: Buscar por contract_number (si existe)
             $existingContract = null;

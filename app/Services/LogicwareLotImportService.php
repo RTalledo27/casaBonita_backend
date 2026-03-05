@@ -46,8 +46,11 @@ class LogicwareLotImportService
             $stockData = $this->logicwareApi->getStockByStage($projectCode, $stageId, (bool) $options['force_refresh']);
             $units = $stockData['data'] ?? null;
             if (!is_array($units)) {
-                throw new Exception('Respuesta inválida del API de LogicWare');
+                throw new Exception('Respuesta inv?lida del API de LogicWare');
             }
+
+            // Enriquecer con model_name (tipo de calle) desde el cach? de full stock (misma fuente que Stock completo)
+            $units = $this->enrichUnitsWithFullStock($units, (bool) ($options['force_refresh'] ?? false));
 
             $this->stats['total'] = count($units);
 
@@ -82,31 +85,80 @@ class LogicwareLotImportService
         } catch (Exception $e) {
             DB::rollBack();
 
-            Log::error('[LogicwareLotImport] ❌ Error en importación', [
+            Log::error('[LogicwareLotImport] ��� Error en importaci?n', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
             return [
                 'success' => false,
-                'message' => 'Error en la importación: ' . $e->getMessage(),
+                'message' => 'Error en la importaci?n: ' . $e->getMessage(),
                 'stats' => $this->stats,
                 'errors' => $this->errors
             ];
         }
     }
 
+    /**
+     * Enriquecer unidades con model_name (tipo de calle) desde el cach? de full stock.
+     * La importaci?n por etapa (external-import) usa getStockByStage que no trae model_name;
+     * el full stock (misma fuente que "Stock completo") s? lo trae. Se reutiliza el cach?.
+     */
+    protected function enrichUnitsWithFullStock(array $units, bool $forceRefresh = false): array
+    {
+        try {
+            $res = $this->logicwareApi->getFullStockData($forceRefresh);
+            $full = $res['data'] ?? [];
+            if (is_array($full) && isset($full['data'])) {
+                $full = $full['data'];
+            } elseif (is_array($full) && isset($full['units'])) {
+                $full = $full['units'];
+            } elseif (!is_array($full)) {
+                return $units;
+            }
+            $byCode = [];
+            foreach ($full as $u) {
+                $code = $u['code'] ?? $u['unitNumber'] ?? $u['unit_number'] ?? null;
+                if ($code !== null && $code !== '') {
+                    $byCode[(string) $code] = $u;
+                }
+            }
+            foreach ($units as $i => $unit) {
+                $code = $unit['code'] ?? null;
+                if ($code && isset($byCode[(string) $code])) {
+                    $fs = $byCode[(string) $code];
+                    $modelName = $fs['model_name'] ?? $fs['modelName'] ?? null;
+                    if ($modelName !== null && $modelName !== '') {
+                        $units[$i]['model_name'] = $modelName;
+                        $units[$i]['modelName'] = $modelName;
+                    }
+                }
+            }
+            Log::info('[LogicwareLotImport] Unidades enriquecidas con model_name desde full stock', [
+                'units_count' => count($units),
+                'full_stock_matched' => count(array_filter($units, function ($u) {
+                return !empty($u['model_name'] ?? $u['modelName'] ?? null);
+            })),
+            ]);
+        } catch (Exception $e) {
+            Log::warning('[LogicwareLotImport] No se pudo enriquecer con full stock (tipo de calle puede quedar Sin Especificar)', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+        return $units;
+    }
+
     protected function processUnit(array $unit, array $options): void
     {
         if (empty($unit['code'])) {
-            throw new Exception('Unidad sin código identificador');
+            throw new Exception('Unidad sin c?digo identificador');
         }
 
         $parsed = $this->parseUnitCode($unit['code']);
         if (!$parsed) {
             $this->warnings[] = [
                 'unit' => $unit['code'],
-                'warning' => 'Formato de código no reconocido, se intentará crear igual'
+                'warning' => 'Formato de c?digo no reconocido, se intentar? crear igual'
             ];
         }
 
@@ -162,7 +214,7 @@ class LogicwareLotImportService
         }
 
         if (!($options['create_manzanas'] ?? true)) {
-            throw new Exception("Manzana '{$manzanaName}' no existe y la creación automática está deshabilitada");
+            throw new Exception("Manzana '{$manzanaName}' no existe y la creaci?n autom?tica est? deshabilitada");
         }
 
         return Manzana::create(['name' => $manzanaName]);
@@ -235,6 +287,12 @@ class LogicwareLotImportService
 
         if (empty($lot->external_code) && !empty($unit['code'])) {
             $updates['external_code'] = $unit['code'];
+        }
+
+        $newStreetTypeId = $this->resolveStreetTypeId($unit);
+        $defaultId = (int) StreetType::firstOrCreate(['name' => 'Sin Especificar'])->street_type_id;
+        if ($newStreetTypeId !== $defaultId && (int) $lot->street_type_id !== $newStreetTypeId) {
+            $updates['street_type_id'] = $newStreetTypeId;
         }
 
         $updates['external_sync_at'] = now();
@@ -349,7 +407,7 @@ class LogicwareLotImportService
         $mapped = null;
         if (preg_match('/^(av|avd|avda|avenida)\b/', $normalized)) $mapped = 'Avenida';
         elseif (preg_match('/^(cl|calle)\b/', $normalized)) $mapped = 'Calle';
-        elseif (preg_match('/^(jr|jiron)\b/', $normalized)) $mapped = 'Jirón';
+        elseif (preg_match('/^(jr|jiron)\b/', $normalized)) $mapped = 'Jir?n';
         elseif (preg_match('/^(psj|pje|pasaje)\b/', $normalized)) $mapped = 'Pasaje';
 
         $target = $mapped ?: implode(' ', array_map(fn($w) => $w === '' ? '' : mb_strtoupper(mb_substr($w, 0, 1)) . mb_substr($w, 1), explode(' ', $normalized)));
@@ -384,7 +442,7 @@ class LogicwareLotImportService
         if ($this->stats['updated'] > 0) $parts[] = "{$this->stats['updated']} lotes actualizados";
         if ($this->stats['skipped'] > 0) $parts[] = "{$this->stats['skipped']} lotes omitidos";
         if ($this->stats['errors'] > 0) $parts[] = "{$this->stats['errors']} errores";
-        return !empty($parts) ? 'Importación completada: ' . implode(', ', $parts) : 'No se procesaron lotes';
+        return !empty($parts) ? 'Importaci?n completada: ' . implode(', ', $parts) : 'No se procesaron lotes';
     }
 
     public function getStats(): array

@@ -7,6 +7,7 @@ use App\Services\LogicwareContractImporter;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class LogicwareImportController extends Controller
@@ -395,7 +396,7 @@ class LogicwareImportController extends Controller
             'area' => $unit['salableArea'] ?? ($unit['area'] ?? null),
             'price' => $unit['totalPrice'] ?? ($unit['price'] ?? 0),
             'price_per_sqm' => $unit['pricePerSqm'] ?? null,
-            'model_name' => $unit['modelName'] ?? null,
+            'model_name' => $unit['model_name'] ?? $unit['modelName'] ?? null,
             'stage_name' => $unit['stageName'] ?? null,
             'project_name' => $unit['projectName'] ?? null,
             'project_code' => $unit['projectCode'] ?? null,
@@ -443,5 +444,72 @@ class LogicwareImportController extends Controller
         ];
 
         return $statusMap[$status] ?? 'disponible';
+    }
+
+    /**
+     * Eliminar todos los contratos y cronogramas de pago (Sales) para poder re-importar desde Logicware.
+     * No toca el caché de full stock. Opcionalmente devuelve lotes "vendido" a "disponible".
+     *
+     * POST /api/logicware/clear-contracts
+     * Body: { "reset_lot_status": true } (opcional, default true)
+     */
+    public function clearContracts(Request $request): JsonResponse
+    {
+        try {
+            $resetLotStatus = $request->boolean('reset_lot_status', true);
+
+            Log::info('[LogicwareImportAPI] Limpieza de contratos solicitada', [
+                'user_id' => auth()->id() ?? 'N/A',
+                'reset_lot_status' => $resetLotStatus,
+            ]);
+
+            DB::beginTransaction();
+            try {
+                $contractIds = \Modules\Sales\Models\Contract::query()->pluck('contract_id');
+                $paymentSchedulesDeleted = 0;
+                if ($contractIds->isNotEmpty()) {
+                    $paymentSchedulesDeleted = \Modules\Sales\Models\PaymentSchedule::whereIn('contract_id', $contractIds)->delete();
+                }
+                $contractsDeleted = \Modules\Sales\Models\Contract::query()->delete();
+
+                if ($resetLotStatus) {
+                    $lotsUpdated = \Modules\Inventory\Models\Lot::where('status', 'vendido')->update(['status' => 'disponible']);
+                } else {
+                    $lotsUpdated = 0;
+                }
+
+                DB::commit();
+
+                Log::info('[LogicwareImportAPI] Contratos y cronogramas eliminados', [
+                    'contracts_deleted' => $contractsDeleted,
+                    'payment_schedules_deleted' => $paymentSchedulesDeleted,
+                    'lots_updated_to_disponible' => $lotsUpdated ?? 0,
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Contratos y cronogramas eliminados. Puedes re-importar desde Logicware.',
+                    'data' => [
+                        'contracts_deleted' => $contractsDeleted,
+                        'payment_schedules_deleted' => $paymentSchedulesDeleted,
+                        'lots_updated_to_disponible' => $lotsUpdated ?? 0,
+                    ],
+                ], 200);
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+        } catch (Exception $e) {
+            Log::error('[LogicwareImportAPI] Error limpiando contratos', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar contratos',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
