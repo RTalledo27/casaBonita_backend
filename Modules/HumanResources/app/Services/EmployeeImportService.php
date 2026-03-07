@@ -25,6 +25,10 @@ class EmployeeImportService
      */
     public function importFromExcel(array $excelData): array
     {
+        // Evitar el error "Maximum execution time of 60 seconds exceeded" 
+        // debido al hashing concurrente de múltiples contraseñas y envío de correos.
+        set_time_limit(0);
+
         $results = [
             'success' => 0,
             'updated' => 0,
@@ -389,31 +393,45 @@ class EmployeeImportService
         return $team->team_id;
     }
 
-    /**
-     * Asignar roles a usuario
-     */
     private function assignRoles(User $user, string $accesos): void
     {
         // Limpiar roles string (ej: "Admin, Vendedor" -> ["Admin", "Vendedor"])
         $roleNames = array_map('trim', explode(',', $accesos));
         $validRoles = [];
 
+        // Mapeo básico para limpiar textos del Excel
+        $roleMapping = [
+            'acceso a todo' => 'Administrador',
+            'admin' => 'Administrador',
+            'vendedor' => 'Vendedor',
+            'rrhh' => 'RRHH',
+            'cobranzas' => 'Cobranzas',
+            // Otras descripciones como "Solo comisiones" o "Por definir" se ignorarán
+        ];
+
         foreach ($roleNames as $roleName) {
-            // Buscar rol insensitive case
-            // Asumiendo que usamos Spatie Permission o similar con tabla roles
+            if (empty($roleName)) {
+                continue;
+            }
+
+            $normalizedInput = mb_strtolower($roleName, 'UTF-8');
+            
+            // Si hay un mapeo conocido, usarlo
+            if (isset($roleMapping[$normalizedInput])) {
+                $roleName = $roleMapping[$normalizedInput];
+            }
+
+            // Buscar rol real en la BD
             $role = Role::whereRaw('LOWER(name) = ?', [mb_strtolower($roleName, 'UTF-8')])->first();
             
             if ($role) {
-                $validRoles[] = $role->name; // Usar el nombre exacto de la DB
+                $validRoles[] = $role->name;
             } else {
-                Log::warning("Rol no encontrado durante importación: {$roleName}");
+                Log::info("Rol de Excel ignorado/no mapeado: {$roleName}");
             }
         }
 
         if (!empty($validRoles)) {
-            // Sincronizar roles (reemplaza los existentes) o asignar (agrega)?
-            // El usuario pidió "Accesos", normalmente esto define QUE roles tiene. 
-            // Sync parece más seguro para reflejar estado actual del Excel.
             $user->syncRoles($validRoles);
         }
     }
@@ -612,7 +630,11 @@ class EmployeeImportService
             foreach ($formats as $format) {
                 try {
                     $parsed = Carbon::createFromFormat($format, $dateString);
-                    if ($parsed && $parsed->year >= 1900 && $parsed->year <= 2100) {
+                    // Validar estrictamente para evitar "rollover" (ej. mes 21 se convierte en el año siguiente)
+                    $errors = Carbon::getLastErrors();
+                    $hasErrorsOrWarnings = $errors && ($errors['warning_count'] > 0 || $errors['error_count'] > 0);
+
+                    if (!$hasErrorsOrWarnings && $parsed && $parsed->year >= 1900 && $parsed->year <= 2100) {
                         $result = $parsed->format('Y-m-d');
                         Log::info("Fecha parseada con formato", ['format' => $format, 'input' => $dateString, 'result' => $result]);
                         return $result;

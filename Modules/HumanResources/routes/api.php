@@ -80,6 +80,7 @@ Route::prefix('v1')->group(function () {
                 Route::get('/{commission}/split-summary', [CommissionController::class, 'getSplitPaymentSummary'])->name('hr.commissions.split-summary');
                 
                 Route::post('/process-period', [CommissionController::class, 'processForPeriod'])->name('hr.commissions.process-period');
+                Route::get('/unassigned-contracts', [CommissionController::class, 'getUnassignedContracts'])->name('hr.commissions.unassigned-contracts');
                 Route::post('/process-for-payroll', [CommissionController::class, 'processForPayroll'])->name('hr.commissions.process-for-payroll');
                 Route::post('/pay', [CommissionController::class, 'pay'])->name('hr.commissions.pay');
                 Route::post('/{commission}/pay-part', [CommissionController::class, 'payPart'])->name('hr.commissions.pay-part');

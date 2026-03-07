@@ -1,0 +1,138 @@
+{
+    "total_sales": 148,
+    "unique_statuses": {
+        "Ventas": 71,
+        "En Proceso Venta": 72,
+        "Separacion": 1,
+        "En Proceso Separación": 4,
+        "En Proceso de Resolucion": 1
+    },
+    "correlative_patterns": {
+        "#-#": 149
+    },
+    "sample_docs_by_status": {
+        "Ventas": [
+            {
+                "correlative": "202602-000001673",
+                "seller": "JOSE EDUARDO RONDOY TALLEDO",
+                "status": "Ventas",
+                "saleStartDate": "2026-02-28T09:53:39.133",
+                "separationStartDate": null,
+                "units_count": 1,
+                "unit_numbers": [
+                    "D2-25"
+                ]
+            },
+            {
+                "correlative": "202601-000001410",
+                "seller": "SEGUNDO PASAPERA SALDAÑA",
+                "status": "Ventas",
+                "saleStartDate": "2026-01-24T13:33:55.127",
+                "separationStartDate": null,
+                "units_count": 1,
+                "unit_numbers": [
+                    "I-23"
+                ]
+            }
+        ],
+        "En Proceso Venta": [
+            {
+                "correlative": "202603-000001710",
+                "seller": "JULIANA ELIZABETH ALVAREZ RAMOS",
+                "status": "En Proceso Venta",
+                "saleStartDate": "2026-03-03T11:24:14.023",
+                "separationStartDate": null,
+                "units_count": 1,
+                "unit_numbers": [
+                    "D2-59"
+                ]
+            },
+            {
+                "correlative": "202602-000001700",
+                "seller": "IKER RANKLIN MIGUEL ADRIANZEN VENCES",
+                "status": "En Proceso Venta",
+                "saleStartDate": "2026-03-05T11:36:33.367",
+                "separationStartDate": "2026-02-28T20:56:30.737",
+                "units_count": 1,
+                "unit_numbers": [
+                    "A2-47"
+                ]
+            }
+        ],
+        "Separacion": [
+            {
+                "correlative": "202603-000001711",
+                "seller": "PEDRO JOSE CRUZ ROMERO",
+                "status": "Separacion",
+                "saleStartDate": null,
+                "separationStartDate": "2026-03-03T12:36:44.1",
+                "units_count": 1,
+                "unit_numbers": [
+                    "J2-55"
+                ]
+            }
+        ],
+        "En Proceso Separación": [
+            {
+                "correlative": "202602-000001698",
+                "seller": "DINA YSABEL SAAVEDRA DOMINGUEZ",
+                "status": "En Proceso Separación",
+                "saleStartDate": null,
+                "separationStartDate": "2026-02-28T20:06:09.4",
+                "units_count": 1,
+                "unit_numbers": [
+                    "E-37"
+                ]
+            },
+            {
+                "correlative": "202603-000001720",
+                "seller": "NEREYDA BEBERLY ANTON TINOCO",
+                "status": "En Proceso Separación",
+                "saleStartDate": null,
+                "separationStartDate": "2026-03-05T11:27:15.297",
+                "units_count": 1,
+                "unit_numbers": [
+                    "G-34"
+                ]
+            }
+        ],
+        "En Proceso de Resolucion": [
+            {
+                "correlative": "202509-000000118",
+                "seller": "DAVID FEIJOO FEIJOO",
+                "status": "En Proceso de Resolucion",
+                "saleStartDate": "2025-09-30T19:12:07.33",
+                "separationStartDate": null,
+                "units_count": 1,
+                "unit_numbers": [
+                    "F2-12"
+                ]
+            }
+        ]
+    },
+    "unique_sellers": {
+        "JOSE EDUARDO RONDOY TALLEDO": 3,
+        "JULIANA ELIZABETH ALVAREZ RAMOS": 6,
+        "SEGUNDO PASAPERA SALDAÑA": 11,
+        "IKER RANKLIN MIGUEL ADRIANZEN VENCES": 3,
+        "PAOLA CANDELA ": 10,
+        "LIDIA YARITZA FARFAN JAIME": 5,
+        "LEWIS FARFAN ": 7,
+        "CINDY JOHANY QUEZADA AMAYA": 15,
+        "NEREYDA BEBERLY ANTON TINOCO": 10,
+        "LEONARDO DAVID MAURICIO JIMENEZ": 7,
+        "DINA YSABEL SAAVEDRA DOMINGUEZ": 5,
+        "PEDRO JOSE CRUZ ROMERO": 2,
+        "LUIS TAVARA ": 18,
+        "DAVID SEBASTIAN NOLE GARCÍA": 3,
+        "BRUNO ALONSO VARILLAS TRELLES": 12,
+        "AQUEMI CRISANTO SAAVEDRA": 17,
+        "EMILIA ZORAIDA TALLEDO SANDOVAL": 1,
+        "AUGUSTO GARCIA BECERRA": 4,
+        "MILAGROS MARÍA TIZÓN PALACIOS": 3,
+        "RENATO JUVENAL MORAN QUIROZ": 2,
+        "JOHANN SEBASTIAN ABAD BENITES": 2,
+        "JIMMY CARDOZA MENDOZA": 2,
+        "DAVID FEIJOO FEIJOO": 1
+    }
+}

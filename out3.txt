@@ -1,0 +1,128 @@
+=== TOTALES ===
+Contratos: 810 (Vigentes: 806, Resueltos: 0)
+Reservas: 179
+Comisiones: 162
+Contratos con numero de reserva (mal importados): 0
+Contratos sin asesor: 184
+
+=== LUIS TAVARA ===
+Contratos: 116
+Reservas: 24
+Comisiones: 24
+Contratos detalle:
+- ID: 23 | Nro: 202509-000000114 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 24 | Nro: 202510-000000314 | Status: vigente | Fecha: 2025-10-25T05:00:00.000000Z
+- ID: 26 | Nro: 202510-000000193 | Status: vigente | Fecha: 2025-10-20T05:00:00.000000Z
+- ID: 27 | Nro: 202509-000000025 | Status: vigente | Fecha: 2025-09-18T05:00:00.000000Z
+- ID: 32 | Nro: 202601-000001103 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 41 | Nro: 202510-000000338 | Status: vigente | Fecha: 2025-10-27T05:00:00.000000Z
+- ID: 49 | Nro: 202509-000000125 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 62 | Nro: 202601-000001080 | Status: vigente | Fecha: 2025-10-03T05:00:00.000000Z
+- ID: 76 | Nro: 202510-000000418 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 81 | Nro: 202510-000000253 | Status: vigente | Fecha: 2025-10-19T05:00:00.000000Z
+- ID: 82 | Nro: 202510-000000251 | Status: vigente | Fecha: 2025-10-19T05:00:00.000000Z
+- ID: 84 | Nro: 202510-000000201 | Status: vigente | Fecha: 2025-10-17T05:00:00.000000Z
+- ID: 85 | Nro: 202509-000000112 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 88 | Nro: 202601-000000967 | Status: vigente | Fecha: 2025-06-28T05:00:00.000000Z
+- ID: 91 | Nro: 202601-000001207 | Status: vigente | Fecha: 2025-04-08T05:00:00.000000Z
+- ID: 99 | Nro: 202601-000001126 | Status: vigente | Fecha: 2025-06-04T05:00:00.000000Z
+- ID: 113 | Nro: 202601-000001154 | Status: vigente | Fecha: 2025-06-30T05:00:00.000000Z
+- ID: 117 | Nro: 202601-000001232 | Status: vigente | Fecha: 2025-06-24T05:00:00.000000Z
+- ID: 127 | Nro: 202512-000000947 | Status: vigente | Fecha: 2025-12-31T05:00:00.000000Z
+- ID: 135 | Nro: 202510-000000164 | Status: vigente | Fecha: 2025-10-11T05:00:00.000000Z
+- ID: 136 | Nro: 202510-000000371 | Status: vigente | Fecha: 2025-10-30T05:00:00.000000Z
+- ID: 139 | Nro: 202601-000000972 | Status: vigente | Fecha: 2025-08-28T05:00:00.000000Z
+- ID: 146 | Nro: 202511-000000698 | Status: vigente | Fecha: 2025-11-28T05:00:00.000000Z
+- ID: 153 | Nro: 202512-000000933 | Status: vigente | Fecha: 2025-12-20T05:00:00.000000Z
+- ID: 175 | Nro: 202509-000000120 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 179 | Nro: 202512-000000938 | Status: vigente | Fecha: 2025-12-23T05:00:00.000000Z
+- ID: 181 | Nro: 202510-000000417 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 182 | Nro: 202511-000000733 | Status: vigente | Fecha: 2025-11-28T05:00:00.000000Z
+- ID: 200 | Nro: 202601-000001195 | Status: vigente | Fecha: 2025-05-06T05:00:00.000000Z
+- ID: 203 | Nro: 202510-000000360 | Status: vigente | Fecha: 2025-10-29T05:00:00.000000Z
+- ID: 207 | Nro: 202510-000000407 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 211 | Nro: 202601-000001228 | Status: vigente | Fecha: 2025-06-30T05:00:00.000000Z
+- ID: 225 | Nro: 202601-000001005 | Status: vigente | Fecha: 2025-05-05T05:00:00.000000Z
+- ID: 251 | Nro: 202601-000001269 | Status: vigente | Fecha: 2025-06-16T05:00:00.000000Z
+- ID: 265 | Nro: 202601-000001230 | Status: vigente | Fecha: 2025-06-30T05:00:00.000000Z
+- ID: 266 | Nro: 202511-000000582 | Status: vigente | Fecha: 2025-11-16T05:00:00.000000Z
+- ID: 274 | Nro: 202511-000000804 | Status: vigente | Fecha: 2025-11-30T05:00:00.000000Z
+- ID: 277 | Nro: 202509-000000107 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 278 | Nro: 202601-000001220 | Status: vigente | Fecha: 2025-08-31T05:00:00.000000Z
+- ID: 279 | Nro: 202601-000001265 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 285 | Nro: 202601-000001111 | Status: vigente | Fecha: 2025-06-20T05:00:00.000000Z
+- ID: 293 | Nro: 202511-000000708 | Status: vigente | Fecha: 2025-11-26T05:00:00.000000Z
+- ID: 299 | Nro: 202511-000000653 | Status: vigente | Fecha: 2025-11-24T05:00:00.000000Z
+- ID: 302 | Nro: 202601-000001067 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 303 | Nro: 202601-000001203 | Status: vigente | Fecha: 2025-06-30T05:00:00.000000Z
+- ID: 310 | Nro: 202601-000001272 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 312 | Nro: 202601-000001157 | Status: vigente | Fecha: 2025-07-19T05:00:00.000000Z
+- ID: 319 | Nro: 202601-000001138 | Status: vigente | Fecha: 2025-05-23T05:00:00.000000Z
+- ID: 320 | Nro: 202510-000000421 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 323 | Nro: 202601-000001212 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 324 | Nro: 202510-000000294 | Status: vigente | Fecha: 2025-10-22T05:00:00.000000Z
+- ID: 326 | Nro: 202601-000001279 | Status: vigente | Fecha: 2025-06-30T05:00:00.000000Z
+- ID: 343 | Nro: 202510-000000425 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 346 | Nro: 202601-000001229 | Status: vigente | Fecha: 2025-06-24T05:00:00.000000Z
+- ID: 383 | Nro: 202601-000001173 | Status: vigente | Fecha: 2025-05-05T05:00:00.000000Z
+- ID: 386 | Nro: 202510-000000293 | Status: vigente | Fecha: 2025-10-22T05:00:00.000000Z
+- ID: 388 | Nro: 202510-000000401 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 389 | Nro: 202511-000000533 | Status: vigente | Fecha: 2025-11-17T05:00:00.000000Z
+- ID: 397 | Nro: 202511-000000532 | Status: vigente | Fecha: 2025-11-17T05:00:00.000000Z
+- ID: 407 | Nro: 202601-000001193 | Status: vigente | Fecha: 2025-05-21T05:00:00.000000Z
+- ID: 408 | Nro: 202510-000000269 | Status: vigente | Fecha: 2025-10-20T05:00:00.000000Z
+- ID: 409 | Nro: 202601-000001251 | Status: vigente | Fecha: 2025-05-23T05:00:00.000000Z
+- ID: 414 | Nro: 202510-000000359 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 416 | Nro: 202601-000001018 | Status: vigente | Fecha: 2025-08-23T05:00:00.000000Z
+- ID: 433 | Nro: 202512-000000883 | Status: vigente | Fecha: 2025-11-30T05:00:00.000000Z
+- ID: 436 | Nro: 202510-000000308 | Status: vigente | Fecha: 2025-10-24T05:00:00.000000Z
+- ID: 443 | Nro: 202511-000000710 | Status: vigente | Fecha: 2025-11-27T05:00:00.000000Z
+- ID: 445 | Nro: 202512-000000966 | Status: vigente | Fecha: 2025-12-30T05:00:00.000000Z
+- ID: 451 | Nro: 202601-000001288 | Status: vigente | Fecha: 2025-08-31T05:00:00.000000Z
+- ID: 454 | Nro: 202510-000000163 | Status: vigente | Fecha: 2025-10-22T05:00:00.000000Z
+- ID: 459 | Nro: 202509-000000091 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 462 | Nro: 202510-000000451 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 470 | Nro: 202510-000000229 | Status: vigente | Fecha: 2025-10-18T05:00:00.000000Z
+- ID: 483 | Nro: 202601-000001062 | Status: vigente | Fecha: 2025-04-28T05:00:00.000000Z
+- ID: 494 | Nro: 202601-000000999 | Status: vigente | Fecha: 2025-05-15T05:00:00.000000Z
+- ID: 502 | Nro: 202510-000000374 | Status: vigente | Fecha: 2025-10-30T05:00:00.000000Z
+- ID: 521 | Nro: 202601-000001156 | Status: vigente | Fecha: 2025-06-10T05:00:00.000000Z
+- ID: 523 | Nro: 202510-000000422 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 534 | Nro: 202601-000001263 | Status: vigente | Fecha: 2025-07-09T05:00:00.000000Z
+- ID: 543 | Nro: 202509-000000105 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 557 | Nro: 202509-000000111 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 561 | Nro: 202601-000001051 | Status: vigente | Fecha: 2025-05-01T05:00:00.000000Z
+- ID: 563 | Nro: 202509-000000113 | Status: vigente | Fecha: 2025-09-30T05:00:00.000000Z
+- ID: 566 | Nro: 202601-000001236 | Status: vigente | Fecha: 2025-06-12T05:00:00.000000Z
+- ID: 592 | Nro: 202510-000000412 | Status: vigente | Fecha: 2025-10-31T05:00:00.000000Z
+- ID: 603 | Nro: 202510-000000268 | Status: vigente | Fecha: 2025-10-20T05:00:00.000000Z
+- ID: 610 | Nro: 202510-000000162 | Status: vigente | Fecha: 2025-10-10T05:00:00.000000Z
+- ID: 614 | Nro: 202511-000000699 | Status: vigente | Fecha: 2025-11-30T05:00:00.000000Z
+- ID: 635 | Nro: 202511-000000821 | Status: vigente | Fecha: 2025-11-30T05:00:00.000000Z
+- ID: 636 | Nro: 202601-000001082 | Status: vigente | Fecha: 2025-09-19T05:00:00.000000Z
+- ID: 638 | Nro: 202509-000000069 | Status: vigente | Fecha: 2025-09-23T05:00:00.000000Z
+- ID: 641 | Nro: 202509-000000079 | Status: vigente | Fecha: 2025-09-24T05:00:00.000000Z
+- ID: 642 | Nro: 202601-000001221 | Status: vigente | Fecha: 2025-06-30T05:00:00.000000Z
+- ID: 646 | Nro: 202601-000001282 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 650 | Nro: 202601-000001172 | Status: vigente | Fecha: 2025-05-02T05:00:00.000000Z
+- ID: 655 | Nro: 202601-000001268 | Status: vigente | Fecha: 2025-07-31T05:00:00.000000Z
+- ID: 658 | Nro: 202601-000001267 | Status: vigente | Fecha: 2025-07-10T05:00:00.000000Z
+- ID: 659 | Nro: 202511-000000788 | Status: vigente | Fecha: 2025-11-29T05:00:00.000000Z
+- ID: 688 | Nro: 202602-000001657 | Status: vigente | Fecha: 2026-02-27T05:00:00.000000Z
+- ID: 696 | Nro: 202603-000001707 | Status: vigente | Fecha: 2026-03-02T05:00:00.000000Z
+- ID: 703 | Nro: 202603-000001709 | Status: vigente | Fecha: 2026-03-02T05:00:00.000000Z
+- ID: 706 | Nro: 202601-000001389 | Status: vigente | Fecha: 2026-01-18T05:00:00.000000Z
+- ID: 715 | Nro: 202603-000001708 | Status: vigente | Fecha: 2026-03-02T05:00:00.000000Z
+- ID: 719 | Nro: 202602-000001661 | Status: vigente | Fecha: 2026-02-27T05:00:00.000000Z
+- ID: 737 | Nro: 202601-000000987 | Status: vigente | Fecha: 2026-01-02T05:00:00.000000Z
+- ID: 741 | Nro: 202601-000001386 | Status: vigente | Fecha: 2026-01-16T05:00:00.000000Z
+- ID: 745 | Nro: 202603-000001706 | Status: vigente | Fecha: 2026-03-03T05:00:00.000000Z
+- ID: 769 | Nro: 202601-000001442 | Status: vigente | Fecha: 2026-01-31T05:00:00.000000Z
+- ID: 774 | Nro: 202602-000001505 | Status: vigente | Fecha: 2026-02-05T05:00:00.000000Z
+- ID: 776 | Nro: 202601-000001443 | Status: vigente | Fecha: 2026-01-31T05:00:00.000000Z
+- ID: 789 | Nro: 202602-000001488 | Status: vigente | Fecha: 2026-01-31T05:00:00.000000Z
+- ID: 790 | Nro: 202603-000001721 | Status: vigente | Fecha: 2026-03-05T05:00:00.000000Z
+- ID: 799 | Nro: 202602-000001621 | Status: vigente | Fecha: 2026-02-27T05:00:00.000000Z
+- ID: 800 | Nro: 202602-000001562 | Status: vigente | Fecha: 2026-02-20T05:00:00.000000Z
+- ID: 808 | Nro: 202601-000001451 | Status: vigente | Fecha: 2026-01-31T05:00:00.000000Z
+- ID: 810 | Nro: 202601-000001448 | Status: vigente | Fecha: 2026-01-31T05:00:00.000000Z

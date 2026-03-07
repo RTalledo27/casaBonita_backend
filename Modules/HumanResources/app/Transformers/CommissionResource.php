@@ -30,12 +30,24 @@ class CommissionResource extends JsonResource
 
             // Relaciones
             'employee' => $this->whenLoaded('employee', function () {
-                return [
+                $employeeData = [
                     'employee_id' => $this->employee->employee_id,
                     'employee_code' => $this->employee->employee_code,
                     'full_name' => $this->employee->full_name,
                     'employee_type' => $this->employee->employee_type
                 ];
+                
+                if ($this->employee->relationLoaded('user') && $this->employee->user) {
+                    $employeeData['user'] = [
+                        'id' => $this->employee->user->user_id ?? $this->employee->user->id,
+                        'name' => $this->employee->user->name,
+                        'first_name' => $this->employee->user->first_name,
+                        'last_name' => $this->employee->user->last_name,
+                        'email' => $this->employee->user->email,
+                    ];
+                }
+                
+                return $employeeData;
             }),
 
             'contract' => $this->whenLoaded('contract', function () {

@@ -95,6 +95,12 @@ class CommissionController extends Controller
                 $request->year
             );
 
+            // Obtener contratos sin asesor asignado para el período
+            $unassignedContracts = $this->commissionService->getUnassignedContractsForPeriod(
+                $request->month,
+                $request->year
+            );
+
             // Registrar actividad
             UserActivityLog::log(
                 $request->user()->user_id,
@@ -104,12 +110,14 @@ class CommissionController extends Controller
                     'month' => $request->month,
                     'year' => $request->year,
                     'count' => count($commissions),
+                    'unassigned_count' => count($unassignedContracts),
                 ]
             );
 
             return response()->json([
                 'success' => true,
                 'data' => CommissionResource::collection($commissions),
+                'unassigned_contracts' => $unassignedContracts,
                 'message' => 'Comisiones procesadas exitosamente',
                 'count' => count($commissions)
             ]);
@@ -117,6 +125,37 @@ class CommissionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error al procesar comisiones: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Obtener contratos sin asesor para un período
+     * GET /api/commissions/unassigned-contracts?month=X&year=Y
+     */
+    public function getUnassignedContracts(Request $request): JsonResponse
+    {
+        $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2020|max:2030'
+        ]);
+
+        try {
+            $unassigned = $this->commissionService->getUnassignedContractsForPeriod(
+                $request->month,
+                $request->year
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $unassigned,
+                'count' => count($unassigned),
+                'message' => 'Contratos sin asesor obtenidos'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error: ' . $e->getMessage()
             ], 500);
         }
     }

@@ -3,6 +3,7 @@
 namespace Modules\HumanResources\Services;
 
 use Exception;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,29 +22,99 @@ class CommissionService
         protected CommissionEvaluator $commissionEvaluator
     ) {}
 
+    /**
+     * Obtiene la fecha efectiva de venta de un contrato.
+     * Prioridad: actual_sale_date > primer pago del cronograma > sign_date
+     */
+    private function getEffectiveSaleDate(Contract $contract): Carbon
+    {
+        // 1. Si ya tiene actual_sale_date calculada, usarla
+        if ($contract->actual_sale_date) {
+            return Carbon::parse($contract->actual_sale_date);
+        }
+
+        // 2. Buscar la fecha del primer pago en el cronograma
+        $firstPayment = $contract->paymentSchedules()
+                                 ->orderBy('due_date', 'asc')
+                                 ->first();
+
+        if ($firstPayment && $firstPayment->due_date) {
+            $effectiveDate = Carbon::parse($firstPayment->due_date);
+
+            // Guardar para futuras consultas
+            $contract->update(['actual_sale_date' => $effectiveDate->toDateString()]);
+
+            Log::info('[Commission] actual_sale_date inferida del primer pago', [
+                'contract_id' => $contract->contract_id,
+                'sign_date' => $contract->sign_date?->toDateString(),
+                'first_payment_date' => $effectiveDate->toDateString(),
+            ]);
+
+            return $effectiveDate;
+        }
+
+        // 3. Fallback: usar sign_date
+        return Carbon::parse($contract->sign_date);
+    }
+
     public function processCommissionsForPeriod(int $month, int $year): array
     {
         $commissions = [];
         
         DB::transaction(function () use ($month, $year, &$commissions) {
-            // Obtener contratos firmados en el período
-            $contracts = Contract::with('advisor')
-                               ->whereMonth('sign_date', $month)
-                               ->whereYear('sign_date', $year)
+            // Obtener contratos cuya fecha efectiva de venta corresponda al período
+            // Busca por: actual_sale_date OR sign_date OR primer pago del cronograma
+            $contracts = Contract::with(['advisor', 'paymentSchedules'])
                                ->where('status', 'vigente')
                                ->whereNotNull('advisor_id')
+                               ->where(function($query) use ($month, $year) {
+                                   // Contratos con actual_sale_date en el período
+                                   $query->where(function($q) use ($month, $year) {
+                                       $q->whereMonth('actual_sale_date', $month)
+                                         ->whereYear('actual_sale_date', $year);
+                                   })
+                                   // O contratos sin actual_sale_date cuyo sign_date esté en el período
+                                   ->orWhere(function($q) use ($month, $year) {
+                                       $q->whereNull('actual_sale_date')
+                                         ->whereMonth('sign_date', $month)
+                                         ->whereYear('sign_date', $year);
+                                   });
+                               })
                                ->get();
 
+            Log::info('[Commission] Contratos encontrados para período', [
+                'month' => $month,
+                'year' => $year,
+                'count' => $contracts->count()
+            ]);
+
             foreach ($contracts as $contract) {
+                // Determinar la fecha efectiva de venta
+                $effectiveDate = $this->getEffectiveSaleDate($contract);
+                $effectiveMonth = $effectiveDate->month;
+                $effectiveYear = $effectiveDate->year;
+
+                // Si la fecha efectiva no corresponde al período solicitado, saltar
+                if ($effectiveMonth !== $month || $effectiveYear !== $year) {
+                    Log::info('[Commission] Contrato excluido - fecha efectiva fuera del período', [
+                        'contract_id' => $contract->contract_id,
+                        'sign_date' => $contract->sign_date?->toDateString(),
+                        'effective_date' => $effectiveDate->toDateString(),
+                        'requested_period' => "{$month}/{$year}",
+                        'effective_period' => "{$effectiveMonth}/{$effectiveYear}"
+                    ]);
+                    continue;
+                }
+
                 // Usar LotFinancialTemplate como fuente única de datos financieros
                 try {
                     $commissionData = $this->calculateCommissionFromTemplate($contract);
                 } catch (Exception $e) {
                         // Fallback a datos del contrato si no hay template
                     // Usar la misma lógica de tabla de rangos que calculateCommissionFromTemplate
-                        $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
+                        $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $effectiveDate);
                         $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
-                        $contractDate = $contract->sign_date ? $contract->sign_date->toDateString() : null;
+                        $contractDate = $effectiveDate->toDateString();
                         $commissionRatePercent = $this->getCommissionRate($salesCount, $contract->term_months, $saleType, $contractDate);
                     $commissionRate = $commissionRatePercent / 100; // Convertir a decimal para cálculo
                     
@@ -61,15 +132,15 @@ class CommissionService
                 
                 // Verificar si ya existe una comisión COMPLETA (padre + 2 hijas) para este contrato
                 $existingParentCommissions = Commission::where('contract_id', $contract->contract_id)
-                                                       ->where('period_month', $month)
-                                                       ->where('period_year', $year)
+                                                       ->where('period_month', $effectiveMonth)
+                                                       ->where('period_year', $effectiveYear)
                                                        ->where('employee_id', $contract->advisor_id)
                                                        ->whereNull('parent_commission_id')
                                                        ->count();
                                                        
                 $existingChildCommissions = Commission::where('contract_id', $contract->contract_id)
-                                                      ->where('period_month', $month)
-                                                      ->where('period_year', $year)
+                                                      ->where('period_month', $effectiveMonth)
+                                                      ->where('period_year', $effectiveYear)
                                                       ->where('employee_id', $contract->advisor_id)
                                                       ->whereNotNull('parent_commission_id')
                                                       ->count();
@@ -78,7 +149,7 @@ class CommissionService
                 $needsProcessing = ($existingParentCommissions == 0) || ($existingParentCommissions > 0 && $existingChildCommissions < 2);
                 
                 if ($needsProcessing && $contract->advisor && $contract->financing_amount > 0) {
-                    $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $contract->sign_date);
+                    $salesCount = $this->getAdvisorFinancedSalesCount($contract->advisor_id, $effectiveDate);
                     
                     // Crear pagos divididos automáticamente (incluye comisión padre)
                     $splitCommissions = $this->createSplitCommissions(
@@ -86,8 +157,8 @@ class CommissionService
                         $commissionData['commission_amount'],
                         $commissionData['commission_rate'],
                         $salesCount,
-                        $month,
-                        $year,
+                        $effectiveMonth,
+                        $effectiveYear,
                         $commissionData['financial_source'] ?? null,
                         $commissionData['template_id'] ?? null,
                         now()->toDateString()
@@ -100,6 +171,65 @@ class CommissionService
         });
 
         return $commissions;
+    }
+
+    /**
+     * Obtiene contratos sin asesor asignado para un período dado.
+     * Estos contratos no generan comisiones pero deben mostrarse al usuario.
+     */
+    public function getUnassignedContractsForPeriod(int $month, int $year): array
+    {
+        $contracts = Contract::with(['client', 'lot.manzana', 'reservation.client', 'reservation.lot.manzana', 'paymentSchedules'])
+            ->where('status', 'vigente')
+            ->whereNull('advisor_id')
+            ->where(function($query) use ($month, $year) {
+                $query->where(function($q) use ($month, $year) {
+                    $q->whereMonth('actual_sale_date', $month)
+                      ->whereYear('actual_sale_date', $year);
+                })
+                ->orWhere(function($q) use ($month, $year) {
+                    $q->whereNull('actual_sale_date')
+                      ->whereMonth('sign_date', $month)
+                      ->whereYear('sign_date', $year);
+                });
+            })
+            ->where('financing_amount', '>', 0)
+            ->orderByRaw('COALESCE(actual_sale_date, sign_date)')
+            ->get();
+
+        $unassigned = [];
+        foreach ($contracts as $contract) {
+            $effectiveDate = $this->getEffectiveSaleDate($contract);
+            
+            // Calcular comisión potencial (como si tuviera asesor)
+            $potentialCommission = 0;
+            try {
+                $commissionData = $this->calculateCommissionFromTemplate($contract);
+                $potentialCommission = $commissionData['commission_amount'] ?? 0;
+            } catch (Exception $e) {
+                $saleType = ($contract->financing_amount && $contract->financing_amount > 0) ? 'financed' : 'cash';
+                $commissionRatePercent = $this->getCommissionRate(1, $contract->term_months, $saleType, $effectiveDate->toDateString());
+                $commissionRate = $commissionRatePercent / 100;
+                $baseAmount = $contract->total_price ?? $contract->financing_amount;
+                $potentialCommission = $baseAmount * $commissionRate;
+            }
+
+            $unassigned[] = [
+                'contract_id' => $contract->contract_id,
+                'contract_number' => $contract->contract_number,
+                'client_name' => $contract->getClientName() ?? 'N/A',
+                'project_name' => $contract->getManzanaName() ?? 'N/A',
+                'lot_number' => $contract->getLotName() ?? 'N/A',
+                'financing_amount' => $contract->financing_amount,
+                'total_price' => $contract->total_price,
+                'term_months' => $contract->term_months,
+                'sign_date' => $contract->sign_date?->format('Y-m-d'),
+                'effective_date' => $effectiveDate->toDateString(),
+                'potential_commission' => round($potentialCommission, 2),
+            ];
+        }
+
+        return $unassigned;
     }
 
     public function calculateCommission(Contract $contract): float
@@ -666,12 +796,22 @@ class CommissionService
         }
 
         // Obtener todos los contratos del asesor en el período
-        $contracts = Contract::with(['reservation.lot.manzana', 'reservation.client'])
+        // Usa actual_sale_date si disponible, sino sign_date
+        $contracts = Contract::with(['reservation.lot.manzana', 'reservation.client', 'paymentSchedules'])
             ->where('advisor_id', $employeeId)
-            ->whereMonth('sign_date', $month)
-            ->whereYear('sign_date', $year)
+            ->where(function($query) use ($month, $year) {
+                $query->where(function($q) use ($month, $year) {
+                    $q->whereMonth('actual_sale_date', $month)
+                      ->whereYear('actual_sale_date', $year);
+                })
+                ->orWhere(function($q) use ($month, $year) {
+                    $q->whereNull('actual_sale_date')
+                      ->whereMonth('sign_date', $month)
+                      ->whereYear('sign_date', $year);
+                });
+            })
             ->where('financing_amount', '>', 0)
-            ->orderBy('sign_date')
+            ->orderByRaw('COALESCE(actual_sale_date, sign_date)')
             ->get();
 
         $salesDetail = [];

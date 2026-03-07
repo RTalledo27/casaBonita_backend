@@ -33,7 +33,7 @@ class ProjectionController extends Controller
             $monthsAhead = $request->input('months_ahead', 6);
             $monthsBack = $request->input('months_back', 12);
 
-            \Log::info('📊 Getting monthly revenue projection', [
+            \Log::info('Getting monthly revenue projection', [
                 'months_ahead' => $monthsAhead,
                 'months_back' => $monthsBack
             ]);
@@ -46,7 +46,7 @@ class ProjectionController extends Controller
                 'message' => 'Proyección generada exitosamente'
             ]);
         } catch (\Exception $e) {
-            \Log::error('❌ Error getting revenue projection: ' . $e->getMessage(), [
+            \Log::error('Error getting revenue projection: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
 

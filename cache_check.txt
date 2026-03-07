@@ -1,0 +1,17 @@
+Total sales from cache: 20
+
+=== Sale 0 ===
+documentNumber: 02664922
+documents count: 1
+  Doc 0: status=En Proceso Venta correlative=202603-000001710 units=1
+
+=== Sale 1 ===
+documentNumber: 02825581
+documents count: 1
+  Doc 0: status=En Proceso Venta correlative=202602-000001700 units=1
+
+=== Sale 2 ===
+documentNumber: 40440319
+documents count: 1
+  Doc 0: status=Separacion correlative=202603-000001711 units=1
+

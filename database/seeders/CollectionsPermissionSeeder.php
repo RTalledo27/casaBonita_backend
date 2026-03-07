@@ -64,6 +64,6 @@ class CollectionsPermissionSeeder extends Seeder
             $this->command->info("   ✅ Permisos asignados al rol {$adminRole->name}");
         }
 
-        $this->command->info('🎯 Módulo Collections configurado correctamente!');
+        $this->command->info('🎯 Módulo Collections configurado correctamente!'); 
     }
 }

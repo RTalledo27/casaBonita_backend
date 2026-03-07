@@ -762,7 +762,7 @@ class ContractImportService
             'previous_status' => $availability['current_status']
         ]);
         
-        // Buscar asesor
+        // Buscar asesor (puede ser null si no se encuentra coincidencia)
         $advisor = $this->findAdvisorIntegral($data);
         
         // Crear reservación
@@ -778,11 +778,17 @@ class ContractImportService
         // Actualizar status del lote con la nueva lógica
         $this->updateLotStatus($lot, $operationType, $availability['current_status']);
         
+        $advisorLabel = 'Sin asesor asignado';
+        if ($advisor && $advisor->user) {
+            $advisorLabel = $advisor->user->first_name . ' ' . $advisor->user->last_name;
+        }
+        
         $this->processed[] = [
             'row' => $rowNumber,
             'client' => $client->first_name . ' ' . $client->last_name,
             'lot' => $lot->num_lot,
-            'advisor' => $advisor ? $advisor->user->first_name . ' ' . $advisor->user->last_name : 'No asignado',
+            'advisor' => $advisorLabel,
+            'advisor_found' => $advisor !== null,
             'operation_type' => $operationType,
             'reassigned' => $availability['current_status'] !== 'disponible'
         ];
@@ -964,17 +970,16 @@ class ContractImportService
     /**
      * Buscar asesor con información del template actual - VERSIÓN MEJORADA
      * Incluye logging detallado y mejor lógica de coincidencia
-     * NUNCA retorna null - siempre encuentra un asesor válido
+     * Retorna null si no se encuentra un asesor válido (NO asigna aleatorio)
      */
-    private function findAdvisorIntegral(array $data): Employee
+    private function findAdvisorIntegral(array $data): ?Employee
     {
         $advisorName = $data["advisor_name"] ?? "";
         $advisorCode = $data["advisor_code"] ?? "";
         
         Log::info("[IMPORT] Buscando asesor", [
             "advisor_name" => $advisorName,
-            "advisor_code" => $advisorCode,
-            "row_data" => $data
+            "advisor_code" => $advisorCode
         ]);
         
         // 1. Buscar por código primero si existe
@@ -988,7 +993,7 @@ class ContractImportService
                     "advisor_code" => $advisor->employee_code,
                     "advisor_name" => $advisor->user->first_name . " " . $advisor->user->last_name
                 ]);
-                return $this->preventAdvisorConcentration($advisor);
+                return $advisor;
             }
             Log::warning("[IMPORT] No se encontró asesor con código: {$advisorCode}");
         }
@@ -1040,20 +1045,19 @@ class ContractImportService
                     "total_candidates" => count($matches)
                 ]);
                 
-                return $this->preventAdvisorConcentration($bestMatch["advisor"]);
+                return $bestMatch["advisor"];
             }
             
             Log::warning("[IMPORT] No se encontró coincidencia para nombre: {$normalizedSearchName}");
         }
         
-        // 3. Fallback: usar sistema de rotación equitativa
-        Log::warning("[IMPORT] Usando sistema de rotación", [
-            "reason" => "No se encontró coincidencia por código ni nombre",
+        // 3. NO asignar asesor aleatorio — retornar null para que el contrato quede sin asesor
+        Log::warning("[IMPORT] Asesor NO encontrado - contrato quedará sin asesor asignado", [
             "advisor_name" => $advisorName,
             "advisor_code" => $advisorCode
         ]);
         
-        return $this->getNextAdvisorInRotation();
+        return null;
     }
 
     /**
@@ -1245,13 +1249,13 @@ class ContractImportService
         $depositReference = $data['deposit_reference'] ?? null;
         $depositPaidAt = !empty($data['deposit_paid_at']) ? $this->parseDate($data['deposit_paid_at']) : null;
         
-        // Buscar el asesor (siempre retorna un Employee válido)
+        // Buscar el asesor (puede ser null)
         $advisor = $this->findAdvisorIntegral($data);
         
         return Reservation::create([
             'lot_id' => $lot->lot_id,
             'client_id' => $client->client_id,
-            'advisor_id' => $advisor->employee_id,
+            'advisor_id' => $advisor ? $advisor->employee_id : null,
             'reservation_date' => $reservationDate,
             'expiration_date' => Carbon::parse($reservationDate)->addDays(30),
             'deposit_amount' => $depositAmount,
@@ -1278,7 +1282,7 @@ class ContractImportService
     /**
      * Crear contrato con información del template financiero del lote
      */
-    private function createContractIntegral(Reservation $reservation, Employee $advisor, array $data): Contract
+    private function createContractIntegral(Reservation $reservation, ?Employee $advisor, array $data): Contract
     {
         // Obtener el lote y su template financiero
         $lot = $reservation->lot;
@@ -1363,7 +1367,7 @@ class ContractImportService
         
         return Contract::create([
             'reservation_id' => $reservation->reservation_id,
-            'advisor_id' => $advisor->employee_id,
+            'advisor_id' => $advisor ? $advisor->employee_id : null,
             'contract_number' => $contractNumber,
             'sign_date' => $signDate,
             'total_price' => $totalPrice,

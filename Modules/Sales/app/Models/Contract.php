@@ -29,6 +29,7 @@ class Contract extends Model
         'contract_number',
         'contract_date', // Fecha del contrato
         'sign_date',
+        'actual_sale_date', // Fecha real de venta (inferida del primer pago)
         'base_price', // Precio lista / base
         'unit_price', // Precio unitario (venta antes de descuento)
         'total_price',
@@ -61,6 +62,7 @@ class Contract extends Model
     protected $casts = [
         'contract_date' => 'date',
         'sign_date' => 'date',
+        'actual_sale_date' => 'date',
         'base_price' => 'decimal:2',
         'unit_price' => 'decimal:2',
         'total_price' => 'decimal:2',

@@ -227,8 +227,31 @@ class LogicwareContractImporter
         // 2. Procesar cada documento de venta (proforma/contrato)
         foreach ($sale['documents'] as $document) {
             
-            // Solo procesar ventas completadas
-            if (($document['status'] ?? '') !== 'Ventas') {
+            $docStatus = $document['status'] ?? '';
+            $statusLower = strtolower(trim($docStatus));
+            $correlative = $document['correlative'] ?? '';
+
+            if (str_starts_with($correlative, 'Cot. Nro.')) {
+                Log::info('[LogicwareImporter] ⏭️ Saltando documento (es solo cotización)', [
+                    'correlative' => $correlative
+                ]);
+                continue;
+            }
+
+            // Identificar si es venta o reserva basado en el ESTADO
+            $isContract = in_array($statusLower, ['venta', 'ventas', 'vendido']);
+            $isReservation = in_array($statusLower, ['en proceso venta', 'en proceso separación', 'en proceso separacion', 'separacion', 'separación']);
+            
+            // Si el correlativo dice explícitamente "Sep. Nro." o "Res Nro.", forzar como reserva
+            if (str_starts_with($correlative, 'Sep. Nro.') || str_starts_with($correlative, 'Res Nro.')) {
+                $isReservation = true;
+                $isContract = false;
+            }
+
+            if (!$isContract && !$isReservation) {
+                Log::info('[LogicwareImporter] ⏭️ Saltando documento (estado no válido: ' . $docStatus . ')', [
+                    'correlative' => $correlative
+                ]);
                 continue;
             }
 
@@ -260,14 +283,20 @@ class LogicwareContractImporter
                 $advisor = $this->findAdvisorByName($document['seller'] ?? null);
 
                 if (!$advisor) {
-                    Log::warning('[LogicwareImporter] Asesor no encontrado', [
+                    Log::warning('[LogicwareImporter] ⚠️ Asesor no encontrado - contrato se creará sin asesor', [
                         'seller_name' => $document['seller'] ?? 'N/A',
                         'document' => $document['correlative'] ?? 'N/A'
                     ]);
-                    continue;
+                    // NO hacer continue — crear contrato/reserva con advisor_id = NULL
                 }
 
-                // 5. Verificar si ya existe un contrato para este lote
+                // 5. Verificar si es reserva o contrato
+                if ($isReservation) {
+                    $this->createOrUpdateReservation($client, $lot, $advisor, $document, $unit);
+                    continue; // Se procesó como reserva, pasamos a la siguiente unidad/documento
+                }
+
+                // 6. Verificar si ya existe un contrato para este lote
                 $existingContract = Contract::where('lot_id', $lot->lot_id)->first();
 
                 if ($existingContract) {
@@ -330,6 +359,31 @@ class LogicwareContractImporter
                             'error' => $e->getMessage()
                         ]);
                     }
+                }
+                
+                // 8. Inferir actual_sale_date desde el primer pago del cronograma
+                // Esto permite que las comisiones se asignen al período correcto
+                try {
+                    $firstPayment = $contract->paymentSchedules()
+                                             ->orderBy('due_date', 'asc')
+                                             ->first();
+                    
+                    if ($firstPayment && $firstPayment->due_date) {
+                        $actualSaleDate = Carbon::parse($firstPayment->due_date)->toDateString();
+                        $contract->update(['actual_sale_date' => $actualSaleDate]);
+                        
+                        Log::info('[LogicwareImporter] 📅 actual_sale_date inferida del primer pago', [
+                            'contract_id' => $contract->contract_id,
+                            'sign_date' => $contract->sign_date?->toDateString(),
+                            'actual_sale_date' => $actualSaleDate,
+                            'differs' => $contract->sign_date?->toDateString() !== $actualSaleDate
+                        ]);
+                    }
+                } catch (Exception $e) {
+                    Log::warning('[LogicwareImporter] ⚠️ No se pudo inferir actual_sale_date', [
+                        'contract_id' => $contract->contract_id,
+                        'error' => $e->getMessage()
+                    ]);
                 }
                 
                 $contractsCreated++;
@@ -535,10 +589,18 @@ class LogicwareContractImporter
      * @return Contract
      * @throws Exception
      */
-    protected function createContractFromRealData(Client $client, Lot $lot, Employee $advisor, array $document, array $unit): Contract
+    protected function createContractFromRealData(Client $client, Lot $lot, ?Employee $advisor, array $document, array $unit): Contract
     {
         $contractDate = isset($document['saleStartDate']) ? Carbon::parse($document['saleStartDate']) : now();
         
+        $docStatus = strtolower(trim($document['status'] ?? ''));
+        $docResolution = strtolower(trim($document['resolutionStatus'] ?? $document['resolution_status'] ?? ''));
+        $unitStatus = strtolower(trim($unit['status'] ?? $unit['state'] ?? ''));
+        
+        $resolvedStatuses = ['resuelto', 'cancelado', 'anulado'];
+        $isResolved = in_array($docStatus, $resolvedStatuses) || in_array($docResolution, $resolvedStatuses) || in_array($unitStatus, $resolvedStatuses);
+        $contractStatus = $isResolved ? 'resuelto' : 'vigente';
+
         $financing = $document['financing'] ?? [];
         
         // 🔍 DEBUG: Ver qué está llegando en el array unit
@@ -571,7 +633,7 @@ class LogicwareContractImporter
         $contract = Contract::create([
             'client_id' => $client->client_id,
             'lot_id' => $lot->lot_id,
-            'advisor_id' => $advisor->employee_id,
+            'advisor_id' => $advisor?->employee_id,
             'contract_number' => $document['correlative'] ?? $this->generateContractNumber(),
             'contract_date' => $contractDate,
             'sign_date' => $contractDate,
@@ -585,7 +647,7 @@ class LogicwareContractImporter
             'balloon_payment' => $balloonPayment,
             'bpp' => $bppBonus,
             'currency' => $financing['currency'] ?? 'PEN',
-            'status' => 'vigente',
+            'status' => $contractStatus,
             'interest_rate' => 0,
             'monthly_payment' => 0,
             'notes' => 'Importado desde Logicware el ' . now()->format('Y-m-d H:i:s')
@@ -596,7 +658,7 @@ class LogicwareContractImporter
             'contract_number' => $contract->contract_number,
             'client_id' => $client->client_id,
             'lot_id' => $lot->lot_id,
-            'advisor_id' => $advisor->employee_id,
+            'advisor_id' => $advisor?->employee_id,
             'total_price' => $totalPrice,
             'discount' => $discount,
             'base_price' => $listPrice,
@@ -619,10 +681,18 @@ class LogicwareContractImporter
      * @param array $unit Unidad vendida
      * @return Contract
      */
-    protected function updateContractFromRealData(Contract $contract, Client $client, Lot $lot, Employee $advisor, array $document, array $unit): Contract
+    protected function updateContractFromRealData(Contract $contract, Client $client, Lot $lot, ?Employee $advisor, array $document, array $unit): Contract
     {
         $contractDate = isset($document['saleStartDate']) ? Carbon::parse($document['saleStartDate']) : $contract->sign_date;
         
+        $docStatus = strtolower(trim($document['status'] ?? ''));
+        $docResolution = strtolower(trim($document['resolutionStatus'] ?? $document['resolution_status'] ?? ''));
+        $unitStatus = strtolower(trim($unit['status'] ?? $unit['state'] ?? ''));
+        
+        $resolvedStatuses = ['resuelto', 'cancelado', 'anulado'];
+        $isResolved = in_array($docStatus, $resolvedStatuses) || in_array($docResolution, $resolvedStatuses) || in_array($unitStatus, $resolvedStatuses);
+        $contractStatus = $isResolved ? 'resuelto' : 'vigente';
+
         $financing = $document['financing'] ?? [];
         
         // Extraer datos financieros actualizados
@@ -644,7 +714,7 @@ class LogicwareContractImporter
         // Actualizar datos del contrato
         $contract->update([
             'client_id' => $client->client_id,
-            'advisor_id' => $advisor->employee_id,
+            'advisor_id' => $advisor?->employee_id,
             'contract_number' => $document['correlative'] ?? $contract->contract_number,
             'contract_date' => $contractDate,
             'sign_date' => $contractDate,
@@ -658,6 +728,7 @@ class LogicwareContractImporter
             'balloon_payment' => $balloonPayment,
             'bpp' => $bppBonus,
             'currency' => $financing['currency'] ?? $contract->currency ?? 'PEN',
+            'status' => $contractStatus,
             'notes' => ($contract->notes ?? '') . "\nActualizado desde Logicware el " . now()->format('Y-m-d H:i:s')
         ]);
         
@@ -671,6 +742,66 @@ class LogicwareContractImporter
         ]);
 
         return $contract;
+    }
+
+    /**
+     * Procesar documento de separación o reserva en Logicware
+     */
+    protected function createOrUpdateReservation(Client $client, Lot $lot, ?Employee $advisor, array $document, array $unit): void
+    {
+        $reservationDate = isset($document['saleStartDate']) 
+            ? Carbon::parse($document['saleStartDate'])->format('Y-m-d')
+            : (isset($document['saleDate']) ? Carbon::parse($document['saleDate'])->format('Y-m-d') : now()->format('Y-m-d'));
+
+        $financing = $document['financing'] ?? [];
+        $reservationAmount = $this->parseNumericValue($financing['reservationAmount'] ?? $financing['downPayment'] ?? $unit['basePrice'] ?? 0); 
+        
+        if ($reservationAmount == 0) {
+            $reservationAmount = $this->parseNumericValue($unit['total'] ?? $unit['totalPrice'] ?? $unit['unitPrice'] ?? 0);
+        }
+
+        $reservation = \Modules\Sales\Models\Reservation::where('lot_id', $lot->lot_id)
+            ->where('client_id', $client->client_id)
+            ->first();
+
+        $status = 'activa';
+        $docStatus = strtolower(trim($document['status'] ?? ''));
+        $docResolution = strtolower(trim($document['resolutionStatus'] ?? $document['resolution_status'] ?? ''));
+        $unitStatus = strtolower(trim($unit['status'] ?? $unit['state'] ?? ''));
+        
+        $resolvedStatuses = ['resuelto', 'cancelado', 'anulado'];
+        if (in_array($docStatus, $resolvedStatuses) || in_array($docResolution, $resolvedStatuses) || in_array($unitStatus, $resolvedStatuses)) {
+            $status = 'anulada';
+        }
+
+        if ($reservation) {
+            $reservation->update([
+                'advisor_id' => $advisor?->employee_id,
+                'reservation_date' => $reservationDate,
+                'deposit_amount' => $reservationAmount,
+                'status' => $status,
+            ]);
+            Log::info('[LogicwareImporter] 🔄 Reserva actualizada', ['reservation_id' => $reservation->reservation_id, 'lot_id' => $lot->lot_id, 'status' => $status]);
+        } else {
+            $reservation = \Modules\Sales\Models\Reservation::create([
+                'lot_id' => $lot->lot_id,
+                'client_id' => $client->client_id,
+                'advisor_id' => $advisor?->employee_id,
+                'reservation_date' => $reservationDate,
+                'expiration_date' => Carbon::parse($reservationDate)->addDays(30)->format('Y-m-d'),
+                'deposit_amount' => $reservationAmount,
+                'status' => $status,
+            ]);
+            Log::info('[LogicwareImporter] 🏷️ Reserva creada', ['reservation_id' => $reservation->reservation_id, 'lot_id' => $lot->lot_id, 'status' => $status]);
+        }
+
+        // Si la reserva está activa y el lote no estaba vendido, se marca como reservado
+        if ($status === 'activa' && $lot->status !== 'vendido') {
+            $lot->update(['status' => 'reservado']);
+        } elseif ($status === 'anulada' && $lot->status === 'reservado') {
+            // Si la reserva se anula y el lote sólo estaba reservado, se libera
+            $lot->update(['status' => 'disponible']);
+        }
     }
     
     /**
